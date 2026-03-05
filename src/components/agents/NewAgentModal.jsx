@@ -218,10 +218,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
             </div>
             <label style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              padding: 16, borderRadius: 10, background: "#0f0f0f", border: "2px dashed #2a2a2a",
+              padding: 16, borderRadius: 10,
+              background: iconPreview ? "rgba(249,115,22,0.15)" : "#0f0f0f",
+              border: `2px dashed ${iconPreview ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
               cursor: "pointer", transition: "all 0.2s"
-            }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"}
-              onMouseLeave={e => e.currentTarget.style.borderColor = "#2a2a2a"}>
+            }} onMouseEnter={e => { if (!iconPreview) e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
+              onMouseLeave={e => { if (!iconPreview) e.currentTarget.style.borderColor = "#2a2a2a"; }}>
               {iconPreview ? (
                 <>
                   <img src={iconPreview} alt="preview" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
