@@ -1,14 +1,9 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { X, Upload, Loader2, Bot, Zap, Brain, Sparkles, Cpu, Settings, Palette, Rocket, Trash2 } from "lucide-react";
+import TOOLS_LIST from "../shared/toolsList";
 
-const AVAILABLE_TOOLS = [
-  { name: "web_search", label: "Web Search" },
-  { name: "file_upload", label: "File Upload" },
-  { name: "data_analysis", label: "Data Analysis" },
-  { name: "code_execution", label: "Code Execution" },
-  { name: "email", label: "Email" },
-];
+const AVAILABLE_TOOLS = TOOLS_LIST.map(t => ({ name: t.name, label: t.label }));
 
 export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, knowledgeBases = [], editAgent = null }) {
   const isEditing = !!editAgent;
