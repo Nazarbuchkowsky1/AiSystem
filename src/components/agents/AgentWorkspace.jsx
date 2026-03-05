@@ -95,23 +95,32 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea — DOM-only, no state to avoid losing focus
+  // Auto-resize textarea with hysteresis to avoid spring/flapping bug
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    ta.style.height = "0px";
+
+    // Reset to measure real content height
+    ta.style.height = "auto";
+    // Force reflow
+    void ta.offsetHeight;
     const sh = ta.scrollHeight;
-    const clamped = Math.min(sh, MAX_HEIGHT);
-    ta.style.height = clamped + "px";
+
+    // Clamp height
+    const newH = Math.min(sh, MAX_HEIGHT);
+    ta.style.height = newH + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
 
-    const multi = sh > 42;
-    if (multi !== isMultilineRef.current) {
-      isMultilineRef.current = multi;
-      // force a re-render only when layout mode actually switches
-      setForceUpdate(n => n + 1);
-    }
-  }, [input, attachedFiles]);
+    // Hysteresis: enter multi-line at >45px, exit at <=40px
+    setMultiLine(prev => {
+      if (input.length === 0) return false;
+      const enterThreshold = 45;
+      const exitThreshold = 40;
+      if (!prev && sh > enterThreshold) return true;
+      if (prev && sh <= exitThreshold) return false;
+      return prev; // stay in current mode (hysteresis band)
+    });
+  }, [input, attachedFiles, isRecording]);
 
   // ResizeObserver for wave container
   useEffect(() => {
