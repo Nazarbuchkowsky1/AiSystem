@@ -6,10 +6,12 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState([]);
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim() || files.length === 0 || isLoading) return;
+    if (!name.trim() || files.length === 0 || isLoading || isCreating) return;
     
+    setIsCreating(true);
     const uploadedFiles = [];
     for (const file of files) {
       const uploadRes = await base44.integrations.Core.UploadFile({ file });
@@ -26,17 +28,23 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
+      processing: true,
     });
+    setIsCreating(false);
   };
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)"
-    }} onClick={onClose}>
+      position: "fixed", inset: 0, background: `rgba(0,0,0,${isCreating ? 0.8 : 0.6})`, display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: `blur(${isCreating ? 8 : 4}px)`,
+      transition: "all 0.3s ease"
+    }} onClick={!isCreating ? onClose : undefined}>
       <div style={{
         background: "#181818", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
-        padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 20px 25px rgba(0,0,0,0.5)"
+        padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 20px 25px rgba(0,0,0,0.5)",
+        opacity: isCreating ? 0.3 : 1,
+        pointerEvents: isCreating ? "none" : "auto",
+        transition: "opacity 0.3s ease"
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>New Knowledge Base</h2>
@@ -132,6 +140,19 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
           </div>
         </div>
       </div>
+
+      {isCreating && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 16, zIndex: 100
+        }}>
+          <Loader2 style={{
+            width: 48, height: 48, color: "#f97316",
+            animation: "spin 1s linear infinite"
+          }} />
+          <p style={{ fontSize: 14, color: "#f5f5f5", fontWeight: 500 }}>Creating knowledge base...</p>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
