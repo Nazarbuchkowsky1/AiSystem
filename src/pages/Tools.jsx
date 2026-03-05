@@ -1,14 +1,5 @@
 import React from "react";
-import { Terminal, Globe, Database, FileCode, Cpu, Cog } from "lucide-react";
-
-const TOOLS = [
-  { name: "Script Runner", description: "Execute custom scripts and automations", icon: Terminal, status: "active", runs: 142 },
-  { name: "Web Scraper", description: "Extract data from websites and APIs", icon: Globe, status: "active", runs: 89 },
-  { name: "Data Processor", description: "Transform and analyze datasets", icon: Database, status: "active", runs: 234 },
-  { name: "Code Generator", description: "Generate code snippets and templates", icon: FileCode, status: "offline", runs: 67 },
-  { name: "Local AI Bridge", description: "Connect to local AI models and services", icon: Cpu, status: "active", runs: 156 },
-  { name: "System Utility", description: "System maintenance and monitoring tools", icon: Cog, status: "active", runs: 312 },
-];
+import TOOLS_LIST from "../components/shared/toolsList";
 
 export default function Tools() {
   return (
