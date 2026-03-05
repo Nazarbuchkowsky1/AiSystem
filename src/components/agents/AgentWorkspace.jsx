@@ -279,123 +279,79 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {/* Main row */}
-      <div style={{ display: "flex", alignItems: isExpanded ? "flex-end" : "center", padding: isExpanded ? "6px 8px 8px" : "0 8px", minHeight: 56 }}>
-        {/* Attach */}
-        <button
-          onMouseDown={e => e.preventDefault()}
-          onClick={() => fileInputRef.current?.click()}
-          style={{
-            padding: 8, borderRadius: 12, background: "none", border: "none",
-            cursor: "pointer", color: "#555", display: "flex", flexShrink: 0,
-            transition: "color 0.2s", marginBottom: isExpanded ? 2 : 0,
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-          onMouseLeave={e => e.currentTarget.style.color = "#555"}
-        >
-          <Plus style={{ width: 17, height: 17 }} />
-        </button>
-
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-          }}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          onPaste={handlePaste}
-          placeholder="Message agent..."
-          rows={1}
-          style={{
-            flex: 1,
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            resize: "none",
-            fontSize: 15,
-            lineHeight: "24px",
-            color: "#f5f5f5",
-            fontFamily: "inherit",
-            padding: isExpanded ? "6px 8px 0" : "0 8px",
-            overflowY: textareaHeight >= MAX_HEIGHT ? "auto" : "hidden",
-            maxHeight: MAX_HEIGHT,
-            display: "block",
-          }}
-        />
-
-        {/* Right buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginBottom: isExpanded ? 2 : 0 }}>
-          {isRecording ? (
-            <>
-              {isFinalizing ? (
-                <Loader2 style={{ width: 16, height: 16, color: "#f97316", animation: "spin 1s linear infinite" }} />
-              ) : (
-                <>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={stopRecording}
-                    style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#ef4444", display: "flex" }}
-                  >
-                    <X style={{ width: 16, height: 16 }} />
-                  </button>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={confirmRecording}
-                    style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                  >
-                    <Send style={{ width: 14, height: 14, color: "#fff" }} />
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <button
-                onMouseDown={e => e.preventDefault()}
-                onClick={startRecording}
-                disabled={isLoading}
-                style={{
-                  padding: 8, borderRadius: 12, background: "none", border: "none",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  color: "#555", display: "flex", transition: "color 0.2s",
-                  opacity: isLoading ? 0.4 : 1,
-                }}
-                onMouseEnter={e => { if (!isLoading) e.currentTarget.style.color = "#f5f5f5"; }}
-                onMouseLeave={e => e.currentTarget.style.color = "#555"}
-              >
-                <Mic style={{ width: 17, height: 17 }} />
-              </button>
-              {isLoading ? (
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={stopGeneration}
-                  style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <Square style={{ width: 14, height: 14, color: "#fff" }} />
-                </button>
-              ) : (
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={handleSend}
-                  disabled={!hasContent}
-                  style={{
-                    width: 36, height: 36, borderRadius: 12, border: "none",
-                    cursor: hasContent ? "pointer" : "not-allowed",
-                    background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    opacity: hasContent ? 1 : 0.5, transition: "all 0.2s",
-                  }}
-                >
-                  <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
-                </button>
-              )}
-            </>
-          )}
+      {isExpanded ? (
+        /* Multi-line / files mode: flex-col */
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Textarea full width */}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={handlePaste}
+            placeholder="Message agent..."
+            rows={1}
+            style={{
+              width: "100%", boxSizing: "border-box",
+              background: "transparent", border: "none", outline: "none", resize: "none",
+              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
+              padding: "12px 16px 4px",
+              overflowY: "hidden", maxHeight: MAX_HEIGHT,
+            }}
+          />
+          {/* Action bar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px 8px" }}>
+            <button
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => fileInputRef.current?.click()}
+              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+              onMouseLeave={e => e.currentTarget.style.color = "#555"}
+            >
+              <Plus style={{ width: 17, height: 17 }} />
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {renderRightButtons()}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Single-line mode: flex-row */
+        <div style={{ display: "flex", alignItems: "center", height: 56, padding: "0 8px" }}>
+          <button
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+            onMouseLeave={e => e.currentTarget.style.color = "#555"}
+          >
+            <Plus style={{ width: 17, height: 17 }} />
+          </button>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={handlePaste}
+            placeholder="Message agent..."
+            rows={1}
+            style={{
+              flex: 1, minWidth: 0,
+              background: "transparent", border: "none", outline: "none", resize: "none",
+              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
+              padding: "16px 8px 8px",
+              overflowY: "hidden",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            {renderRightButtons()}
+          </div>
+        </div>
+      )}
 
       <input
         ref={fileInputRef}
