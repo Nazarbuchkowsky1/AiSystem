@@ -34,21 +34,44 @@ export default function Agents() {
     return <AgentWorkspace agent={selectedAgent} onBack={() => setSelectedAgent(null)} />;
   }
 
+  if (currentTab === "knowledge") {
+    return <KnowledgeBasePage onBack={() => setCurrentTab("agents")} />;
+  }
+
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-         <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
-         <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-           <Plus style={{ width: 12, height: 12 }} /> New Agent
-         </button>
-       </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
+          <div style={{ display: "flex", gap: 4, borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+            {[["agents", "Agents"], ["knowledge", "Knowledge Base"]].map(([tab, label]) => (
+              <button key={tab} onClick={() => setCurrentTab(tab)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                  background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
+                  color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
+                  transition: "all 0.2s"
+                }}>
+                {tab === "knowledge" ? <BookOpen style={{ width: 11, height: 11 }} /> : null}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {currentTab === "agents" && (
+          <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <Plus style={{ width: 12, height: 12 }} /> New Agent
+          </button>
+        )}
+      </div>
 
-       {showNewModal && (
-         <NewAgentModal
-           onClose={() => setShowNewModal(false)}
-           onCreate={(agentData) => createAgentMutation.mutate(agentData)}
-         />
-       )}
+      {showNewModal && (
+        <NewAgentModal
+          onClose={() => setShowNewModal(false)}
+          onCreate={(agentData) => createAgentMutation.mutate(agentData)}
+          knowledgeBases={knowledgeBases}
+        />
+      )}
 
       {agents.length === 0 ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
