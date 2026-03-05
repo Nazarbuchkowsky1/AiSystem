@@ -189,7 +189,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>System Instructions</p>
             <textarea
               value={systemInstructions}
-              onChange={e => setSystemInstructions(e.target.value)}
+              onChange={e => {
+                setSystemInstructions(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
+              }}
+              ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
               placeholder="Define the agent's behavior, constraints, and guidelines..."
               rows={3}
               style={{
