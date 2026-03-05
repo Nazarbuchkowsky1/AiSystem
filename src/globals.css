@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -171,4 +170,13 @@ html, body, #root {
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 8px rgba(34, 197, 94, 0.6), 0 0 16px rgba(34, 197, 94, 0.3); }
+  50% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.4), 0 0 12px rgba(34, 197, 94, 0.1); }
+}
+
+.status-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
 }
