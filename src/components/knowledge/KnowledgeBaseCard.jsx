@@ -39,7 +39,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
     queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     setShowFileInput(false);
 
-    // Simulate processing completion after 3 seconds per file
+    // Simulate processing completion after 2 seconds
     setTimeout(async () => {
       const processedFiles = updatedFiles.map(f => ({ ...f, processed: true }));
       await base44.entities.KnowledgeBase.update(kb.id, { 
@@ -47,7 +47,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
         processing: false 
       });
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-    }, 3000);
+    }, 2000);
   };
 
   const files = kb.files || [];
