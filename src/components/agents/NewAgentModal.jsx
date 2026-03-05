@@ -323,17 +323,8 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
           direction: ltr;
         }
         div::-webkit-scrollbar {
-          width: 6px;
-        }
-        div::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        div::-webkit-scrollbar-thumb {
-          background: transparent;
-          border-radius: 3px;
-        }
-        div::-webkit-scrollbar-thumb:hover {
-          background: transparent;
+          width: 0;
+          display: none;
         }
       `}</style>
     </div>
