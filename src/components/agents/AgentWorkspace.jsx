@@ -551,7 +551,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
               padding: multiLine || attachedFiles.length > 0 ? "10px 16px 4px 16px" : "0 8px",
-              overflowY: "hidden",
+              overflowY: "hidden", overflowX: "hidden", wordBreak: "break-word",
             }}
           />
 
