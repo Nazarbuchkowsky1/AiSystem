@@ -503,21 +503,16 @@ export default function AgentWorkspace({ agent, onBack }) {
       )}
 
       {/* Main input row */}
-      <div style={{ display: "flex", alignItems: inVoiceMode ? "center" : "flex-end", padding: "8px 8px 8px" }}>
-        {/* Left: attach button (hidden during voice) */}
-        {!inVoiceMode && (
-          <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s", marginBottom: 2 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={e => e.currentTarget.style.color = "#555"}>
-            <Plus style={{ width: 17, height: 17 }} />
-          </button>
-        )}
-
-        {/* Center: textarea OR waveform */}
-        {inVoiceMode ? (
-          renderWaveform()
-        ) : (
+      {inVoiceMode ? (
+        <div style={{ display: "flex", alignItems: "center", padding: "8px 8px" }}>
+          {renderWaveform()}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            {renderRightButtons()}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Textarea full width */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -529,20 +524,27 @@ export default function AgentWorkspace({ agent, onBack }) {
             placeholder="Message agent..."
             rows={1}
             style={{
-              flex: 1, minWidth: 0,
+              width: "100%", minWidth: 0, boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "7px 8px",
+              padding: "10px 14px 4px",
               overflowY: "hidden",
             }}
           />
-        )}
-
-        {/* Right: action buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginBottom: inVoiceMode ? 0 : 2 }}>
-          {renderRightButtons()}
+          {/* Action bar: attach left, mic+send right */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+              onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+              <Plus style={{ width: 17, height: 17 }} />
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {renderRightButtons()}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <input ref={fileInputRef} type="file" multiple style={{ display: "none" }}
         accept={[...SUPPORTED_IMAGES, "application/pdf", ".txt,.html,.css,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.cpp,.c,.cs,.java,.php,.swift,.kt,.md,.csv,.json,.xml,.sh,.sql,.yaml,.yml"].join(",")}
