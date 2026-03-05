@@ -73,22 +73,31 @@ export default function KnowledgeBasePage({ onBack }) {
 function NewKBModal({ onClose, onCreate, isLoading }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
 
   const handleCreate = async () => {
-    if (!name.trim() || !file) return;
-    const uploadRes = await base44.integrations.Core.UploadFile({ file });
+    if (!name.trim() || files.length === 0) return;
+    
+    const uploadedFiles = [];
+    for (const file of files) {
+      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      uploadedFiles.push({
+        name: file.name,
+        url: uploadRes.file_url,
+        size: file.size,
+        type: file.name.split(".").pop().toLowerCase(),
+        processed: false,
+      });
+    }
+
     await onCreate({
       name: name.trim(),
       description: description.trim(),
-      file_url: uploadRes.file_url,
-      file_type: file.name.split(".").pop().toLowerCase(),
-      file_name: file.name,
-      file_size: file.size,
+      files: uploadedFiles,
     });
     setName("");
     setDescription("");
-    setFile(null);
+    setFiles([]);
     onClose();
   };
 
@@ -142,24 +151,27 @@ function NewKBModal({ onClose, onCreate, isLoading }) {
             <label style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               padding: 16, borderRadius: 10, background: "#0f0f0f", border: "2px dashed #2a2a2a",
-              cursor: "pointer", transition: "all 0.2s"
+              cursor: "pointer", transition: "all 0.2s", flexDirection: "column"
             }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"}
               onMouseLeave={e => e.currentTarget.style.borderColor = "#2a2a2a"}>
-              {file ? (
-                <>
-                  <Upload style={{ width: 16, height: 16, color: "#f97316" }} />
-                  <span style={{ fontSize: 12, color: "#f5f5f5" }}>{file.name}</span>
-                </>
-              ) : (
-                <>
-                  <Upload style={{ width: 16, height: 16, color: "#555" }} />
-                  <span style={{ fontSize: 12, color: "#555" }}>Click to upload file</span>
-                </>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Upload style={{ width: 16, height: 16, color: files.length > 0 ? "#f97316" : "#555" }} />
+                <span style={{ fontSize: 12, color: files.length > 0 ? "#f5f5f5" : "#555" }}>
+                  {files.length > 0 ? `${files.length} file${files.length !== 1 ? "s" : ""} selected` : "Click to upload files (up to 100)"}
+                </span>
+              </div>
+              {files.length > 0 && (
+                <div style={{ fontSize: 10, color: "#888", marginTop: 8, maxHeight: 80, overflow: "auto", width: "100%" }}>
+                  {files.map((f, i) => (
+                    <div key={i} style={{ padding: "2px 4px", textAlign: "center" }}>{f.name}</div>
+                  ))}
+                </div>
               )}
               <input
                 type="file"
-                onChange={e => setFile(e.target.files?.[0] || null)}
+                onChange={e => setFiles(Array.from(e.target.files || []).slice(0, 100))}
                 accept=".pdf,.txt,.md,.json,.csv"
+                multiple
                 style={{ display: "none" }}
               />
             </label>
@@ -173,11 +185,11 @@ function NewKBModal({ onClose, onCreate, isLoading }) {
             }}>
               Cancel
             </button>
-            <button onClick={handleCreate} disabled={!name.trim() || !file || isLoading} style={{
+            <button onClick={handleCreate} disabled={!name.trim() || files.length === 0 || isLoading} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "#f97316",
               border: "none", color: "#fff", fontSize: 14, fontWeight: 500,
-              cursor: !name.trim() || !file || isLoading ? "not-allowed" : "pointer",
-              opacity: !name.trim() || !file || isLoading ? 0.5 : 1,
+              cursor: !name.trim() || files.length === 0 || isLoading ? "not-allowed" : "pointer",
+              opacity: !name.trim() || files.length === 0 || isLoading ? 0.5 : 1,
               display: "flex", alignItems: "center", justifyContent: "center", gap: 6
             }}>
               {isLoading ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : null}

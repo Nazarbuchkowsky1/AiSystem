@@ -15,18 +15,21 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
   };
 
   const handleAddFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = Array.from(e.target.files || []).slice(0, 100);
+    if (selectedFiles.length === 0) return;
 
-    const uploadRes = await base44.integrations.Core.UploadFile({ file });
     const updatedFiles = kb.files ? [...kb.files] : [];
-    updatedFiles.push({
-      name: file.name,
-      url: uploadRes.file_url,
-      size: file.size,
-      type: file.name.split(".").pop().toLowerCase(),
-      processed: false,
-    });
+    
+    for (const file of selectedFiles) {
+      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      updatedFiles.push({
+        name: file.name,
+        url: uploadRes.file_url,
+        size: file.size,
+        type: file.name.split(".").pop().toLowerCase(),
+        processed: false,
+      });
+    }
 
     await base44.entities.KnowledgeBase.update(kb.id, { 
       files: updatedFiles,
@@ -36,7 +39,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
     queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     setShowFileInput(false);
 
-    // Simulate processing completion after 3 seconds
+    // Simulate processing completion after 3 seconds per file
     setTimeout(async () => {
       const processedFiles = updatedFiles.map(f => ({ ...f, processed: true }));
       await base44.entities.KnowledgeBase.update(kb.id, { 
@@ -196,6 +199,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
               type="file"
               onChange={handleAddFile}
               accept=".pdf,.txt,.md,.json,.csv"
+              multiple
               style={{ display: "none" }}
             />
           </label>
