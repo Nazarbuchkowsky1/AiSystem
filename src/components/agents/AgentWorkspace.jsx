@@ -1,7 +1,22 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot, Loader2 } from "lucide-react";
+import {
+  ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
+  Loader2, X, FileText, Code2, Image as ImageIcon
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
+
+const MAX_FILES = 30;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const SUPPORTED_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const CODE_EXTS = ["js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs","java","php","swift","kt","html","css","scss","json","yaml","yml","xml","sh","bash","sql","md","txt","csv"];
+
+function getFileType(file) {
+  if (SUPPORTED_IMAGES.includes(file.type)) return "image";
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (CODE_EXTS.includes(ext)) return "code";
+  return "document";
+}
 
 export default function AgentWorkspace({ agent, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -10,8 +25,15 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const [attachedFiles, setAttachedFiles] = useState([]);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [multiLine, setMultiLine] = useState(false);
+
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
+  const filesScrollRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -20,6 +42,28 @@ export default function AgentWorkspace({ agent, onBack }) {
   useEffect(() => {
     loadHistory();
   }, [agent]);
+
+  useEffect(() => {
+    if (filesScrollRef.current) {
+      filesScrollRef.current.scrollLeft = filesScrollRef.current.scrollWidth;
+    }
+  }, [attachedFiles]);
+
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const sh = ta.scrollHeight;
+    const maxH = 188;
+    ta.style.height = Math.min(sh, maxH) + "px";
+    ta.style.overflowY = sh > maxH ? "auto" : "hidden";
+    if (input.length === 0) {
+      setMultiLine(false);
+    } else {
+      const isNow = sh > (multiLine ? 40 : 45);
+      if (isNow !== multiLine) setMultiLine(isNow);
+    }
+  }, [input]);
 
   const loadHistory = async () => {
     const convos = await base44.entities.Conversation.filter({ agent_id: String(agent.id) }, "-created_date", 20);
@@ -32,238 +76,352 @@ export default function AgentWorkspace({ agent, onBack }) {
     setShowHistory(false);
   };
 
+  const addFilesFromList = (files) => {
+    const arr = Array.from(files);
+    const newFiles = [];
+    for (const file of arr) {
+      if (attachedFiles.length + newFiles.length >= MAX_FILES) break;
+      if (file.size > MAX_FILE_SIZE) continue;
+      const type = getFileType(file);
+      const preview = type === "image" ? URL.createObjectURL(file) : null;
+      newFiles.push({ file, type, preview, id: Math.random().toString(36).slice(2) });
+    }
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const removeFile = (id) => {
+    setAttachedFiles(prev => {
+      const f = prev.find(x => x.id === id);
+      if (f?.preview) URL.revokeObjectURL(f.preview);
+      return prev.filter(x => x.id !== id);
+    });
+  };
+
+  const handlePaste = (e) => {
+    const imgs = Array.from(e.clipboardData?.items || [])
+      .filter(i => i.kind === "file" && i.type.startsWith("image/"))
+      .map(i => i.getAsFile());
+    if (imgs.length) { e.preventDefault(); addFilesFromList(imgs); }
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachedFiles.length === 0) || isLoading) return;
     const userMsg = input.trim();
+    const filesToSend = [...attachedFiles];
     setInput("");
-    const newMessages = [...messages, { role: "user", content: userMsg }];
+    setAttachedFiles([]);
+    setMultiLine(false);
+
+    let displayContent = userMsg;
+    if (filesToSend.length > 0) {
+      const names = filesToSend.map(f => f.file.name).join(", ");
+      displayContent = userMsg ? `${userMsg}\n\n📎 ${names}` : `📎 ${names}`;
+    }
+
+    const newMessages = [...messages, { role: "user", content: displayContent }];
     setMessages(newMessages);
     setIsLoading(true);
 
     const systemPrompt = agent.system_prompt || `You are ${agent.name}. ${agent.description || ""}. ${
       mode === "thinking" ? "Think deeply and provide thorough, detailed responses." : "Be concise and direct."
     }`;
-
     const prompt = `${systemPrompt}\n\nConversation:\n${newMessages.map(m => `${m.role}: ${m.content}`).join("\n")}\n\nassistant:`;
+
+    abortControllerRef.current = new AbortController();
 
     const response = await base44.integrations.Core.InvokeLLM({ prompt });
 
-    setMessages([...newMessages, { role: "assistant", content: response }]);
+    setMessages(prev => [...prev, { role: "assistant", content: response }]);
     setIsLoading(false);
+    abortControllerRef.current = null;
 
-    // Save conversation
-    let convoId;
     if (messages.length === 0) {
       const convo = await base44.entities.Conversation.create({
-        agent_id: String(agent.id),
-        agent_name: agent.name,
-        title: userMsg.substring(0, 60),
-        mode,
-        message_count: 2,
-        last_message_preview: response.substring(0, 100),
+        agent_id: String(agent.id), agent_name: agent.name,
+        title: (userMsg || "File upload").substring(0, 60), mode,
+        message_count: 2, last_message_preview: response.substring(0, 100),
       });
-      convoId = convo.id;
-    }
-    // Save messages in background
-    if (convoId) {
       await base44.entities.Message.bulkCreate([
-        { conversation_id: String(convoId), role: "user", content: userMsg },
-        { conversation_id: String(convoId), role: "assistant", content: response },
+        { conversation_id: String(convo.id), role: "user", content: displayContent },
+        { conversation_id: String(convo.id), role: "assistant", content: response },
       ]);
+      loadHistory();
     }
   };
 
   const hasMessages = messages.length > 0;
+  const hasContent = input.trim() || attachedFiles.length > 0;
+  const isMultiMode = multiLine || attachedFiles.length > 0;
 
-  return (
-    <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 h-14 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-white/5 transition">
-            <ArrowLeft className="w-4 h-4" style={{ color: "var(--text-secondary)" }} />
-          </button>
-          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{agent.name}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="p-2 rounded-lg hover:bg-white/5 transition"
-            style={{ color: "var(--text-muted)" }}
-          >
-            <Clock className="w-4 h-4" />
-          </button>
-          <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: "var(--border-subtle)" }}>
-            <button
-              onClick={() => setMode("instant")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition"
-              style={{
-                background: mode === "instant" ? "var(--accent-dim)" : "transparent",
-                color: mode === "instant" ? "var(--accent)" : "var(--text-muted)",
-              }}
-            >
-              <Zap className="w-3 h-3" /> Instant
-            </button>
-            <button
-              onClick={() => setMode("thinking")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition"
-              style={{
-                background: mode === "thinking" ? "var(--accent-dim)" : "transparent",
-                color: mode === "thinking" ? "var(--accent)" : "var(--text-muted)",
-              }}
-            >
-              <Brain className="w-3 h-3" /> Thinking
+  const inputBarStyle = {
+    background: inputFocused ? "#1e1e1e" : "#181818",
+    border: `1px solid ${inputFocused ? "rgba(249,115,22,0.35)" : "#2a2a2a"}`,
+    borderRadius: 24,
+    boxShadow: inputFocused ? "0 0 0 3px rgba(249,115,22,0.08)" : "none",
+    transition: "all 0.2s",
+  };
+
+  const renderFilesBar = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 4px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div ref={filesScrollRef} style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
+        {attachedFiles.map((af) => (
+          <div key={af.id} style={{ display: "flex", alignItems: "center", gap: 6, background: "#242424", border: "1px solid #333", borderRadius: 10, padding: "4px 8px", flexShrink: 0, maxWidth: 140 }}>
+            {af.type === "image" && af.preview
+              ? <img src={af.preview} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover" }} />
+              : af.type === "code"
+              ? <div style={{ width: 22, height: 22, borderRadius: 4, background: "rgba(168,85,247,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><Code2 style={{ width: 12, height: 12, color: "#a855f7" }} /></div>
+              : <div style={{ width: 22, height: 22, borderRadius: 4, background: "rgba(59,130,246,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><FileText style={{ width: 12, height: 12, color: "#3b82f6" }} /></div>
+            }
+            <span style={{ fontSize: 10, color: "#aaa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 70 }}>{af.file.name}</span>
+            <button onClick={() => removeFile(af.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 0, display: "flex" }}>
+              <X style={{ width: 10, height: 10 }} />
             </button>
           </div>
-        </div>
+        ))}
       </div>
+      <span style={{ fontSize: 10, color: "#444", flexShrink: 0 }}>{attachedFiles.length}/{MAX_FILES}</span>
+    </div>
+  );
 
-      {/* History Panel */}
-      {showHistory && (
-        <div className="absolute right-0 top-14 w-80 h-[calc(100%-56px)] z-20 border-l overflow-auto" style={{ background: "var(--bg-secondary)", borderColor: "var(--border-subtle)" }}>
-          <div className="p-4">
-            <h3 className="text-xs font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Chat History</h3>
-            <div className="space-y-2">
-              {conversations.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => loadConversation(c)}
-                  className="w-full text-left p-3 rounded-xl hover:bg-white/5 transition"
-                >
-                  <p className="text-xs font-medium truncate" style={{ color: "var(--text-primary)" }}>{c.title}</p>
-                  <p className="text-[10px] mt-1 truncate" style={{ color: "var(--text-muted)" }}>{c.last_message_preview}</p>
+  const renderInputBar = () => (
+    <div style={{ ...inputBarStyle, position: "relative", width: hasMessages ? "100%" : 680, maxWidth: "100%" }}>
+      {attachedFiles.length > 0 && renderFilesBar()}
+
+      {!isMultiMode ? (
+        /* Single-line row */
+        <div style={{ display: "flex", alignItems: "center", height: 56, padding: "0 8px" }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+            onMouseLeave={e => e.currentTarget.style.color = "#555"}
+          >
+            <Plus style={{ width: 16, height: 16 }} />
+          </button>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={handlePaste}
+            placeholder="Message agent..."
+            rows={1}
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none", resize: "none",
+              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", paddingTop: 16, paddingBottom: 8,
+              overflowY: "hidden", fontFamily: "inherit",
+            }}
+          />
+          <button style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex" }}>
+            <Mic style={{ width: 16, height: 16 }} />
+          </button>
+          {isLoading ? (
+            <button onClick={stopGeneration} style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4 }}>
+              <Square style={{ width: 14, height: 14, color: "#fff" }} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!hasContent}
+              style={{
+                width: 36, height: 36, borderRadius: 12, border: "none", cursor: hasContent ? "pointer" : "not-allowed",
+                background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)",
+                display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4,
+                opacity: hasContent ? 1 : 0.5, transition: "all 0.2s",
+              }}
+            >
+              <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
+            </button>
+          )}
+        </div>
+      ) : (
+        /* Multi-line */
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={handlePaste}
+            placeholder="Message agent..."
+            rows={1}
+            style={{
+              width: "100%", background: "transparent", border: "none", outline: "none", resize: "none",
+              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", paddingTop: 13, paddingBottom: 7,
+              paddingLeft: 16, paddingRight: 16, overflowY: "hidden", fontFamily: "inherit",
+            }}
+          />
+          {/* Action bar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px 8px" }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+              onMouseLeave={e => e.currentTarget.style.color = "#555"}
+            >
+              <Plus style={{ width: 16, height: 16 }} />
+            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex" }}>
+                <Mic style={{ width: 16, height: 16 }} />
+              </button>
+              {isLoading ? (
+                <button onClick={stopGeneration} style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Square style={{ width: 14, height: 14, color: "#fff" }} />
                 </button>
-              ))}
-              {conversations.length === 0 && (
-                <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>No history yet</p>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!hasContent}
+                  style={{
+                    width: 36, height: 36, borderRadius: 12, border: "none", cursor: hasContent ? "pointer" : "not-allowed",
+                    background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: hasContent ? 1 : 0.5, transition: "all 0.2s",
+                  }}
+                >
+                  <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
+                </button>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
-        {!hasMessages ? (
-          /* Empty State */
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-md">
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                style={{ background: "var(--accent-dim)" }}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        style={{ display: "none" }}
+        accept={[...SUPPORTED_IMAGES, "application/pdf", ".txt,.html,.css,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.cpp,.c,.cs,.java,.php,.swift,.kt,.md,.csv,.json,.xml,.sh,.sql,.yaml,.yml"].join(",")}
+        onChange={e => { addFilesFromList(e.target.files); e.target.value = ""; }}
+      />
+    </div>
+  );
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={onBack}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 6, borderRadius: 10, display: "flex", transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f5f5f5"}
+            onMouseLeave={e => e.currentTarget.style.color = "#555"}
+          >
+            <ArrowLeft style={{ width: 16, height: 16 }} />
+          </button>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5" }}>{agent.name}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            style={{ padding: 7, borderRadius: 10, background: showHistory ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showHistory ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}
+          >
+            <Clock style={{ width: 15, height: 15 }} />
+          </button>
+          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+            {[["instant", Zap, "Instant"], ["thinking", Brain, "Thinking"]].map(([val, Icon, label]) => (
+              <button
+                key={val}
+                onClick={() => setMode(val)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                  background: mode === val ? "rgba(249,115,22,0.15)" : "transparent",
+                  color: mode === val ? "#f97316" : "#555",
+                  border: "none", cursor: "pointer", transition: "all 0.2s",
+                }}
               >
-                <Bot className="w-7 h-7" style={{ color: "var(--accent)" }} />
-              </div>
-              <h2 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{agent.name}</h2>
-              <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>{agent.description}</p>
-              {/* Input Bar - Centered */}
-              <div className="flex items-center gap-2 p-2 rounded-2xl border" style={{ background: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
-                <button className="p-2 rounded-xl hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-                  <Plus className="w-4 h-4" />
-                </button>
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder="Message agent..."
-                  className="flex-1 bg-transparent text-sm outline-none"
-                  style={{ color: "var(--text-primary)" }}
-                />
-                <button className="p-2 rounded-xl hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-                  <Mic className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim()}
-                  className="p-2 rounded-xl transition"
-                  style={{
-                    background: input.trim() ? "var(--accent)" : "var(--accent-dim)",
-                    color: input.trim() ? "#fff" : "var(--text-muted)",
-                  }}
+                <Icon style={{ width: 11, height: 11 }} />{label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* History Panel */}
+      {showHistory && (
+        <div style={{ position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20, background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto" }}>
+          <div style={{ padding: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Chat History</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {conversations.map(c => (
+                <button key={c.id} onClick={() => loadConversation(c)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, background: "none", border: "1px solid transparent", cursor: "pointer", transition: "all 0.2s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.06)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.15)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "transparent"; }}
                 >
-                  <Send className="w-4 h-4" />
+                  <p style={{ fontSize: 12, fontWeight: 500, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</p>
+                  <p style={{ fontSize: 10, color: "#444", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.last_message_preview}</p>
                 </button>
+              ))}
+              {conversations.length === 0 && <p style={{ fontSize: 11, color: "#444", textAlign: "center", padding: 20 }}>No history yet</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {!hasMessages ? (
+          /* Welcome state — centered */
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
+            <div style={{ textAlign: "center", width: "100%", maxWidth: 680 }}>
+              <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <Bot style={{ width: 28, height: 28, color: "#f97316" }} />
               </div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", marginBottom: 8 }}>{agent.name}</h2>
+              <p style={{ fontSize: 13, color: "#555", marginBottom: 28, lineHeight: 1.6, maxWidth: 440, margin: "0 auto 28px" }}>{agent.description}</p>
+              {renderInputBar()}
             </div>
           </div>
         ) : (
           <>
             {/* Messages */}
-            <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-3 ${msg.role === "user" ? "" : ""}`}
-                    style={{
-                      background: msg.role === "user"
-                        ? "linear-gradient(135deg, rgba(249,115,22,0.2), rgba(249,115,22,0.1))"
-                        : "var(--bg-card)",
-                      border: msg.role === "user" ? "1px solid rgba(249,115,22,0.2)" : "1px solid var(--border-subtle)",
-                    }}
-                  >
+                <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    maxWidth: "75%", borderRadius: 18, padding: "10px 16px",
+                    background: msg.role === "user" ? "rgba(249,115,22,0.12)" : "#181818",
+                    border: msg.role === "user" ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
+                  }}>
                     {msg.role === "assistant" ? (
                       <ReactMarkdown className="text-sm prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                         {msg.content}
                       </ReactMarkdown>
                     ) : (
-                      <p className="text-sm" style={{ color: "var(--text-primary)" }}>{msg.content}</p>
+                      <p style={{ fontSize: 14, color: "#f5f5f5", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{msg.content}</p>
                     )}
                   </div>
                 </div>
               ))}
               {isLoading && (
-                <div className="flex justify-start">
-                  <div className="glass-panel px-4 py-3 flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--accent)" }} />
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {mode === "thinking" ? "Thinking deeply..." : "Generating..."}
-                    </span>
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                    <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: 12, color: "#555" }}>{mode === "thinking" ? "Thinking deeply..." : "Generating..."}</span>
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Bar - Bottom */}
-            <div className="px-6 pb-4 pt-2">
-              <div className="flex items-center gap-2 p-2 rounded-2xl border" style={{ background: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
-                <button className="p-2 rounded-xl hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-                  <Plus className="w-4 h-4" />
-                </button>
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder="Message agent..."
-                  className="flex-1 bg-transparent text-sm outline-none"
-                  style={{ color: "var(--text-primary)" }}
-                />
-                <button className="p-2 rounded-xl hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-                  <Mic className="w-4 h-4" />
-                </button>
-                {isLoading ? (
-                  <button
-                    onClick={() => setIsLoading(false)}
-                    className="p-2 rounded-xl"
-                    style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}
-                  >
-                    <Square className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSend}
-                    disabled={!input.trim()}
-                    className="p-2 rounded-xl transition"
-                    style={{
-                      background: input.trim() ? "var(--accent)" : "var(--accent-dim)",
-                      color: input.trim() ? "#fff" : "var(--text-muted)",
-                    }}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+            {/* Bottom input */}
+            <div style={{ padding: "8px 24px 16px", flexShrink: 0 }}>
+              {renderInputBar()}
             </div>
           </>
         )}
