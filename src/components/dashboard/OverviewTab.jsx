@@ -188,15 +188,29 @@ export default function OverviewTab() {
           </div>
         </div>
 
-
       </div>
 
-      {/* RIGHT — Task Completion only */}
+      {/* RIGHT — Resource Allocation */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div className="glass-panel" style={{ padding: 14, flex: 1, display: "flex", flexDirection: "column" }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 8 }}>Task Completion Rate</p>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <TaskCompletionGauge />
+        <div className="glass-panel" style={{ padding: 14, flex: 1 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 10 }}>Resource Allocation</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {resourceData.map((r) => (
+              <div key={r.name}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "#888" }}>{r.name}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5" }}>{r.value}%</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.05)" }}>
+                  <div style={{
+                    width: `${r.value}%`,
+                    height: "100%",
+                    borderRadius: 4,
+                    background: "linear-gradient(90deg, #c2410c, #f97316)",
+                  }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
