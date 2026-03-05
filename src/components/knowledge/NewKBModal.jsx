@@ -24,12 +24,21 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       });
     }
 
-    onCreate({
+    const createdKB = await onCreate({
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
+      processing: true,
     });
+    
     setIsCreating(false);
+    onClose();
+    
+    if (createdKB?.id) {
+      setTimeout(async () => {
+        await base44.entities.KnowledgeBase.update(createdKB.id, { processing: false });
+      }, 2000);
+    }
   };
 
   return (
