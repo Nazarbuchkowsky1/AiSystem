@@ -289,24 +289,27 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
               <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base first to connect it</p>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {knowledgeBases.map(kb => (
-                  <button key={kb.id} onClick={() => setSelectedKnowledgeBase(kb.id)} style={{
-                    padding: "10px 12px", borderRadius: 10,
-                    background: selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.2)" : "#0f0f0f",
-                    border: `1px solid ${selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
-                    cursor: "pointer", transition: "all 0.2s", fontSize: 11, fontWeight: 500,
-                    color: selectedKnowledgeBase === kb.id ? "#f97316" : "#f5f5f5",
-                    textAlign: "left",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4
-                  }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#f5f5f5" }}>{kb.name}</span>
-                    <span style={{ fontSize: 9, color: "#f97316", fontWeight: 400 }}>
-                      {kb.files ? kb.files.length : 1} file{(kb.files ? kb.files.length : 1) !== 1 ? "s" : ""}
-                    </span>
-                  </button>
-                ))}
+                {knowledgeBases.map(kb => {
+                  const isSelected = selectedKnowledgeBase === kb.id;
+                  return (
+                    <button key={kb.id} onClick={() => setSelectedKnowledgeBase(isSelected ? "" : kb.id)} style={{
+                      padding: "10px 12px", borderRadius: 10,
+                      background: isSelected ? "#f97316" : "#0f0f0f",
+                      border: `1px solid ${isSelected ? "#f97316" : "#2a2a2a"}`,
+                      cursor: "pointer", transition: "all 0.2s", fontSize: 11, fontWeight: 500,
+                      color: isSelected ? "#fff" : "#f5f5f5",
+                      textAlign: "left",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4
+                    }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kb.name}</span>
+                      <span style={{ fontSize: 9, color: isSelected ? "#fff" : "#f5f5f5", fontWeight: 400 }}>
+                        {kb.files ? kb.files.length : 1} file{(kb.files ? kb.files.length : 1) !== 1 ? "s" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
