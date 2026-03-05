@@ -14,6 +14,7 @@ export default function Agents() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [showNewKBModal, setShowNewKBModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState(null);
+  const [editingKB, setEditingKB] = useState(null);
   const [currentTab, setCurrentTab] = useState("agents");
   const queryClient = useQueryClient();
 
