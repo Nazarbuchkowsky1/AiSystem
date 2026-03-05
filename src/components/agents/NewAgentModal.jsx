@@ -314,18 +314,6 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* Scrollbar position on left */
-        [style*="maxHeight: 90vh"] {
-          direction: rtl;
-          padding-right: 16px;
-        }
-        [style*="maxHeight: 90vh"] > * {
-          direction: ltr;
-        }
-        div::-webkit-scrollbar {
-          width: 0;
-          display: none;
-        }
       `}</style>
     </div>
   );
