@@ -141,32 +141,6 @@ export default function Layout({ children, currentPageName }) {
           })}
         </nav>
 
-        {/* Collapse Toggle */}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          style={{
-            position: "absolute",
-            right: -12,
-            top: 80,
-            width: 24,
-            height: 24,
-            borderRadius: "50%",
-            background: "#161616",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "#555",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            zIndex: 20,
-            transition: "border-color 0.2s",
-          }}
-        >
-          {collapsed
-            ? <ChevronRight style={{ width: 12, height: 12 }} />
-            : <ChevronLeft style={{ width: 12, height: 12 }} />}
-        </button>
-
         {/* Bottom Status */}
         <div style={{ padding: 16, flexShrink: 0 }}>
           {!collapsed && (
