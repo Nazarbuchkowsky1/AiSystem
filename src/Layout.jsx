@@ -53,36 +53,58 @@ export default function Layout({ children, currentPageName }) {
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
             gap: 12,
-            padding: "0 20px",
+            padding: "0 16px",
             height: 64,
             borderBottom: "1px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}
         >
-          <div
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                background: "rgba(249,115,22,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
+            </div>
+            {!collapsed && (
+              <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                NEXUS AI
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setCollapsed(!collapsed)}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              background: "rgba(249,115,22,0.15)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#555",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
+              padding: 4,
               flexShrink: 0,
             }}
+            title={collapsed ? "Expand" : "Collapse"}
           >
-            <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
-          </div>
-          {!collapsed && (
-            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-              NEXUS AI
-            </span>
-          )}
+            {collapsed
+              ? <ChevronRight style={{ width: 16, height: 16 }} />
+              : <ChevronLeft style={{ width: 16, height: 16 }} />}
+          </button>
         </div>
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+...
           {NAV_ITEMS.map((item) => {
             const isActive = currentPageName === item.page;
             return (
