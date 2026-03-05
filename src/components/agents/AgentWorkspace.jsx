@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
