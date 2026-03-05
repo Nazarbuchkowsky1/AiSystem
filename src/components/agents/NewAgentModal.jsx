@@ -338,7 +338,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
             }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}>
-              Видалити бота
+              Delete Agent
             </button>
           )}
 
@@ -348,7 +348,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
               border: "1px solid rgba(239,68,68,0.3)", display: "flex", flexDirection: "column", gap: 10
             }}>
               <p style={{ fontSize: 13, color: "#ef4444", fontWeight: 500, textAlign: "center" }}>
-                Ви впевнені, що хочете видалити цього бота?
+                Are you sure you want to delete this agent?
               </p>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setShowDeleteConfirm(false)} style={{
@@ -356,14 +356,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
                   border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 13, fontWeight: 500,
                   cursor: "pointer", transition: "all 0.2s"
                 }}>
-                  Скасувати
+                  Cancel
                 </button>
                 <button onClick={() => { onDelete(editAgent.id); onClose(); }} style={{
                   flex: 1, padding: "8px 14px", borderRadius: 8, background: "#ef4444",
                   border: "none", color: "#fff", fontSize: 13, fontWeight: 500,
                   cursor: "pointer", transition: "all 0.2s"
                 }}>
-                  Так, видалити
+                  Yes, Delete
                 </button>
               </div>
             </div>
