@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Upload, Loader2, Bot, Zap, Brain, Sparkles, Cpu, Settings } from "lucide-react";
+import { X, Upload, Loader2, Bot, Zap, Brain, Sparkles, Cpu, Settings, Palette, Code, Shield, Globe, MessageSquare, Pencil } from "lucide-react";
 
 const AVAILABLE_TOOLS = [
   { name: "web_search", label: "Web Search" },
