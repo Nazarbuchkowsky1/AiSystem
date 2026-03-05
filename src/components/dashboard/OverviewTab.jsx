@@ -315,7 +315,7 @@ export default function OverviewTab() {
 
       {/* RIGHT — Task Completion Rate */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
-        <div className="glass-panel" style={{ padding: 12, display: "flex", flexDirection: "column" }}>
+        <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 12, display: "flex", flexDirection: "column" }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 6 }}>Task Completion Rate</p>
           <TaskCompletionGauge />
         </div>
