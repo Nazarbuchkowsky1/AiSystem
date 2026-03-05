@@ -37,7 +37,7 @@ export default function Analytics() {
       <DashboardTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         {activeTab === "Overview" && <OverviewTab />}
         {activeTab === "Agents" && <AgentsTab />}
         {["OpenClo", "Tools", "Costs", "System"].includes(activeTab) && (

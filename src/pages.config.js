@@ -47,20 +47,20 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import Analytics from './pages/Analytics';
 import Agents from './pages/Agents';
-import Tools from './pages/Tools';
+import Analytics from './pages/Analytics';
 import Calendar from './pages/Calendar';
 import Settings from './pages/Settings';
+import Tools from './pages/Tools';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Analytics": Analytics,
     "Agents": Agents,
-    "Tools": Tools,
+    "Analytics": Analytics,
     "Calendar": Calendar,
     "Settings": Settings,
+    "Tools": Tools,
 }
 
 export const pagesConfig = {

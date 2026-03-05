@@ -93,7 +93,7 @@ function TaskCompletionGauge() {
 
 export default function OverviewTab() {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "5fr 4fr 3fr", gap: 12, height: "100%" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "5fr 4fr 3fr", gap: 12, minHeight: "100%" }}>
 
       {/* LEFT — AI Generation Activity */}
       <div className="glass-panel" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
