@@ -255,14 +255,6 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
                  </button>
                ))}
              </div>
-             <button onClick={analyzeAndSuggest} disabled={!name.trim() || isAnalyzing} style={{
-               marginTop: 10, padding: "6px 12px", borderRadius: 8, background: "rgba(249,115,22,0.1)",
-               border: "1px solid rgba(249,115,22,0.2)", color: "#f97316", fontSize: 11, fontWeight: 500,
-               cursor: isAnalyzing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6
-             }}>
-               {isAnalyzing ? <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} /> : null}
-               {isAnalyzing ? "Analyzing..." : "AI Suggest Tools"}
-             </button>
            </div>
 
           {/* Knowledge Base */}
