@@ -40,6 +40,13 @@ export default function Agents() {
     },
   });
 
+  const deleteAgentMutation = useMutation({
+    mutationFn: (id) => base44.entities.Agent.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+
   const createKBMutation = useMutation({
     mutationFn: async (kbData) => {
       const created = await base44.entities.KnowledgeBase.create(kbData);
@@ -103,6 +110,7 @@ export default function Agents() {
           onClose={() => { setShowNewModal(false); setEditingAgent(null); }}
           onCreate={(agentData) => createAgentMutation.mutate(agentData)}
           onUpdate={(id, data) => updateAgentMutation.mutate({ id, data })}
+          onDelete={(id) => deleteAgentMutation.mutate(id)}
           knowledgeBases={knowledgeBases}
           editAgent={editingAgent}
         />
