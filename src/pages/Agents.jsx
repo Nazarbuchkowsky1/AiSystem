@@ -6,7 +6,7 @@ import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
 import NewKBModal from "../components/knowledge/NewKBModal.jsx";
-import KnowledgeBaseViewGrid from "../components/knowledge/KnowledgeBaseViewGrid.jsx";
+import KnowledgeBaseCard from "../components/knowledge/KnowledgeBaseCard";
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -109,7 +109,25 @@ export default function Agents() {
           </div>
         )
       ) : (
-        <KnowledgeBaseViewGrid knowledgeBases={knowledgeBases} />
+        knowledgeBases.length === 0 ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
+              <BookOpen style={{ width: 24, height: 24, color: "#f97316" }} />
+            </div>
+            <p style={{ fontSize: 13, color: "#f5f5f5" }}>No knowledge bases yet</p>
+            <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, overflow: "auto" }}>
+            {knowledgeBases.map((kb) => (
+              <KnowledgeBaseCard
+                key={kb.id}
+                kb={kb}
+                onSelect={() => {}}
+              />
+            ))}
+          </div>
+        )
       )}
     </div>
   );
