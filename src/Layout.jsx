@@ -24,45 +24,95 @@ export default function Layout({ children, currentPageName }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-primary)" }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+        background: "#0a0a0a",
+        color: "#f5f5f5",
+      }}
+    >
       {/* Sidebar */}
       <aside
-        className={`relative flex flex-col border-r transition-all duration-300 ease-in-out ${
-          collapsed ? "w-[72px]" : "w-[240px]"
-        }`}
         style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          width: collapsed ? 72 : 240,
+          minWidth: collapsed ? 72 : 240,
+          flexShrink: 0,
           background: "linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 100%)",
-          borderColor: "var(--border-subtle)",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+          transition: "width 0.3s ease, min-width 0.3s ease",
+          zIndex: 10,
         }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 h-16 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "var(--accent-dim)" }}>
-            <Flame className="w-4 h-4" style={{ color: "var(--accent)" }} />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "0 20px",
+            height: 64,
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
+              background: "rgba(249,115,22,0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
           </div>
           {!collapsed && (
-            <span className="font-semibold text-sm tracking-wide" style={{ color: "var(--text-primary)" }}>
+            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
               NEXUS AI
             </span>
           )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav style={{ flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
           {NAV_ITEMS.map((item) => {
             const isActive = currentPageName === item.page;
             return (
               <Link
                 key={item.page}
                 to={createPageUrl(item.page)}
-                className={`sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent text-sm font-medium transition-all ${
-                  isActive ? "active" : ""
-                }`}
                 style={{
-                  color: isActive ? "var(--accent)" : "var(--text-secondary)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  textDecoration: "none",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: isActive ? "#f97316" : "#888",
+                  background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
+                  border: `1px solid ${isActive ? "rgba(249,115,22,0.3)" : "transparent"}`,
+                  transition: "all 0.2s ease",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.background = "rgba(249,115,22,0.07)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+                <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
                 {!collapsed && <span>{item.name}</span>}
               </Link>
             );
@@ -72,35 +122,50 @@ export default function Layout({ children, currentPageName }) {
         {/* Collapse Toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 rounded-full border flex items-center justify-center z-10 transition-colors hover:border-orange-500/30"
           style={{
-            background: "var(--bg-card)",
-            borderColor: "var(--border-subtle)",
-            color: "var(--text-muted)",
+            position: "absolute",
+            right: -12,
+            top: 80,
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            background: "#161616",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "#555",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            zIndex: 20,
+            transition: "border-color 0.2s",
           }}
         >
-          {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+          {collapsed
+            ? <ChevronRight style={{ width: 12, height: 12 }} />
+            : <ChevronLeft style={{ width: 12, height: 12 }} />}
         </button>
 
-        {/* Bottom Glow */}
-        <div className="px-4 py-4">
+        {/* Bottom Status */}
+        <div style={{ padding: 16, flexShrink: 0 }}>
           {!collapsed && (
             <div
-              className="rounded-xl p-4 relative overflow-hidden"
               style={{
-                background: "linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(249, 115, 22, 0.03))",
-                border: "1px solid rgba(249, 115, 22, 0.15)",
+                borderRadius: 12,
+                padding: 16,
+                background: "linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.03))",
+                border: "1px solid rgba(249,115,22,0.15)",
+                position: "relative",
+                overflow: "hidden",
               }}
             >
-              <div
-                className="absolute -top-10 -right-10 w-24 h-24 rounded-full opacity-30"
-                style={{ background: "radial-gradient(circle, rgba(249, 115, 22, 0.4), transparent)" }}
-              />
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--accent)" }}>System Status</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>All systems operational</p>
-              <div className="flex items-center gap-1.5 mt-2">
-                <div className="glow-dot" style={{ width: 6, height: 6 }} />
-                <span className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>Online</span>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#f97316", marginBottom: 4 }}>System Status</p>
+              <p style={{ fontSize: 11, color: "#555" }}>All systems operational</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%", background: "#f97316",
+                  boxShadow: "0 0 8px rgba(249,115,22,0.6)"
+                }} />
+                <span style={{ fontSize: 10, color: "#f97316", fontWeight: 600 }}>Online</span>
               </div>
             </div>
           )}
@@ -108,7 +173,14 @@ export default function Layout({ children, currentPageName }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto" style={{ background: "var(--bg-primary)" }}>
+      <main
+        style={{
+          flex: 1,
+          overflow: "auto",
+          background: "#0a0a0a",
+          minWidth: 0,
+        }}
+      >
         {children}
       </main>
     </div>
