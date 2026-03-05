@@ -235,20 +235,20 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
           {/* Tools Access */}
            <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Tool Access</p>
-             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+             <p style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Tools Access</p>
+             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                {AVAILABLE_TOOLS.map(tool => (
                  <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
-                   display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", borderRadius: 10,
-                   background: selectedTools.includes(tool.name) ? "rgba(249,115,22,0.2)" : "#0f0f0f",
-                   border: `1px solid ${selectedTools.includes(tool.name) ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
-                   cursor: "pointer", transition: "all 0.2s", fontSize: 11, fontWeight: 500,
-                   color: selectedTools.includes(tool.name) ? "#f97316" : "#f5f5f5",
-                   textAlign: "center", flexDirection: "column"
+                   display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20,
+                   background: selectedTools.includes(tool.name) ? "#f97316" : "#0f0f0f",
+                   border: `1px solid ${selectedTools.includes(tool.name) ? "#f97316" : "#2a2a2a"}`,
+                   cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                   color: selectedTools.includes(tool.name) ? "#fff" : "#f5f5f5",
+                   whiteSpace: "nowrap"
                  }}>
                    <div style={{
-                     width: 8, height: 8, borderRadius: "50%", 
-                     background: selectedTools.includes(tool.name) ? "#f97316" : "#2a2a2a",
+                     width: 6, height: 6, borderRadius: "50%", 
+                     background: selectedTools.includes(tool.name) ? "#fff" : "#f97316",
                      flexShrink: 0
                    }} />
                    {tool.label}
