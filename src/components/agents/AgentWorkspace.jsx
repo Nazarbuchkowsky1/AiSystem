@@ -61,16 +61,24 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea — only runs when in single-line DOM mode to measure
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+    // Save scroll pos
     ta.style.height = "auto";
     const sh = ta.scrollHeight;
     const clamped = Math.min(sh, MAX_HEIGHT);
     ta.style.height = clamped + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-    setTextareaHeight(clamped);
+    // Determine multiline: threshold is ~44px (one line = 24px text + 13+7 padding)
+    if (input.length === 0) {
+      setIsMultiLineSt(false);
+    } else {
+      // Use 48px threshold (one line of text = ~44px including padding in single-line mode)
+      const threshold = isMultiLineSt ? 40 : 48;
+      setIsMultiLineSt(sh > threshold);
+    }
   }, [input]);
 
   const loadHistory = async () => {
