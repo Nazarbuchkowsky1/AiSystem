@@ -84,24 +84,11 @@ export default function Agents() {
       )}
 
       {showNewKBModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-          <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 16, padding: 24, width: "100%", maxWidth: 400, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f5f5f5", margin: 0 }}>New Knowledge Base</h2>
-              <button onClick={() => setShowNewKBModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#555", fontSize: 18 }}>×</button>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 8, display: "block" }}>Name</label>
-                <input type="text" placeholder="KB name" style={{ width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f", border: "1px solid #2a2a2a", color: "#f5f5f5", boxSizing: "border-box", fontSize: 13 }} />
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setShowNewKBModal(false)} style={{ flex: 1, padding: "8px 12px", borderRadius: 10, background: "transparent", border: "1px solid #2a2a2a", color: "#f5f5f5", cursor: "pointer", fontSize: 12, fontWeight: 500 }}>Cancel</button>
-                <button style={{ flex: 1, padding: "8px 12px", borderRadius: 10, background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.3)", color: "#f97316", cursor: "pointer", fontSize: 12, fontWeight: 500 }}>Create</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <NewKBModal 
+          onClose={() => setShowNewKBModal(false)} 
+          onCreate={(kbData) => createKBMutation.mutate(kbData)}
+          isLoading={createKBMutation.isPending}
+        />
       )}
 
       {currentTab === "agents" ? (
