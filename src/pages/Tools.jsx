@@ -32,7 +32,7 @@ export default function Tools() {
                    <span style={{ fontSize: 10, color: isActive ? "#22c55e" : "#ef4444" }}>{isActive ? "Active" : "Offline"}</span>
                  </div>
               </div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>{tool.name}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>{tool.label}</p>
               <p style={{ fontSize: 11, color: "#555", marginBottom: 8, lineHeight: 1.5 }}>{tool.description}</p>
               <p style={{ fontSize: 10, color: "#444" }}>{tool.runs} executions</p>
             </button>
