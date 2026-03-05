@@ -148,20 +148,18 @@ export default function Layout({ children, currentPageName }) {
                       if (!isActive) {
                         e.currentTarget.style.background = "rgba(249,115,22,0.07)";
                         e.currentTarget.style.color = "#f97316";
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) icon.style.border = "1px solid #f97316";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.background = "transparent";
                         e.currentTarget.style.color = "#888";
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) icon.style.border = "none";
                       }
                     }}
                   >
-                <item.icon style={{ width: 18, height: 18, flexShrink: 0, borderRadius: 4 }} />
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.3)", flexShrink: 0 }}>
+                  <item.icon style={{ width: 18, height: 18 }} />
+                </div>
                 {!collapsed && <span>{item.name}</span>}
               </Link>
             );
