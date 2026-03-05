@@ -95,28 +95,40 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Step 1: DOM-only — resize textarea (no setState here)
+  // Ref to track multiLine without causing dependency loops
+  const multiLineRef = useRef(false);
+
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+
+    // Measure with current layout
     ta.style.height = "auto";
     void ta.offsetHeight;
     const sh = ta.scrollHeight;
-    const newH = Math.min(sh, MAX_HEIGHT);
-    ta.style.height = newH + "px";
-    ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-  }, [input, attachedFiles.length, isRecording, multiLine]);
 
-  // Step 2: Decide multiLine state after DOM has settled (separate effect, no loop)
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const sh = ta.scrollHeight;
-    const isNowMultiLine = input.length === 0 ? false : sh > (multiLine ? 40 : 45);
-    if (isNowMultiLine !== multiLine) {
-      setMultiLine(isNowMultiLine);
+    // Clamp height
+    ta.style.height = Math.min(sh, MAX_HEIGHT) + "px";
+    ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
+
+    // Hysteresis using ref (no setState in layout effect)
+    const prev = multiLineRef.current;
+    let next;
+    if (input.length === 0) {
+      next = false;
+    } else if (!prev && sh > 45) {
+      next = true;
+    } else if (prev && sh <= 40) {
+      next = false;
+    } else {
+      next = prev;
     }
-  }, [input, attachedFiles.length, isRecording, multiLine]);
+
+    if (next !== prev) {
+      multiLineRef.current = next;
+      setMultiLine(next);
+    }
+  }, [input, attachedFiles.length, isRecording]);
 
   // ResizeObserver for wave container
   useEffect(() => {
