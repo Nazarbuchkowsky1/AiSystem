@@ -9,7 +9,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Flame
+  Flame,
+  BookOpen
 } from "lucide-react";
 
 const NAV_ITEMS = [
