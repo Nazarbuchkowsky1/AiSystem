@@ -92,7 +92,7 @@ function TubeAreaChart() {
           dataKey="lower"
           stroke="url(#tubeGrad)"
           strokeWidth={2.5}
-          fill="#0a0a0a"
+          fill="#1c1c1c"
           fillOpacity={1}
           dot={false}
           activeDot={false}
