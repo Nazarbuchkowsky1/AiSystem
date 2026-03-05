@@ -17,17 +17,17 @@ export default function Analytics() {
   const [activeTab, setActiveTab] = useState("Overview");
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "16px 20px", gap: 12, overflow: "hidden" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "10px 16px 10px", gap: 8, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 600, color: "#f5f5f5" }}>Analytics</h1>
-        <span style={{ fontSize: 11, padding: "4px 12px", borderRadius: 8, background: "rgba(249,115,22,0.15)", color: "#f97316" }}>
+        <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Analytics</h1>
+        <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 8, background: "rgba(249,115,22,0.15)", color: "#f97316" }}>
           Live
         </span>
       </div>
 
       {/* Metrics Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, flexShrink: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, flexShrink: 0 }}>
         {METRICS.map((m, i) => (
           <MetricCard key={i} {...m} />
         ))}
@@ -37,7 +37,7 @@ export default function Analytics() {
       <DashboardTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
-      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {activeTab === "Overview" && <OverviewTab />}
         {activeTab === "Agents" && <AgentsTab />}
         {["OpenClo", "Tools", "Costs", "System"].includes(activeTab) && (
