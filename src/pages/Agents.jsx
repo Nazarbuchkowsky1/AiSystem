@@ -33,9 +33,24 @@ export default function Agents() {
   });
 
   const createKBMutation = useMutation({
-    mutationFn: (kbData) => base44.entities.KnowledgeBase.create(kbData),
+    mutationFn: async (kbData) => {
+      const created = await base44.entities.KnowledgeBase.create(kbData);
+      
+      // Auto-process after 2 seconds
+      setTimeout(async () => {
+        const processedFiles = kbData.files.map(f => ({ ...f, processed: true }));
+        await base44.entities.KnowledgeBase.update(created.id, { 
+          files: processedFiles,
+          processing: false 
+        });
+        queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+      }, 2000);
+      
+      return created;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+      setShowNewKBModal(false);
     },
   });
 
