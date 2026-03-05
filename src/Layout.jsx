@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { name: "Agents", icon: Bot, page: "Agents" },
   { name: "Tools", icon: Wrench, page: "Tools" },
   { name: "Calendar", icon: Calendar, page: "Calendar" },
+  { name: "Knowledge Base", icon: BookOpen, page: "KnowledgeBase" },
   { name: "Settings", icon: Settings, page: "Settings" },
 ];
 
