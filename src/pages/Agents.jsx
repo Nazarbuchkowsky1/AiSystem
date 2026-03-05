@@ -126,6 +126,17 @@ export default function Agents() {
         />
       )}
 
+      {editingKB && (
+        <EditKBModal
+          kb={editingKB}
+          onClose={() => setEditingKB(null)}
+          onSaved={() => {
+            setEditingKB(null);
+            queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+          }}
+        />
+      )}
+
       {currentTab === "agents" ? (
         agents.length === 0 ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
