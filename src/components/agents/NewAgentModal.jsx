@@ -313,6 +313,19 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        div::-webkit-scrollbar {
+          width: 6px;
+        }
+        div::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        div::-webkit-scrollbar-thumb {
+          background: rgba(249,115,22,0.3);
+          border-radius: 3px;
+        }
+        div::-webkit-scrollbar-thumb:hover {
+          background: rgba(249,115,22,0.5);
+        }
       `}</style>
     </div>
   );
