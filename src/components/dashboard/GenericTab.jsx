@@ -65,9 +65,10 @@ const pieData = [
 
 function ChartPanel({ title, type, span }) {
   const data = generateData(12, 100);
+  const spanClass = span === 7 ? "col-span-7" : "col-span-5";
 
   return (
-    <div className={`col-span-${span} glass-panel p-5`}>
+    <div className={`${spanClass} glass-panel p-5`}>
       <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>{title}</h3>
       <ResponsiveContainer width="100%" height={180}>
         {type === "area" ? (
