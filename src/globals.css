@@ -49,9 +49,15 @@ html, body, #root {
 }
 
 @layer base {
+  html, body, * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+  }
+
   * {
     @apply border-[var(--border-subtle)];
-    user-select: none;
   }
 
   body {
