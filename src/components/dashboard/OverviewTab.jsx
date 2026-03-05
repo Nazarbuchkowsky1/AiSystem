@@ -270,13 +270,13 @@ export default function OverviewTab() {
 
         {/* Tokens */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, flexShrink: 0 }}>
-          <div className="glass-panel" style={{ padding: 12 }}>
+          <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 12 }}>
             <p style={{ fontSize: 9, color: "#555", marginBottom: 3 }}>Tokens Used</p>
             <p style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", lineHeight: 1 }}>
               157<span style={{ fontSize: 9, color: "#555", marginLeft: 2 }}>4.2B</span>
             </p>
           </div>
-          <div className="glass-panel" style={{ padding: 12 }}>
+          <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 12 }}>
             <p style={{ fontSize: 9, color: "#555", marginBottom: 3 }}>Tokens Processed</p>
             <p style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", lineHeight: 1 }}>
               4.2<span style={{ fontSize: 9, color: "#555", marginLeft: 2 }}>B</span>
