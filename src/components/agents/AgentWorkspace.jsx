@@ -104,6 +104,8 @@ export default function AgentWorkspace({ agent, onBack }) {
     const clamped = Math.min(sh, MAX_HEIGHT);
     ta.style.height = clamped + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
+    // single line height with lineHeight=24 + padding top=10 + padding bottom=4 = ~38px
+    setIsMultiline(sh > 42);
   }, [input, attachedFiles]);
 
   // ResizeObserver for wave container
