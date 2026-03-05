@@ -513,9 +513,9 @@ export default function AgentWorkspace({ agent, onBack }) {
             {renderRightButtons()}
           </div>
         </div>
-      ) : (
+      ) : isMultiline ? (
+        /* MULTILINE: textarea on top, icons on bottom row */
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {/* Textarea full width, left-aligned with the plus button (plus has p:8 + icon offset ≈ 14px left) */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -530,11 +530,10 @@ export default function AgentWorkspace({ agent, onBack }) {
               width: "100%", minWidth: 0, boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "10px 16px 4px 16px",
+              padding: "10px 14px 4px 14px",
               overflowY: "hidden",
             }}
           />
-          {/* Action bar: attach left, mic+send right */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
             <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
               style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
@@ -545,6 +544,37 @@ export default function AgentWorkspace({ agent, onBack }) {
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {renderRightButtons()}
             </div>
+          </div>
+        </div>
+      ) : (
+        /* SINGLE LINE: all in one row */
+        <div style={{ display: "flex", alignItems: "center", padding: "6px 8px" }}>
+          <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+            onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+            <Plus style={{ width: 17, height: 17 }} />
+          </button>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={handlePaste}
+            placeholder="Message agent..."
+            rows={1}
+            style={{
+              flex: 1, minWidth: 0,
+              background: "transparent", border: "none", outline: "none", resize: "none",
+              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
+              padding: "6px 8px",
+              overflowY: "hidden",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            {renderRightButtons()}
           </div>
         </div>
       )}
