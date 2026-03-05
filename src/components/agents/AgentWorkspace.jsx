@@ -95,7 +95,7 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea — DOM-only, no state to avoid losing focus
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -104,8 +104,13 @@ export default function AgentWorkspace({ agent, onBack }) {
     const clamped = Math.min(sh, MAX_HEIGHT);
     ta.style.height = clamped + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-    // single line height with lineHeight=24 + padding top=10 + padding bottom=4 = ~38px
-    setIsMultiline(sh > 42);
+
+    const multi = sh > 42;
+    if (multi !== isMultilineRef.current) {
+      isMultilineRef.current = multi;
+      // force a re-render only when layout mode actually switches
+      setForceUpdate(n => n + 1);
+    }
   }, [input, attachedFiles]);
 
   // ResizeObserver for wave container
