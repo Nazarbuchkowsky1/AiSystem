@@ -317,7 +317,9 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "transparent",
               border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, fontWeight: 500,
               cursor: "pointer", transition: "all 0.2s"
-            }}>
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               Cancel
             </button>
             <button onClick={handleCreate} disabled={!name.trim() || isCreating} style={{
