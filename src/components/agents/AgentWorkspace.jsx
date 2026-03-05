@@ -478,7 +478,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   );
 
   const renderInputBar = () => {
-    const isMulti = isMultilineRef.current;
+    const isMulti = multiLine || attachedFiles.length > 0;
     return (
     <div style={{
       ...noSelect,
