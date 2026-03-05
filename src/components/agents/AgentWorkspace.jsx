@@ -47,7 +47,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const recordedChunksRef = useRef([]);
   const streamRef = useRef(null);
 
-  const MAX_HEIGHT = 188;
+  const MAX_HEIGHT = 200;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,25 +61,16 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea — only runs when in single-line DOM mode to measure
+  // Auto-resize textarea — grow with content, never shrink below 1 line
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    // Save scroll pos
-    ta.style.height = "auto";
+    ta.style.height = "0px";
     const sh = ta.scrollHeight;
     const clamped = Math.min(sh, MAX_HEIGHT);
     ta.style.height = clamped + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-    // Determine multiline: threshold is ~44px (one line = 24px text + 13+7 padding)
-    if (input.length === 0) {
-      setIsMultiLineSt(false);
-    } else {
-      // Use 48px threshold (one line of text = ~44px including padding in single-line mode)
-      const threshold = isMultiLineSt ? 40 : 48;
-      setIsMultiLineSt(sh > threshold);
-    }
-  }, [input]);
+  }, [input, attachedFiles]);
 
   const loadHistory = async () => {
     const convos = await base44.entities.Conversation.filter({ agent_id: String(agent.id) }, "-created_date", 20);
