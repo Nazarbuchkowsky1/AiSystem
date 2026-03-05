@@ -217,9 +217,8 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   const hasMessages = messages.length > 0;
   const hasContent = !!(input.trim() || attachedFiles.length > 0);
-  const isMultiLine = input.length > 0 && textareaHeight > SINGLE_LINE_THRESHOLD;
   const showFilesBar = attachedFiles.length > 0;
-  const isExpanded = isMultiLine || showFilesBar;
+  const isExpanded = isMultiLineSt || showFilesBar;
 
   // Input bar styles
   const barBg = inputFocused ? "#1e1e1e" : "#181818";
