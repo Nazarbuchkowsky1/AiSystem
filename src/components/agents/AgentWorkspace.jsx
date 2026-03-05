@@ -34,7 +34,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [conversations, setConversations] = useState([]);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [inputFocused, setInputFocused] = useState(false);
-  const [textareaHeight, setTextareaHeight] = useState(24);
+  const [isMultiLineSt, setIsMultiLineSt] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
