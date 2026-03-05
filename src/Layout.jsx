@@ -18,7 +18,6 @@ const NAV_ITEMS = [
   { name: "Agents", icon: Bot, page: "Agents" },
   { name: "Tools", icon: Wrench, page: "Tools" },
   { name: "Calendar", icon: Calendar, page: "Calendar" },
-  { name: "Knowledge Base", icon: BookOpen, page: "KnowledgeBase" },
   { name: "Settings", icon: Settings, page: "Settings" },
 ];
 
@@ -93,9 +92,12 @@ export default function Layout({ children, currentPageName }) {
               color: "#555",
               display: "flex",
               alignItems: "center",
-              padding: 4,
+              padding: 6,
               flexShrink: 0,
+              transition: "color 0.2s",
             }}
+            onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
             title={collapsed ? "Expand" : "Collapse"}
           >
             {collapsed
