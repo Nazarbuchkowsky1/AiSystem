@@ -31,6 +31,8 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
     { name: "Sparkles", icon: Sparkles },
     { name: "Cpu", icon: Cpu },
     { name: "Settings", icon: Settings },
+    { name: "Palette", icon: Palette },
+    { name: "Rocket", icon: Rocket },
   ];
 
   const handleIconChange = (e) => {
