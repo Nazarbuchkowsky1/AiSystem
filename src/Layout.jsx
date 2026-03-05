@@ -116,31 +116,37 @@ export default function Layout({ children, currentPageName }) {
             const isActive = currentPageName === item.page;
             return (
               <Link
-                key={item.page}
-                to={createPageUrl(item.page)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  textDecoration: "none",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: isActive ? "#f97316" : "#888",
-                  background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
-                  border: `1px solid ${isActive ? "rgba(249,115,22,0.3)" : "transparent"}`,
-                  transition: "all 0.2s ease",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.background = "rgba(249,115,22,0.07)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.background = "transparent";
-                }}
-              >
+                    key={item.page}
+                    to={createPageUrl(item.page)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      textDecoration: "none",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: isActive ? "#f97316" : "#888",
+                      background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
+                      border: `1px solid ${isActive ? "rgba(249,115,22,0.3)" : "transparent"}`,
+                      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = "rgba(249,115,22,0.07)";
+                        e.currentTarget.style.color = "#f97316";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.color = "#888";
+                      }
+                    }}
+                  >
                 <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
                 {!collapsed && <span>{item.name}</span>}
               </Link>
