@@ -201,7 +201,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Icon</p>
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               {ICON_OPTIONS.map(({ name: iconName, icon: IconComponent }) => (
-                <button key={iconName} onClick={() => setSelectedIcon(iconName)} style={{
+                <button key={iconName} onClick={() => { setSelectedIcon(iconName); setIconPreview(null); setIconFile(null); }} style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 52, height: 52, borderRadius: 10,
                   background: selectedIcon === iconName ? "rgba(249,115,22,0.15)" : "#0f0f0f",
