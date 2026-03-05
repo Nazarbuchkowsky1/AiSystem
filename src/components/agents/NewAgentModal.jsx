@@ -236,7 +236,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
           {/* Tools Access */}
            <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-             <p style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Tools Access</p>
+             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Tools Access</p>
              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                {AVAILABLE_TOOLS.map(tool => (
                  <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
