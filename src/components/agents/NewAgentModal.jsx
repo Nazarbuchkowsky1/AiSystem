@@ -313,6 +313,9 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        [style*="maxHeight: 90vh"]::-webkit-scrollbar {
+          display: none;
+        }
       `}</style>
     </div>
   );
