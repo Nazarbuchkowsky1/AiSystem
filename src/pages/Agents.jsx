@@ -117,7 +117,7 @@ export default function Agents() {
             <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, overflow: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, overflow: "auto", alignItems: "flex-start" }}>
             {knowledgeBases.map((kb) => (
               <KnowledgeBaseCard
                 key={kb.id}
