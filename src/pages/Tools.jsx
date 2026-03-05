@@ -33,9 +33,9 @@ export default function Tools() {
               style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s", background: "#181818", border: "1px solid #2a2a2a", borderRadius: 14 }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
-                  <Icon style={{ width: 16, height: 16, color: "#f97316" }} />
-                </div>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4px 0 0", border: "1px solid rgba(249,115,22,0.2)" }}>
+                     <Icon style={{ width: 16, height: 16, color: "#f97316" }} />
+                  </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#22c55e" : "#ef4444", boxShadow: isActive ? "0 0 6px rgba(34,197,94,0.5)" : "0 0 6px rgba(239,68,68,0.5)" }} />
                    <span style={{ fontSize: 10, color: isActive ? "#22c55e" : "#ef4444" }}>{isActive ? "Active" : "Offline"}</span>
