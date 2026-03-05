@@ -536,11 +536,10 @@ export default function AgentWorkspace({ agent, onBack }) {
       </div>
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        textarea::placeholder { color: #555; }
-        textarea::-webkit-scrollbar { width: 4px; }
-        textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-        * { -webkit-tap-highlight-color: transparent; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      textarea::placeholder { color: #555 !important; }
+      textarea::-webkit-scrollbar { width: 0px; display: none; }
+      * { -webkit-tap-highlight-color: transparent; }
       `}</style>
     </div>
   );
