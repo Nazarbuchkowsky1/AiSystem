@@ -609,7 +609,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               <button key={val} onMouseDown={e => e.preventDefault()} onClick={() => setMode(val)}
                 style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
                   background: mode === val ? "rgba(249,115,22,0.15)" : "transparent",
-                  color: mode === val ? "#f97316" : "#555", border: "none", cursor: "pointer", transition: "all 0.2s" }}>
+                  color: mode === val ? "#f97316" : "#555", border: "none", cursor: "pointer", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
                 <Icon style={{ width: 11, height: 11 }} />{label}
               </button>
             ))}
