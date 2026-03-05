@@ -157,9 +157,7 @@ export default function Layout({ children, currentPageName }) {
                       }
                     }}
                   >
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.3)", flexShrink: 0 }}>
-                  <item.icon style={{ width: 18, height: 18 }} />
-                </div>
+                <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
                 {!collapsed && <span>{item.name}</span>}
               </Link>
             );
