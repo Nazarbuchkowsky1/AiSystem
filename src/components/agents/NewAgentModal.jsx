@@ -195,7 +195,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
                 border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
-                outline: "none", fontFamily: "inherit", resize: "none"
+                outline: "none", fontFamily: "inherit", resize: "none", overflow: "hidden"
               }}
               onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
               onBlur={e => e.target.style.borderColor = "#2a2a2a"}
