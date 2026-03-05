@@ -104,7 +104,6 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-...
           {NAV_ITEMS.map((item) => {
             const isActive = currentPageName === item.page;
             return (
