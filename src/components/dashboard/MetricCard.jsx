@@ -35,8 +35,8 @@ export default function MetricCard({ label, value, change, isPositive = true, ic
           {change}
         </div>
       </div>
-      <p style={{ fontSize: 22, fontWeight: 700, color: "#f5f5f5", letterSpacing: "-0.5px" }}>{value}</p>
-      <p style={{ fontSize: 11, color: "#555", marginTop: 3 }}>{label}</p>
+      <p style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", letterSpacing: "-0.5px" }}>{value}</p>
+      <p style={{ fontSize: 10, color: "#555", marginTop: 2 }}>{label}</p>
     </div>
   );
 }
