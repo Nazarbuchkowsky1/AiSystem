@@ -37,9 +37,9 @@ export default function Tools() {
                   <Icon style={{ width: 16, height: 16, color: "#f97316" }} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#22c55e" : "#555", boxShadow: isActive ? "0 0 6px rgba(34,197,94,0.5)" : "none" }} />
-                  <span style={{ fontSize: 10, color: isActive ? "#22c55e" : "#555" }}>{isActive ? "Active" : "Offline"}</span>
-                </div>
+                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#22c55e" : "#ef4444", boxShadow: isActive ? "0 0 6px rgba(34,197,94,0.5)" : "0 0 6px rgba(239,68,68,0.5)" }} />
+                   <span style={{ fontSize: 10, color: isActive ? "#22c55e" : "#ef4444" }}>{isActive ? "Active" : "Offline"}</span>
+                 </div>
               </div>
               <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>{tool.name}</p>
               <p style={{ fontSize: 11, color: "#555", marginBottom: 8, lineHeight: 1.5 }}>{tool.description}</p>
