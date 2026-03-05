@@ -191,9 +191,22 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
             />
           </div>
 
-          {/* Icon Upload */}
+          {/* Icon Selection */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Agent Icon</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Icon</p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              {ICON_OPTIONS.map(({ name: iconName, icon: IconComponent }) => (
+                <button key={iconName} onClick={() => setSelectedIcon(iconName)} style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 52, height: 52, borderRadius: 10,
+                  background: selectedIcon === iconName ? "rgba(249,115,22,0.15)" : "#0f0f0f",
+                  border: `1px solid ${selectedIcon === iconName ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
+                  cursor: "pointer", transition: "all 0.2s", color: selectedIcon === iconName ? "#f97316" : "#555"
+                }} title={iconName}>
+                  <IconComponent style={{ width: 24, height: 24 }} />
+                </button>
+              ))}
+            </div>
             <label style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               padding: 16, borderRadius: 10, background: "#0f0f0f", border: "2px dashed #2a2a2a",
@@ -203,12 +216,12 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
               {iconPreview ? (
                 <>
                   <img src={iconPreview} alt="preview" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
-                  <span style={{ fontSize: 12, color: "#f5f5f5" }}>Icon selected</span>
+                  <span style={{ fontSize: 12, color: "#f5f5f5" }}>Custom icon uploaded</span>
                 </>
               ) : (
                 <>
                   <Upload style={{ width: 16, height: 16, color: "#555" }} />
-                  <span style={{ fontSize: 12, color: "#555" }}>Click to upload icon (optional)</span>
+                  <span style={{ fontSize: 12, color: "#555" }}>Or upload custom icon</span>
                 </>
               )}
               <input
@@ -218,7 +231,6 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
                 style={{ display: "none" }}
               />
             </label>
-            <p style={{ fontSize: 10, color: "#444", marginTop: 6 }}>If not provided, AI will suggest one based on agent description</p>
           </div>
 
           {/* Tools Access */}
