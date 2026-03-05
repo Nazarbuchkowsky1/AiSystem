@@ -503,7 +503,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       )}
 
       {/* Main input row */}
-      <div style={{ display: "flex", alignItems: inVoiceMode ? "center" : "flex-end", padding: "12px 8px 12px" }}>
+      <div style={{ display: "flex", alignItems: inVoiceMode ? "center" : "flex-end", padding: "8px 8px 8px" }}>
         {/* Left: attach button (hidden during voice) */}
         {!inVoiceMode && (
           <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
