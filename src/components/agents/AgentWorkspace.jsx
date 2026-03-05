@@ -81,6 +81,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const recordingMimeRef = useRef("");
 
   const MAX_HEIGHT = 188;
+  const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
