@@ -10,15 +10,16 @@ const AVAILABLE_TOOLS = [
   { name: "email", label: "Email" },
 ];
 
-export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [systemInstructions, setSystemInstructions] = useState("");
-  const [selectedTools, setSelectedTools] = useState([]);
-  const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
+export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBases = [], editAgent = null }) {
+  const isEditing = !!editAgent;
+  const [name, setName] = useState(editAgent?.name || "");
+  const [description, setDescription] = useState(editAgent?.description || "");
+  const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || "");
+  const [selectedTools, setSelectedTools] = useState(editAgent?.tools?.map(t => t.name) || []);
+  const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState(editAgent?.knowledge_base_ids?.[0] || "");
   const [iconFile, setIconFile] = useState(null);
-  const [iconPreview, setIconPreview] = useState(null);
-  const [selectedIcon, setSelectedIcon] = useState("Bot");
+  const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
+  const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_name || "Bot");
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
@@ -73,7 +74,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
     if (!name.trim()) return;
     setIsCreating(true);
     try {
-      let iconUrl = null;
+      let iconUrl = isEditing ? editAgent.icon_url : null;
       if (iconFile) {
         const uploadRes = await base44.integrations.Core.UploadFile({ file: iconFile });
         iconUrl = uploadRes.file_url;
@@ -87,10 +88,14 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
         icon_name: selectedIcon,
         tools: selectedTools.map(t => ({ name: t, enabled: true })),
         knowledge_base_ids: selectedKnowledgeBase ? [selectedKnowledgeBase] : [],
-        status: "active"
+        status: isEditing ? editAgent.status : "active"
       };
 
-      await onCreate(agentData);
+      if (isEditing) {
+        await onUpdate(editAgent.id, agentData);
+      } else {
+        await onCreate(agentData);
+      }
       reset();
     } finally {
       setIsCreating(false);
@@ -128,7 +133,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
         boxShadow: "0 20px 25px rgba(0,0,0,0.5)", msOverflowStyle: "none", scrollbarWidth: "none"
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Create New Agent</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>{isEditing ? "Edit Agent" : "Create New Agent"}</h2>
           <button onClick={reset} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
@@ -302,7 +307,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
               cursor: !name.trim() || isCreating ? "not-allowed" : "pointer", opacity: !name.trim() || isCreating ? 0.5 : 1,
               transition: "all 0.2s"
             }}>
-              {isCreating ? "Creating..." : "Create Agent"}
+              {isCreating ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Agent")}
             </button>
           </div>
         </div>
