@@ -165,10 +165,10 @@ export default function Layout({ children, currentPageName }) {
               <p style={{ fontSize: 11, color: "#555" }}>All systems operational</p>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
                 <div style={{
-                  width: 6, height: 6, borderRadius: "50%", background: "#ef4444",
-                  boxShadow: "0 0 8px rgba(239,68,68,0.6)"
+                  width: 6, height: 6, borderRadius: "50%", background: "#22c55e",
+                  boxShadow: "0 0 8px rgba(34,197,94,0.6)"
                 }} />
-                <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 600 }}>Deactivated</span>
+                <span style={{ fontSize: 10, color: "#22c55e", fontWeight: 600 }}>Online</span>
               </div>
             </div>
           )}
