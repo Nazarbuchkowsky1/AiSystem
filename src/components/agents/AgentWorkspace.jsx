@@ -460,7 +460,6 @@ export default function AgentWorkspace({ agent, onBack }) {
   );
 
   const renderInputBar = () => {
-    const isMulti = multiLine || attachedFiles.length > 0;
     return (
     <div style={{
       ...noSelect,
@@ -513,18 +512,15 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {/* Text input area — always in DOM, layout switches via CSS */}
+      {/* Text input row */}
       {!inVoiceMode && (
-        <div style={{ display: "flex", flexDirection: isMulti ? "column" : "row", alignItems: isMulti ? "stretch" : "center" }}>
-          {/* Plus button — shown left in single-line, bottom-left in multiline */}
-          {!isMulti && (
-            <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-              style={{ padding: "0 4px 0 10px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-              onMouseLeave={e => e.currentTarget.style.color = "#555"}>
-              <Plus style={{ width: 17, height: 17 }} />
-            </button>
-          )}
+        <div style={{ display: "flex", alignItems: "flex-end" }}>
+          <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+            style={{ padding: "8px 4px 8px 10px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+            onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+            <Plus style={{ width: 17, height: 17 }} />
+          </button>
 
           <textarea
             ref={textareaRef}
@@ -540,29 +536,14 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0, boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: isMulti ? "10px 14px 4px 14px" : "8px 6px",
+              padding: "8px 6px",
               overflowY: "hidden",
             }}
           />
 
-          {/* Right buttons — inline in single-line, separate row in multiline */}
-          {isMulti ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
-              <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-                style={{ padding: "0 4px 0 2px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-                onMouseLeave={e => e.currentTarget.style.color = "#555"}>
-                <Plus style={{ width: 17, height: 17 }} />
-              </button>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {renderRightButtons()}
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, paddingRight: 8 }}>
-              {renderRightButtons()}
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, paddingRight: 8, paddingBottom: 6 }}>
+            {renderRightButtons()}
+          </div>
         </div>
       )}
 
