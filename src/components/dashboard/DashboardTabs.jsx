@@ -19,15 +19,16 @@ export default function DashboardTabs({ activeTab, onTabChange }) {
             onClick={() => onTabChange(tab)}
             style={{
               position: "relative",
-              padding: "8px 16px",
-              fontSize: 13,
-              fontWeight: isActive ? 600 : 400,
-              color: isActive ? "#f97316" : "#555",
-              background: "transparent",
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: isActive ? 700 : 400,
+              color: isActive ? "#f97316" : "#4a4a4a",
+              background: isActive ? "rgba(249,115,22,0.06)" : "transparent",
               border: "none",
               cursor: "pointer",
               transition: "color 0.2s",
               outline: "none",
+              textShadow: isActive ? "0 0 12px rgba(249,115,22,0.5)" : "none",
             }}
           >
             {tab}
