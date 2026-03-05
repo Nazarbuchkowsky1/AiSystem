@@ -95,24 +95,23 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea with hysteresis to avoid spring/flapping bug
+  // Step 1: DOM-only — resize textarea (no setState here)
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-
-    // Reset to measure real content height
     ta.style.height = "auto";
-    // Force reflow
     void ta.offsetHeight;
     const sh = ta.scrollHeight;
-
-    // Clamp height
     const newH = Math.min(sh, MAX_HEIGHT);
     ta.style.height = newH + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
+  }, [input, attachedFiles.length, isRecording, multiLine]);
 
-    // Hysteresis: enter multi-line at >45px, exit at <=40px
-    // multiLine is in deps so effect re-runs after layout changes (textarea width changes)
+  // Step 2: Decide multiLine state after DOM has settled (separate effect, no loop)
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const sh = ta.scrollHeight;
     const isNowMultiLine = input.length === 0 ? false : sh > (multiLine ? 40 : 45);
     if (isNowMultiLine !== multiLine) {
       setMultiLine(isNowMultiLine);
