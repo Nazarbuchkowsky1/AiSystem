@@ -235,7 +235,7 @@ export default function OverviewTab() {
       <div style={{ display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
 
         {/* Daily AI Usage Timeline */}
-        <div className="glass-panel" style={{ padding: 12, flexShrink: 0 }}>
+        <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 12, flexShrink: 0 }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 8 }}>Daily AI Usage Timeline</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {timelineData.map((row) => (
