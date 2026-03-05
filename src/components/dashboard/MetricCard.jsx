@@ -17,7 +17,7 @@ export default function MetricCard({ label, value, change, isPositive = true, ic
         position: "absolute", top: 0, left: 0, right: 0, height: 1,
         background: "linear-gradient(90deg, transparent, rgba(249,115,22,0.3), transparent)"
       }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
         <div style={{
           width: 34, height: 34, borderRadius: 10,
           background: "rgba(249,115,22,0.12)",
