@@ -95,15 +95,26 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-resize textarea
-  useEffect(() => {
+  // Auto-expand textarea with hysteresis to prevent spring/flapping bug
+  useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+
     ta.style.height = "auto";
-    const sh = ta.scrollHeight;
-    ta.style.height = Math.min(sh, MAX_HEIGHT) + "px";
-    ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-  }, [input, attachedFiles.length, isRecording]);
+    void ta.offsetHeight;
+    const realScrollHeight = ta.scrollHeight;
+
+    ta.style.height = Math.min(realScrollHeight, MAX_HEIGHT) + "px";
+    ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
+
+    const isNowMultiLine = realScrollHeight > (multiLine ? 40 : 45);
+
+    if (input.length === 0) {
+      if (multiLine) setMultiLine(false);
+    } else if (isNowMultiLine !== multiLine) {
+      setMultiLine(isNowMultiLine);
+    }
+  }, [input, isRecording, attachedFiles.length, multiLine]);
 
   // ResizeObserver for wave container
   useEffect(() => {
