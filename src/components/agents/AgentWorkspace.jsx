@@ -112,15 +112,12 @@ export default function AgentWorkspace({ agent, onBack }) {
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
 
     // Hysteresis: enter multi-line at >45px, exit at <=40px
-    // Use functional update so we always compare against latest prev
-    setMultiLine(prev => {
-      if (input.length === 0) return false;
-      // Enter threshold (higher) / exit threshold (lower)
-      if (!prev && sh > 45) return true;
-      if (prev && sh <= 40) return false;
-      return prev; // hysteresis band: keep current mode
-    });
-  }, [input, attachedFiles.length, isRecording]);
+    // multiLine is in deps so effect re-runs after layout changes (textarea width changes)
+    const isNowMultiLine = input.length === 0 ? false : sh > (multiLine ? 40 : 45);
+    if (isNowMultiLine !== multiLine) {
+      setMultiLine(isNowMultiLine);
+    }
+  }, [input, attachedFiles.length, isRecording, multiLine]);
 
   // ResizeObserver for wave container
   useEffect(() => {
