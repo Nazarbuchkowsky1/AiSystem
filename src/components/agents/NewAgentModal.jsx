@@ -21,6 +21,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
   const [selectedIcon, setSelectedIcon] = useState("Bot");
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showToolsAsRows, setShowToolsAsRows] = useState(false);
 
   const ICON_OPTIONS = [
     { name: "Bot", icon: Bot },
