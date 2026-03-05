@@ -34,10 +34,6 @@ export default function Agents() {
     return <AgentWorkspace agent={selectedAgent} onBack={() => setSelectedAgent(null)} />;
   }
 
-  if (currentTab === "knowledge") {
-    return <KnowledgeBasePage onBack={() => setCurrentTab("agents")} />;
-  }
-
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
