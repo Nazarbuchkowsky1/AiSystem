@@ -44,17 +44,17 @@ export default function Agents() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
           <div style={{ display: "flex", gap: 4, borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
-            {[["agents", "Agents"], ["knowledge", "Knowledge Base"]].map(([tab, label]) => (
-              <button key={tab} onClick={() => setCurrentTab(tab)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
-                  background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
-                  color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
-                  transition: "all 0.2s"
-                }}>
-                {tab === "knowledge" ? <BookOpen style={{ width: 11, height: 11 }} /> : null}
-                {label}
-              </button>
+            {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(([tab, Icon, label]) => (
+             <button key={tab} onClick={() => setCurrentTab(tab)}
+               style={{
+                 display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                 background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
+                 color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
+                 transition: "all 0.2s"
+               }}>
+               <Icon style={{ width: 11, height: 11 }} />
+               {label}
+             </button>
             ))}
           </div>
         </div>
@@ -73,20 +73,24 @@ export default function Agents() {
         />
       )}
 
-      {agents.length === 0 ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
-            <Bot style={{ width: 24, height: 24, color: "#f97316" }} />
+      {currentTab === "agents" ? (
+        agents.length === 0 ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
+              <Bot style={{ width: 24, height: 24, color: "#f97316" }} />
+            </div>
+            <p style={{ fontSize: 13, color: "#f5f5f5" }}>No agents yet</p>
+            <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
           </div>
-          <p style={{ fontSize: 13, color: "#f5f5f5" }}>No agents yet</p>
-          <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
-        </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, overflow: "auto" }}>
+            {agents.map((agent) => (
+              <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} />
+            ))}
+          </div>
+        )
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, overflow: "auto" }}>
-          {agents.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} />
-          ))}
-        </div>
+        <KnowledgeBaseViewGrid knowledgeBases={knowledgeBases} />
       )}
     </div>
   );
