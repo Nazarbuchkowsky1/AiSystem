@@ -469,7 +469,9 @@ export default function AgentWorkspace({ agent, onBack }) {
     </div>
   );
 
-  const renderInputBar = () => (
+  const renderInputBar = () => {
+    const isMulti = isMultilineRef.current;
+    return (
     <div style={{
       ...noSelect,
       background: barBg,
@@ -511,56 +513,29 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {/* Main input row */}
-      {inVoiceMode ? (
+      {/* Voice mode */}
+      {inVoiceMode && (
         <div style={{ display: "flex", alignItems: "center", padding: "8px 8px" }}>
           {renderWaveform()}
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             {renderRightButtons()}
           </div>
         </div>
-      ) : isMultilineRef.current ? (
-        /* MULTILINE: textarea on top, icons on bottom row */
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            style={{
-              width: "100%", minWidth: 0, boxSizing: "border-box",
-              background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "10px 14px 4px 14px",
-              overflowY: "hidden",
-            }}
-          />
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
+      )}
+
+      {/* Text input area — always in DOM, layout switches via CSS */}
+      {!inVoiceMode && (
+        <div style={{ display: "flex", flexDirection: isMulti ? "column" : "row", alignItems: isMulti ? "stretch" : "center" }}>
+          {/* Plus button — shown left in single-line, bottom-left in multiline */}
+          {!isMulti && (
             <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
+              style={{ padding: "0 4px 0 10px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
               onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
               onMouseLeave={e => e.currentTarget.style.color = "#555"}>
               <Plus style={{ width: 17, height: 17 }} />
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {renderRightButtons()}
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* SINGLE LINE: all in one row */
-        <div style={{ display: "flex", alignItems: "center", padding: "6px 8px" }}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-            style={{ padding: "8px 6px 8px 8px", borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={e => e.currentTarget.style.color = "#555"}>
-            <Plus style={{ width: 17, height: 17 }} />
-          </button>
+          )}
+
           <textarea
             ref={textareaRef}
             value={input}
@@ -572,16 +547,32 @@ export default function AgentWorkspace({ agent, onBack }) {
             placeholder="Message agent..."
             rows={1}
             style={{
-              flex: 1, minWidth: 0,
+              flex: 1, minWidth: 0, boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "6px 6px",
+              padding: isMulti ? "10px 14px 4px 14px" : "8px 6px",
               overflowY: "hidden",
             }}
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-            {renderRightButtons()}
-          </div>
+
+          {/* Right buttons — inline in single-line, separate row in multiline */}
+          {isMulti ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
+              <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+                style={{ padding: "0 4px 0 2px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+                onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+                <Plus style={{ width: 17, height: 17 }} />
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {renderRightButtons()}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, paddingRight: 8 }}>
+              {renderRightButtons()}
+            </div>
+          )}
         </div>
       )}
 
@@ -590,6 +581,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         onChange={e => { addFilesFromList(e.target.files); e.target.value = ""; }} />
     </div>
   );
+  };
 
   return (
     <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
