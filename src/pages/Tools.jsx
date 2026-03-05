@@ -29,8 +29,8 @@ export default function Tools() {
           return (
             <button
               key={tool.name}
-              className="glass-panel glass-panel-hover"
-              style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s" }}
+              className="glass-panel-hover"
+              style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s", background: "#181818", border: "1px solid #2a2a2a", borderRadius: 14 }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
