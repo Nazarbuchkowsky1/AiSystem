@@ -258,13 +258,15 @@ export default function AgentWorkspace({ agent, onBack }) {
         ...noSelect,
         background: barBg,
         border: `1px solid ${barBorder}`,
-        borderRadius: 24,
+        borderRadius: 20,
         boxShadow: barShadow,
         transition: "border-color 0.2s, box-shadow 0.2s",
         overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      {/* Files strip — seamlessly inside bar, no divider */}
+      {/* Files strip */}
       {showFilesBar && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 0" }}>
           <div
@@ -294,13 +296,9 @@ export default function AgentWorkspace({ agent, onBack }) {
                 <button
                   onMouseDown={e => e.preventDefault()}
                   onClick={(e) => { e.stopPropagation(); removeFile(af.id); }}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "#666", padding: "2px", display: "flex", borderRadius: 4,
-                    flexShrink: 0, transition: "color 0.15s, transform 0.15s",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#f97316"; e.currentTarget.style.transform = "scale(1.2)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = "#666"; e.currentTarget.style.transform = "scale(1)"; }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: "2px", display: "flex", borderRadius: 4, flexShrink: 0, transition: "color 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+                  onMouseLeave={e => e.currentTarget.style.color = "#666"}
                 >
                   <X style={{ width: 14, height: 14 }} />
                 </button>
@@ -311,81 +309,42 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {isExpanded ? (
-        /* Multi-line / files mode: flex-col */
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {/* Textarea full width */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            style={{
-              width: "100%", boxSizing: "border-box",
-              background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "12px 16px 4px",
-              overflowY: "hidden", maxHeight: MAX_HEIGHT,
-            }}
-          />
-          {/* Action bar */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px 8px" }}>
-            <button
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => fileInputRef.current?.click()}
-              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-              onMouseLeave={e => e.currentTarget.style.color = "#555"}
-            >
-              <Plus style={{ width: 17, height: 17 }} />
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {renderRightButtons()}
-            </div>
-          </div>
+      {/* Textarea — grows with content */}
+      <textarea
+        ref={textareaRef}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+        onFocus={() => setInputFocused(true)}
+        onBlur={() => setInputFocused(false)}
+        onPaste={handlePaste}
+        placeholder="Message agent..."
+        rows={1}
+        style={{
+          width: "100%", boxSizing: "border-box",
+          background: "transparent", border: "none", outline: "none", resize: "none",
+          fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
+          padding: showFilesBar ? "8px 16px 4px" : "16px 16px 4px",
+          overflowY: "hidden",
+          minHeight: 24,
+        }}
+      />
+
+      {/* Action row — always at bottom */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 8px" }}>
+        <button
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+          style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
+          onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+          onMouseLeave={e => e.currentTarget.style.color = "#555"}
+        >
+          <Plus style={{ width: 17, height: 17 }} />
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {renderRightButtons()}
         </div>
-      ) : (
-        /* Single-line mode: flex-row */
-        <div style={{ display: "flex", alignItems: "center", height: 56, padding: "0 8px" }}>
-          <button
-            onMouseDown={e => e.preventDefault()}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", flexShrink: 0, transition: "color 0.2s" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={e => e.currentTarget.style.color = "#555"}
-          >
-            <Plus style={{ width: 17, height: 17 }} />
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            style={{
-              flex: 1, minWidth: 0,
-              background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "0 8px",
-              overflowY: "hidden",
-              alignSelf: "center",
-              height: 24,
-            }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-            {renderRightButtons()}
-          </div>
-        </div>
-      )}
+      </div>
 
       <input
         ref={fileInputRef}
