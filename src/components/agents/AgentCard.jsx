@@ -19,7 +19,7 @@ export default function AgentCard({ agent, onClick }) {
       style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s", width: "100%", background: "#181818", border: "1px solid #2a2a2a", borderRadius: 14 }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-         <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
+         <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4px 0 0", border: "1px solid rgba(249,115,22,0.2)" }}>
            <Icon style={{ width: 16, height: 16, color: "#f97316" }} />
          </div>
          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
