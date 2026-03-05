@@ -64,60 +64,80 @@ export default function Layout({ children, currentPageName }) {
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent: collapsed ? "center" : "space-between",
             gap: 12,
-            padding: "0 16px",
+            padding: collapsed ? "0" : "0 16px",
             height: 64,
             borderBottom: "1px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-            <div
+          {collapsed ? (
+            <button
+              onClick={() => setCollapsed(false)}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 10,
+                width: 42,
+                height: 42,
+                borderRadius: 12,
                 background: "rgba(249,115,22,0.15)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                border: "1px solid rgba(249,115,22,0.25)",
+                cursor: "pointer",
+                transition: "all 0.2s",
                 flexShrink: 0,
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)"; }}
+              title="Expand sidebar"
             >
-              <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
-            </div>
-            {!collapsed && (
-              <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                NEXUS AI
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "#555",
-              display: "flex",
-              alignItems: "center",
-              gap: 0,
-              padding: 6,
-              flexShrink: 0,
-              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
-            title={collapsed ? "Expand" : "Collapse"}
-          >
-            {collapsed
-              ? <ChevronRight style={{ width: 16, height: 16 }} />
-              : <ChevronLeft style={{ width: 16, height: 16 }} />}
-            {collapsed
-              ? <ChevronRight style={{ width: 16, height: 16, marginLeft: "-8px", animation: "slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }} />
-              : <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px", animation: "slideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }} />}
-          </button>
+              <Flame style={{ width: 20, height: 20, color: "#f97316" }} />
+            </button>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    background: "rgba(249,115,22,0.15)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
+                </div>
+                <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  NEXUS AI
+                </span>
+              </div>
+              <button
+                onClick={() => setCollapsed(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#555",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0,
+                  padding: 6,
+                  flexShrink: 0,
+                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
+                onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
+                title="Collapse"
+              >
+                <ChevronLeft style={{ width: 16, height: 16 }} />
+                <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px" }} />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Nav */}
