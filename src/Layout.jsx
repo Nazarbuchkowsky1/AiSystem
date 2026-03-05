@@ -95,7 +95,7 @@ export default function Layout({ children, currentPageName }) {
               gap: 4,
               padding: 6,
               flexShrink: 0,
-              transition: "color 0.2s",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
             onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
