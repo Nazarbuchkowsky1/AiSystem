@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -76,10 +77,9 @@ html, body, #root {
 }
 
 .glass-panel {
-  background: linear-gradient(135deg, rgba(22, 22, 22, 0.9), rgba(16, 16, 16, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
 }
 
 .glass-panel-hover:hover {
