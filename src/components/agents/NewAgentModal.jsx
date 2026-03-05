@@ -129,49 +129,48 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Create New Agent</h2>
-          <button onClick={reset} style={{ background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex" }}>
+          <button onClick={reset} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
             <X style={{ width: 20, height: 20 }} />
           </button>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Basic Info */}
-          <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Basic Info</p>
-            
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Agent Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g., Content Writer"
-                style={{
-                  width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
-                  border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
-                  outline: "none"
-                }}
-                onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
-                onBlur={e => e.target.style.borderColor = "#2a2a2a"}
-              />
-            </div>
+          {/* Agent Name */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Agent Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g., Content Writer"
+              style={{
+                width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
+                border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
+                outline: "none"
+              }}
+              onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+              onBlur={e => e.target.style.borderColor = "#2a2a2a"}
+            />
+          </div>
 
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Description</label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="What does this agent do?"
-                rows={2}
-                style={{
-                  width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
-                  border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
-                  outline: "none", fontFamily: "inherit", resize: "none"
-                }}
-                onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
-                onBlur={e => e.target.style.borderColor = "#2a2a2a"}
-              />
-            </div>
+          {/* Description */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Description</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="What does this agent do?"
+              rows={2}
+              style={{
+                width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
+                border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
+                outline: "none", fontFamily: "inherit", resize: "none"
+              }}
+              onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+              onBlur={e => e.target.style.borderColor = "#2a2a2a"}
+            />
           </div>
 
           {/* System Instructions */}
