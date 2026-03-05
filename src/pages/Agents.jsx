@@ -7,6 +7,7 @@ import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
 import NewKBModal from "../components/knowledge/NewKBModal.jsx";
 import KnowledgeBaseCard from "../components/knowledge/KnowledgeBaseCard";
+import EditKBModal from "../components/knowledge/EditKBModal";
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
