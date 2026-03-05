@@ -14,12 +14,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
   const isEditing = !!editAgent;
   const [name, setName] = useState(editAgent?.name || "");
   const [description, setDescription] = useState(editAgent?.description || "");
-  const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || "");
+  const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || editAgent?.system_prompt || "");
   const [selectedTools, setSelectedTools] = useState(editAgent?.tools?.map(t => t.name) || []);
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState(editAgent?.knowledge_base_ids?.[0] || "");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
-  const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_name || "Bot");
+  const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_name || editAgent?.icon || "Bot");
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
@@ -84,8 +84,10 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
         name: name.trim(),
         description: description.trim(),
         system_instructions: systemInstructions.trim(),
+        system_prompt: systemInstructions.trim(),
         icon_url: iconUrl,
         icon_name: selectedIcon,
+        icon: selectedIcon,
         tools: selectedTools.map(t => ({ name: t, enabled: true })),
         knowledge_base_ids: selectedKnowledgeBase ? [selectedKnowledgeBase] : [],
         status: isEditing ? editAgent.status : "active"
