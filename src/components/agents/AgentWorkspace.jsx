@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
-  Loader2, X, FileText, Code2, Image as ImageIcon
+  Loader2, X, FileText, Code2
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -18,6 +18,13 @@ function getFileType(file) {
   return "document";
 }
 
+const noSelect = {
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  MozUserSelect: "none",
+  msUserSelect: "none",
+};
+
 export default function AgentWorkspace({ agent, onBack }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -27,21 +34,27 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [conversations, setConversations] = useState([]);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [inputFocused, setInputFocused] = useState(false);
-  const [multiLine, setMultiLine] = useState(false);
+  const [textareaHeight, setTextareaHeight] = useState(24);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
   const filesScrollRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  const MAX_HEIGHT = 188;
+  const LINE_HEIGHT = 24;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    loadHistory();
-  }, [agent]);
+  useEffect(() => { loadHistory(); }, [agent]);
 
   useEffect(() => {
     if (filesScrollRef.current) {
@@ -49,20 +62,14 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
+  // Auto-resize textarea
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = "auto";
-    const sh = ta.scrollHeight;
-    const maxH = 188;
-    ta.style.height = Math.min(sh, maxH) + "px";
-    ta.style.overflowY = sh > maxH ? "auto" : "hidden";
-    if (input.length === 0) {
-      setMultiLine(false);
-    } else {
-      const isNow = sh > (multiLine ? 40 : 45);
-      if (isNow !== multiLine) setMultiLine(isNow);
-    }
+    const sh = Math.min(ta.scrollHeight, MAX_HEIGHT);
+    ta.style.height = sh + "px";
+    setTextareaHeight(sh);
   }, [input]);
 
   const loadHistory = async () => {
@@ -104,21 +111,65 @@ export default function AgentWorkspace({ agent, onBack }) {
     if (imgs.length) { e.preventDefault(); addFilesFromList(imgs); }
   };
 
-  const stopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+  // Voice recording
+  const startRecording = async () => {
+    if (isLoading || isRecording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      recordedChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
+      mr.start(250);
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Mic error:", err);
     }
+  };
+
+  const stopRecording = () => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") mr.stop();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setIsRecording(false);
+    setIsFinalizing(false);
+    recordedChunksRef.current = [];
+    mediaRecorderRef.current = null;
+  };
+
+  const confirmRecording = async () => {
+    setIsFinalizing(true);
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      await new Promise(resolve => { mr.onstop = resolve; mr.stop(); });
+    }
+    const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    setIsRecording(false);
+    setIsFinalizing(false);
+    recordedChunksRef.current = [];
+    // Just append a placeholder since we have no transcription endpoint
+    setInput(prev => (prev ? prev + " [voice message]" : "[voice message]"));
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); abortControllerRef.current = null; }
     setIsLoading(false);
   };
 
   const handleSend = async () => {
-    if ((!input.trim() && attachedFiles.length === 0) || isLoading) return;
+    const hasContent = input.trim() || attachedFiles.length > 0;
+    if (!hasContent || isLoading) return;
     const userMsg = input.trim();
     const filesToSend = [...attachedFiles];
     setInput("");
     setAttachedFiles([]);
-    setMultiLine(false);
 
     let displayContent = userMsg;
     if (filesToSend.length > 0) {
@@ -136,9 +187,7 @@ export default function AgentWorkspace({ agent, onBack }) {
     const prompt = `${systemPrompt}\n\nConversation:\n${newMessages.map(m => `${m.role}: ${m.content}`).join("\n")}\n\nassistant:`;
 
     abortControllerRef.current = new AbortController();
-
     const response = await base44.integrations.Core.InvokeLLM({ prompt });
-
     setMessages(prev => [...prev, { role: "assistant", content: response }]);
     setIsLoading(false);
     abortControllerRef.current = null;
@@ -158,135 +207,180 @@ export default function AgentWorkspace({ agent, onBack }) {
   };
 
   const hasMessages = messages.length > 0;
-  const hasContent = input.trim() || attachedFiles.length > 0;
-  const isMultiMode = multiLine || attachedFiles.length > 0;
+  const hasContent = !!(input.trim() || attachedFiles.length > 0);
+  const isMultiLine = textareaHeight > LINE_HEIGHT + 8;
+  const showFilesBar = attachedFiles.length > 0;
+  const isExpanded = isMultiLine || showFilesBar;
 
-  const inputBarStyle = {
-    background: inputFocused ? "#1e1e1e" : "#181818",
-    border: `1px solid ${inputFocused ? "rgba(249,115,22,0.35)" : "#2a2a2a"}`,
-    borderRadius: 24,
-    boxShadow: inputFocused ? "0 0 0 3px rgba(249,115,22,0.08)" : "none",
-    transition: "all 0.2s",
-  };
-
-  const renderFilesBar = () => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 4px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-      <div ref={filesScrollRef} style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
-        {attachedFiles.map((af) => (
-          <div key={af.id} style={{ display: "flex", alignItems: "center", gap: 6, background: "#242424", border: "1px solid #333", borderRadius: 10, padding: "4px 8px", flexShrink: 0, maxWidth: 140 }}>
-            {af.type === "image" && af.preview
-              ? <img src={af.preview} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover" }} />
-              : af.type === "code"
-              ? <div style={{ width: 22, height: 22, borderRadius: 4, background: "rgba(168,85,247,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><Code2 style={{ width: 12, height: 12, color: "#a855f7" }} /></div>
-              : <div style={{ width: 22, height: 22, borderRadius: 4, background: "rgba(59,130,246,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><FileText style={{ width: 12, height: 12, color: "#3b82f6" }} /></div>
-            }
-            <span style={{ fontSize: 10, color: "#aaa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 70 }}>{af.file.name}</span>
-            <button onClick={() => removeFile(af.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 0, display: "flex" }}>
-              <X style={{ width: 10, height: 10 }} />
-            </button>
-          </div>
-        ))}
-      </div>
-      <span style={{ fontSize: 10, color: "#444", flexShrink: 0 }}>{attachedFiles.length}/{MAX_FILES}</span>
-    </div>
-  );
+  // Input bar styles
+  const barBg = inputFocused ? "#1e1e1e" : "#181818";
+  const barBorder = inputFocused ? "rgba(249,115,22,0.4)" : "#2a2a2a";
+  const barShadow = inputFocused ? "0 0 0 3px rgba(249,115,22,0.08)" : "none";
 
   const renderInputBar = () => (
-    <div style={{ ...inputBarStyle, position: "relative", width: hasMessages ? "100%" : 680, maxWidth: "100%" }}>
-      {attachedFiles.length > 0 && renderFilesBar()}
-
-      {!isMultiMode ? (
-        /* Single-line row */
-        <div style={{ display: "flex", alignItems: "center", height: 56, padding: "0 8px" }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={e => e.currentTarget.style.color = "#555"}
+    <div
+      style={{
+        ...noSelect,
+        background: barBg,
+        border: `1px solid ${barBorder}`,
+        borderRadius: 24,
+        boxShadow: barShadow,
+        transition: "border-color 0.2s, box-shadow 0.2s",
+        overflow: "hidden",
+      }}
+    >
+      {/* Files strip — seamlessly inside bar, no divider */}
+      {showFilesBar && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 0" }}>
+          <div
+            ref={filesScrollRef}
+            style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            <Plus style={{ width: 16, height: 16 }} />
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            style={{
-              flex: 1, background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", paddingTop: 16, paddingBottom: 8,
-              overflowY: "hidden", fontFamily: "inherit",
-            }}
-          />
-          <button style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex" }}>
-            <Mic style={{ width: 16, height: 16 }} />
-          </button>
-          {isLoading ? (
-            <button onClick={stopGeneration} style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4 }}>
-              <Square style={{ width: 14, height: 14, color: "#fff" }} />
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!hasContent}
-              style={{
-                width: 36, height: 36, borderRadius: 12, border: "none", cursor: hasContent ? "pointer" : "not-allowed",
-                background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)",
-                display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4,
-                opacity: hasContent ? 1 : 0.5, transition: "all 0.2s",
-              }}
-            >
-              <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
-            </button>
-          )}
+            {attachedFiles.map((af) => (
+              <div
+                key={af.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "#262626", border: "1px solid #333", borderRadius: 10,
+                  padding: "5px 8px", flexShrink: 0, maxWidth: 150,
+                }}
+              >
+                {af.type === "image" && af.preview
+                  ? <img src={af.preview} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover", flexShrink: 0 }} />
+                  : af.type === "code"
+                  ? <div style={{ width: 24, height: 24, borderRadius: 5, background: "rgba(168,85,247,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Code2 style={{ width: 13, height: 13, color: "#a855f7" }} />
+                    </div>
+                  : <div style={{ width: 24, height: 24, borderRadius: 5, background: "rgba(59,130,246,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <FileText style={{ width: 13, height: 13, color: "#3b82f6" }} />
+                    </div>
+                }
+                <span style={{ fontSize: 11, color: "#bbb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 72 }}>{af.file.name}</span>
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); removeFile(af.id); }}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#666", padding: "2px", display: "flex", borderRadius: 4,
+                    flexShrink: 0, transition: "color 0.15s, transform 0.15s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#f97316"; e.currentTarget.style.transform = "scale(1.2)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "#666"; e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <span style={{ fontSize: 10, color: "#444", flexShrink: 0, paddingRight: 4 }}>{attachedFiles.length}/{MAX_FILES}</span>
         </div>
-      ) : (
-        /* Multi-line */
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            style={{
-              width: "100%", background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", paddingTop: 13, paddingBottom: 7,
-              paddingLeft: 16, paddingRight: 16, overflowY: "hidden", fontFamily: "inherit",
-            }}
-          />
-          {/* Action bar */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px 8px" }}>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-              onMouseLeave={e => e.currentTarget.style.color = "#555"}
-            >
-              <Plus style={{ width: 16, height: 16 }} />
-            </button>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex" }}>
-                <Mic style={{ width: 16, height: 16 }} />
+      )}
+
+      {/* Main row */}
+      <div style={{ display: "flex", alignItems: isExpanded ? "flex-end" : "center", padding: isExpanded ? "6px 8px 8px" : "0 8px", minHeight: 56 }}>
+        {/* Attach */}
+        <button
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            padding: 8, borderRadius: 12, background: "none", border: "none",
+            cursor: "pointer", color: "#555", display: "flex", flexShrink: 0,
+            transition: "color 0.2s", marginBottom: isExpanded ? 2 : 0,
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+          onMouseLeave={e => e.currentTarget.style.color = "#555"}
+        >
+          <Plus style={{ width: 17, height: 17 }} />
+        </button>
+
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+          }}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          onPaste={handlePaste}
+          placeholder="Message agent..."
+          rows={1}
+          style={{
+            flex: 1,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            resize: "none",
+            fontSize: 15,
+            lineHeight: "24px",
+            color: "#f5f5f5",
+            fontFamily: "inherit",
+            padding: isExpanded ? "6px 8px 0" : "0 8px",
+            overflowY: textareaHeight >= MAX_HEIGHT ? "auto" : "hidden",
+            maxHeight: MAX_HEIGHT,
+            display: "block",
+          }}
+        />
+
+        {/* Right buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginBottom: isExpanded ? 2 : 0 }}>
+          {isRecording ? (
+            <>
+              {isFinalizing ? (
+                <Loader2 style={{ width: 16, height: 16, color: "#f97316", animation: "spin 1s linear infinite" }} />
+              ) : (
+                <>
+                  <button
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={stopRecording}
+                    style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#ef4444", display: "flex" }}
+                  >
+                    <X style={{ width: 16, height: 16 }} />
+                  </button>
+                  <button
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={confirmRecording}
+                    style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Send style={{ width: 14, height: 14, color: "#fff" }} />
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onMouseDown={e => e.preventDefault()}
+                onClick={startRecording}
+                disabled={isLoading}
+                style={{
+                  padding: 8, borderRadius: 12, background: "none", border: "none",
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  color: "#555", display: "flex", transition: "color 0.2s",
+                  opacity: isLoading ? 0.4 : 1,
+                }}
+                onMouseEnter={e => { if (!isLoading) e.currentTarget.style.color = "#f5f5f5"; }}
+                onMouseLeave={e => e.currentTarget.style.color = "#555"}
+              >
+                <Mic style={{ width: 17, height: 17 }} />
               </button>
               {isLoading ? (
-                <button onClick={stopGeneration} style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={stopGeneration}
+                  style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
                   <Square style={{ width: 14, height: 14, color: "#fff" }} />
                 </button>
               ) : (
                 <button
+                  onMouseDown={e => e.preventDefault()}
                   onClick={handleSend}
                   disabled={!hasContent}
                   style={{
-                    width: 36, height: 36, borderRadius: 12, border: "none", cursor: hasContent ? "pointer" : "not-allowed",
+                    width: 36, height: 36, borderRadius: 12, border: "none",
+                    cursor: hasContent ? "pointer" : "not-allowed",
                     background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     opacity: hasContent ? 1 : 0.5, transition: "all 0.2s",
@@ -295,10 +389,10 @@ export default function AgentWorkspace({ agent, onBack }) {
                   <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
                 </button>
               )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       <input
         ref={fileInputRef}
@@ -312,11 +406,12 @@ export default function AgentWorkspace({ agent, onBack }) {
   );
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative" }}>
+    <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
+            onMouseDown={e => e.preventDefault()}
             onClick={onBack}
             style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 6, borderRadius: 10, display: "flex", transition: "color 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.color = "#f5f5f5"}
@@ -328,6 +423,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
+            onMouseDown={e => e.preventDefault()}
             onClick={() => setShowHistory(!showHistory)}
             style={{ padding: 7, borderRadius: 10, background: showHistory ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showHistory ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}
           >
@@ -337,9 +433,11 @@ export default function AgentWorkspace({ agent, onBack }) {
             {[["instant", Zap, "Instant"], ["thinking", Brain, "Thinking"]].map(([val, Icon, label]) => (
               <button
                 key={val}
+                onMouseDown={e => e.preventDefault()}
                 onClick={() => setMode(val)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                  display: "flex", alignItems: "center", gap: 5, padding: "5px 12px",
+                  fontSize: 11, fontWeight: 500,
                   background: mode === val ? "rgba(249,115,22,0.15)" : "transparent",
                   color: mode === val ? "#f97316" : "#555",
                   border: "none", cursor: "pointer", transition: "all 0.2s",
@@ -359,7 +457,11 @@ export default function AgentWorkspace({ agent, onBack }) {
             <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Chat History</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {conversations.map(c => (
-                <button key={c.id} onClick={() => loadConversation(c)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, background: "none", border: "1px solid transparent", cursor: "pointer", transition: "all 0.2s" }}
+                <button
+                  key={c.id}
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => loadConversation(c)}
+                  style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, background: "none", border: "1px solid transparent", cursor: "pointer", transition: "all 0.2s" }}
                   onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.06)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.15)"; }}
                   onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "transparent"; }}
                 >
@@ -373,13 +475,13 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {/* Chat Area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+      {/* Main area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {!hasMessages ? (
-          /* Welcome state — centered */
+          /* Welcome */
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
             <div style={{ textAlign: "center", width: "100%", maxWidth: 680 }}>
-              <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                 <Bot style={{ width: 28, height: 28, color: "#f97316" }} />
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", marginBottom: 8 }}>{agent.name}</h2>
@@ -390,33 +492,36 @@ export default function AgentWorkspace({ agent, onBack }) {
         ) : (
           <>
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
-              {messages.map((msg, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{
-                    maxWidth: "75%", borderRadius: 18, padding: "10px 16px",
-                    background: msg.role === "user" ? "rgba(249,115,22,0.12)" : "#181818",
-                    border: msg.role === "user" ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
-                  }}>
-                    {msg.role === "assistant" ? (
-                      <ReactMarkdown className="text-sm prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      <p style={{ fontSize: 14, color: "#f5f5f5", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{msg.content}</p>
-                    )}
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 24px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: "100%" }}>
+                {messages.map((msg, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                    <div style={{
+                      maxWidth: "75%", minWidth: 0, borderRadius: 18, padding: "10px 16px",
+                      background: msg.role === "user" ? "rgba(249,115,22,0.12)" : "#181818",
+                      border: msg.role === "user" ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
+                      wordBreak: "break-word", overflowWrap: "break-word",
+                    }}>
+                      {msg.role === "assistant" ? (
+                        <ReactMarkdown className="text-sm prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        <p style={{ fontSize: 14, color: "#f5f5f5", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0 }}>{msg.content}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                  <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-                    <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
-                    <span style={{ fontSize: 12, color: "#555" }}>{mode === "thinking" ? "Thinking deeply..." : "Generating..."}</span>
+                ))}
+                {isLoading && (
+                  <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                    <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                      <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontSize: 12, color: "#555" }}>{mode === "thinking" ? "Thinking deeply..." : "Generating..."}</span>
+                    </div>
                   </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
 
             {/* Bottom input */}
@@ -426,6 +531,14 @@ export default function AgentWorkspace({ agent, onBack }) {
           </>
         )}
       </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        textarea::placeholder { color: #555; }
+        textarea::-webkit-scrollbar { width: 4px; }
+        textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        * { -webkit-tap-highlight-color: transparent; }
+      `}</style>
     </div>
   );
 }
