@@ -92,7 +92,7 @@ export default function Layout({ children, currentPageName }) {
               color: "#555",
               display: "flex",
               alignItems: "center",
-              gap: 4,
+              gap: 0,
               padding: 6,
               flexShrink: 0,
               transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -105,8 +105,8 @@ export default function Layout({ children, currentPageName }) {
               ? <ChevronRight style={{ width: 16, height: 16 }} />
               : <ChevronLeft style={{ width: 16, height: 16 }} />}
             {collapsed
-              ? <ChevronRight style={{ width: 16, height: 16 }} />
-              : <ChevronLeft style={{ width: 16, height: 16 }} />}
+              ? <ChevronRight style={{ width: 16, height: 16, marginLeft: "-8px", animation: "slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }} />
+              : <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px", animation: "slideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }} />}
           </button>
         </div>
 
