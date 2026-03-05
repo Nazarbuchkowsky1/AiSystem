@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Bot, BookOpen, Upload } from "lucide-react";
+import { Plus, Bot, BookOpen } from "lucide-react";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
+import NewKBModal from "../components/knowledge/NewKBModal.jsx";
 import KnowledgeBaseViewGrid from "../components/knowledge/KnowledgeBaseViewGrid.jsx";
 
 export default function Agents() {
