@@ -6,10 +6,11 @@ export default function MetricCard({ label, value, change, isPositive = true, ic
     <div style={{
       background: "linear-gradient(145deg, #181818, #111)",
       border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 14,
-      padding: "14px 16px",
+      borderRadius: 12,
+      padding: "10px 14px",
       position: "relative",
       overflow: "hidden",
+      boxShadow: "0 0 20px rgba(0,0,0,0.4)",
     }}>
       {/* Top accent line */}
       <div style={{
