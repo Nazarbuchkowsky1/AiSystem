@@ -157,7 +157,7 @@ export default function Agents() {
               <KnowledgeBaseCard
                 key={kb.id}
                 kb={kb}
-                onSelect={() => {}}
+                onSelect={() => setEditingKB(kb)}
               />
             ))}
           </div>
