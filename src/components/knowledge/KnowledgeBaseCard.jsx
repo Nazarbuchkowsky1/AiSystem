@@ -6,7 +6,14 @@ import { useQueryClient } from "@tanstack/react-query";
 export default function KnowledgeBaseCard({ kb, isSelected, onSelect }) {
   const [expanded, setExpanded] = useState(false);
   const [showFileInput, setShowFileInput] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const queryClient = useQueryClient();
+
+  const handleDeleteKB = async () => {
+    await base44.entities.KnowledgeBase.delete(kb.id);
+    queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+    setShowDeleteConfirm(false);
+  };
 
   const handleDeleteFile = async (fileIndex) => {
     const updatedFiles = kb.files ? [...kb.files] : [];
@@ -69,25 +76,46 @@ export default function KnowledgeBaseCard({ kb, isSelected, onSelect }) {
             <p style={{ fontSize: 11, color: "#555", lineHeight: 1.4 }}>{kb.description}</p>
           )}
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded(!expanded);
-          }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "#888",
-            padding: 4,
-            display: "flex",
-            flexShrink: 0,
-            transition: "all 0.2s",
-            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-          }}
-        >
-          <ChevronDown style={{ width: 16, height: 16 }} />
-        </button>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteConfirm(true);
+            }}
+            style={{
+              background: "rgba(239,68,68,0.1)",
+              border: "none",
+              color: "#ef4444",
+              cursor: "pointer",
+              padding: 4,
+              borderRadius: 6,
+              display: "flex",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.2)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.1)")}
+          >
+            <Trash2 style={{ width: 16, height: 16 }} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#888",
+              padding: 4,
+              display: "flex",
+              transition: "all 0.2s",
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          >
+            <ChevronDown style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -193,6 +221,79 @@ export default function KnowledgeBaseCard({ kb, isSelected, onSelect }) {
               Add file
             </button>
           )}
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            style={{
+              background: "#181818",
+              border: "1px solid #2a2a2a",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 320,
+              boxShadow: "0 20px 25px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5", marginBottom: 8 }}>Delete Knowledge Base?</h3>
+            <p style={{ fontSize: 12, color: "#888", marginBottom: 16, lineHeight: 1.4 }}>
+              This will permanently delete "{kb.name}" and all its files.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: "transparent",
+                  border: "1px solid #2a2a2a",
+                  color: "#f5f5f5",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2a2a2a")}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteKB}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: "#ef4444",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#dc2626")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#ef4444")}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
