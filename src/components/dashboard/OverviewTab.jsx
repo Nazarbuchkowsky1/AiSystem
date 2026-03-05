@@ -114,7 +114,7 @@ export default function OverviewTab() {
             <p style={{ fontSize: 9, color: "#444" }}>Compared to $5,445 last month</p>
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div>
           <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={activityData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
               <defs>
