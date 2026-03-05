@@ -526,13 +526,17 @@ export default function AgentWorkspace({ agent, onBack }) {
 
       {/* Text input row */}
       {!inVoiceMode && (
-        <div style={{ display: "flex", alignItems: "flex-end" }}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
-            style={{ padding: "8px 4px 8px 10px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
-            onMouseLeave={e => e.currentTarget.style.color = "#555"}>
-            <Plus style={{ width: 17, height: 17 }} />
-          </button>
+        <div style={{ display: "flex", flexDirection: multiLine || attachedFiles.length > 0 ? "column" : "row", alignItems: multiLine || attachedFiles.length > 0 ? "stretch" : "center", height: multiLine || attachedFiles.length > 0 ? undefined : 56, padding: multiLine || attachedFiles.length > 0 ? undefined : "0 8px" }}>
+
+          {/* Single-line: attach left of textarea */}
+          {!multiLine && attachedFiles.length === 0 && (
+            <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+              style={{ padding: "0 4px 0 2px", background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+              onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+              <Plus style={{ width: 17, height: 17 }} />
+            </button>
+          )}
 
           <textarea
             ref={textareaRef}
@@ -545,17 +549,35 @@ export default function AgentWorkspace({ agent, onBack }) {
             placeholder="Message agent..."
             rows={1}
             style={{
-              flex: 1, minWidth: 0, boxSizing: "border-box",
+              flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "8px 6px",
+              padding: multiLine || attachedFiles.length > 0 ? "10px 16px 4px 16px" : "0 8px",
               overflowY: "hidden",
             }}
           />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, paddingRight: 8, paddingBottom: 6 }}>
-            {renderRightButtons()}
-          </div>
+          {/* Single-line: mic + send right of textarea */}
+          {!multiLine && attachedFiles.length === 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              {renderRightButtons()}
+            </div>
+          )}
+
+          {/* Multi-line: action bar below textarea */}
+          {(multiLine || attachedFiles.length > 0) && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 12px 10px 12px" }}>
+              <button onMouseDown={e => e.preventDefault()} onClick={() => fileInputRef.current?.click()}
+                style={{ padding: 6, background: "none", border: "none", cursor: "pointer", color: "#555", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
+                onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+                <Plus style={{ width: 17, height: 17 }} />
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {renderRightButtons()}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
