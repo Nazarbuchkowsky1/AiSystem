@@ -19,7 +19,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState(editAgent?.knowledge_base_ids?.[0] || "");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
-  const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_name || editAgent?.icon || "Bot");
+  const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_url ? null : (editAgent?.icon_name || editAgent?.icon || "Bot"));
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
@@ -39,6 +39,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
       setIconFile(file);
       const preview = URL.createObjectURL(file);
       setIconPreview(preview);
+      setSelectedIcon(null);
     }
   };
 
