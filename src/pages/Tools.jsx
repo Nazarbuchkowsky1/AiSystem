@@ -14,7 +14,7 @@ export default function Tools() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, overflow: "auto" }}>
-        {TOOLS.map((tool) => {
+        {TOOLS_LIST.map((tool) => {
           const Icon = tool.icon;
           const isActive = tool.status === "active";
           return (
