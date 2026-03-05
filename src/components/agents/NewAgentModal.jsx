@@ -325,11 +325,13 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
               Cancel
             </button>
             <button onClick={handleCreate} disabled={!name.trim() || isCreating} style={{
-              flex: 1, padding: "10px 16px", borderRadius: 10, background: "#f97316",
-              border: "none", color: "#fff", fontSize: 14, fontWeight: 500,
+              flex: 1, padding: "10px 16px", borderRadius: 10, background: "rgba(249,115,22,0.1)",
+              border: "1px solid rgba(249,115,22,0.3)", color: "#f97316", fontSize: 14, fontWeight: 500,
               cursor: !name.trim() || isCreating ? "not-allowed" : "pointer", opacity: !name.trim() || isCreating ? 0.5 : 1,
               transition: "all 0.2s"
-            }}>
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.2)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
               {isCreating ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Agent")}
             </button>
           </div>
