@@ -70,7 +70,6 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           cursor: "pointer",
           transition: "all 0.2s",
           position: "relative",
-          height: "100%",
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
