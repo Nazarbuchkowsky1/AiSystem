@@ -15,39 +15,21 @@ export default function AgentCard({ agent, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="glass-panel glass-panel-hover p-6 text-left transition-all duration-300 group w-full"
+      className="glass-panel glass-panel-hover"
+      style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s", width: "100%" }}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center transition-all group-hover:scale-105"
-          style={{ background: "var(--accent-dim)" }}
-        >
-          <Icon className="w-5 h-5" style={{ color: "var(--accent)" }} />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
+          <Icon style={{ width: 16, height: 16, color: "#f97316" }} />
         </div>
-        <div className="flex items-center gap-1.5">
-          <div
-            className="w-2 h-2 rounded-full"
-            style={{
-              background: isActive ? "#22c55e" : "#555",
-              boxShadow: isActive ? "0 0 8px rgba(34,197,94,0.5)" : "none",
-            }}
-          />
-          <span className="text-[10px] font-medium" style={{ color: isActive ? "#22c55e" : "var(--text-muted)" }}>
-            {isActive ? "Active" : "Offline"}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#22c55e" : "#555", boxShadow: isActive ? "0 0 6px rgba(34,197,94,0.5)" : "none" }} />
+          <span style={{ fontSize: 10, color: isActive ? "#22c55e" : "#555" }}>{isActive ? "Active" : "Offline"}</span>
         </div>
       </div>
-      <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-        {agent.name}
-      </h3>
-      <p className="text-xs leading-relaxed mb-3" style={{ color: "var(--text-muted)" }}>
-        {agent.description}
-      </p>
-      <div className="flex items-center gap-1">
-        <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-          {agent.message_count || 0} messages
-        </span>
-      </div>
+      <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>{agent.name}</p>
+      <p style={{ fontSize: 11, color: "#555", marginBottom: 8, lineHeight: 1.5 }}>{agent.description}</p>
+      <span style={{ fontSize: 10, color: "#444" }}>{agent.message_count || 0} messages</span>
     </button>
   );
 }
