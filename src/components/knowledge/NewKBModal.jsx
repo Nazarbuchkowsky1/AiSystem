@@ -24,20 +24,12 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       });
     }
 
-    const kbData = {
+    onCreate({
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
-      processing: true,
-    };
-    
-    onCreate(kbData);
+    });
     setIsCreating(false);
-    
-    // Завершити обробку через 2 секунди
-    setTimeout(async () => {
-      await base44.entities.KnowledgeBase.update(kbData.id, { processing: false });
-    }, 2000);
   };
 
   return (
