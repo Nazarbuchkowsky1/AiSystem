@@ -154,17 +154,17 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
                 setShowFileInput(!showFileInput);
               }}
               style={{
-                background: "rgba(249,115,22,0.1)",
-                border: "1px solid rgba(249,115,22,0.2)",
-                color: "#f97316",
+                background: "rgba(34,197,94,0.1)",
+                border: "1px solid rgba(34,197,94,0.2)",
+                color: "#22c55e",
                 cursor: "pointer",
                 padding: 4,
                 borderRadius: 6,
                 display: "flex",
                 transition: "all 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.2)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.1)")}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(34,197,94,0.2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(34,197,94,0.1)")}
             >
               <Plus style={{ width: 14, height: 14 }} />
             </button>
