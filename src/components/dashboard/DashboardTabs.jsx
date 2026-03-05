@@ -4,21 +4,48 @@ const TABS = ["Overview", "Agents", "OpenClo", "Tools", "Costs", "System"];
 
 export default function DashboardTabs({ activeTab, onTabChange }) {
   return (
-    <div className="flex items-center gap-1 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-      {TABS.map((tab) => (
-        <button
-          key={tab}
-          onClick={() => onTabChange(tab)}
-          className={`px-4 py-2.5 text-sm font-medium transition-all relative ${
-            activeTab === tab ? "tab-active" : ""
-          }`}
-          style={{
-            color: activeTab === tab ? "var(--accent)" : "var(--text-muted)",
-          }}
-        >
-          {tab}
-        </button>
-      ))}
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 2,
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      flexShrink: 0,
+    }}>
+      {TABS.map((tab) => {
+        const isActive = activeTab === tab;
+        return (
+          <button
+            key={tab}
+            onClick={() => onTabChange(tab)}
+            style={{
+              position: "relative",
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: isActive ? 600 : 400,
+              color: isActive ? "#f97316" : "#555",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              transition: "color 0.2s",
+              outline: "none",
+            }}
+          >
+            {tab}
+            {isActive && (
+              <span style={{
+                position: "absolute",
+                bottom: -1,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: "#f97316",
+                borderRadius: "1px 1px 0 0",
+                boxShadow: "0 0 8px rgba(249,115,22,0.5)",
+              }} />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
