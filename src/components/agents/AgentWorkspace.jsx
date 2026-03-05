@@ -519,7 +519,7 @@ export default function AgentWorkspace({ agent, onBack }) {
             {renderRightButtons()}
           </div>
         </div>
-      ) : isMultiline ? (
+      ) : isMultilineRef.current ? (
         /* MULTILINE: textarea on top, icons on bottom row */
         <div style={{ display: "flex", flexDirection: "column" }}>
           <textarea
