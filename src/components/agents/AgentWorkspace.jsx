@@ -532,7 +532,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0,
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "10px 8px",
+              padding: "7px 8px",
               overflowY: "hidden",
             }}
           />
