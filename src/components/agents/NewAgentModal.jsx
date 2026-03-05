@@ -104,6 +104,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
     setSelectedKnowledgeBase("");
     setIconFile(null);
     setIconPreview(null);
+    setSelectedIcon("Bot");
     onClose();
   };
 
