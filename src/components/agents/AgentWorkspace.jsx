@@ -107,14 +107,12 @@ export default function AgentWorkspace({ agent, onBack }) {
     ta.style.height = Math.min(realScrollHeight, MAX_HEIGHT) + "px";
     ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 
-    const isNowMultiLine = realScrollHeight > (multiLine ? 40 : 45);
-
-    if (input.length === 0) {
-      if (multiLine) setMultiLine(false);
-    } else if (isNowMultiLine !== multiLine) {
-      setMultiLine(isNowMultiLine);
-    }
-  }, [input, isRecording, attachedFiles.length, multiLine]);
+    setMultiLine(prevMultiLine => {
+      const isNowMultiLine = realScrollHeight > (prevMultiLine ? 40 : 45);
+      if (input.length === 0) return false;
+      return isNowMultiLine;
+    });
+  }, [input, isRecording, attachedFiles.length]);
 
   // ResizeObserver for wave container
   useEffect(() => {
