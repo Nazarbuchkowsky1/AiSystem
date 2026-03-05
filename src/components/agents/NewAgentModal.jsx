@@ -125,7 +125,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
       <div style={{
         background: "#181818", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
         padding: 24, width: "100%", maxWidth: 600, maxHeight: "90vh", overflow: "auto",
-        boxShadow: "0 20px 25px rgba(0,0,0,0.5)"
+        boxShadow: "0 20px 25px rgba(0,0,0,0.5)", msOverflowStyle: "none", scrollbarWidth: "none"
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Create New Agent</h2>
