@@ -161,7 +161,7 @@ export default function OverviewTab() {
     <div style={{ display: "grid", gridTemplateColumns: "5fr 4fr 3fr", gap: 10, height: "100%" }}>
 
       {/* LEFT — AI Generation Activity */}
-      <div className="glass-panel" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 6, overflow: "hidden" }}>
+      <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 6, overflow: "hidden" }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", flexShrink: 0 }}>AI Generation Activity</p>
 
         {/* Stats row */}
