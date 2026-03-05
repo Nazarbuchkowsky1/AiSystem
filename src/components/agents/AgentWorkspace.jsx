@@ -80,9 +80,8 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
 
-  const MAX_HEIGHT = 200;
-  const isMultilineRef = useRef(false);
-  const [forceUpdate, setForceUpdate] = useState(0);
+  const MAX_HEIGHT = 188;
+  const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
