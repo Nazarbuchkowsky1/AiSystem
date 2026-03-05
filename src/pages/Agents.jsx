@@ -36,7 +36,6 @@ export default function Agents() {
     mutationFn: (kbData) => base44.entities.KnowledgeBase.create(kbData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-      setShowNewKBModal(false);
     },
   });
 
