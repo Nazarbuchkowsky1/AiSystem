@@ -218,46 +218,42 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
                 </button>
               ))}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <label style={{
-                flex: 1, display: "flex", alignItems: "center", gap: 8,
-                padding: "10px 16px", borderRadius: 10,
-                background: iconPreview ? "rgba(249,115,22,0.15)" : "#0f0f0f",
-                border: `2px dashed ${iconPreview ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
-                cursor: "pointer", transition: "all 0.2s"
-              }} onMouseEnter={e => { if (!iconPreview) e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
-                onMouseLeave={e => { if (!iconPreview) e.currentTarget.style.borderColor = "#2a2a2a"; }}>
-                {iconPreview ? (
-                  <>
-                    <img src={iconPreview} alt="preview" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
-                    <span style={{ fontSize: 12, color: "#f5f5f5" }}>Custom icon uploaded</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload style={{ width: 16, height: 16, color: "#555" }} />
-                    <span style={{ fontSize: 12, color: "#555" }}>Or upload custom icon</span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleIconChange}
-                  style={{ display: "none" }}
-                />
-              </label>
-              {iconPreview && (
-                <button onClick={() => { setIconPreview(null); setIconFile(null); setSelectedIcon("Bot"); }} style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 40, height: 40, borderRadius: 10, background: "rgba(239,68,68,0.1)",
-                  border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", transition: "all 0.2s",
-                  color: "#ef4444", flexShrink: 0
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}>
-                  <Trash2 style={{ width: 16, height: 16 }} />
-                </button>
+            <label style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "10px 16px", borderRadius: 10,
+              background: iconPreview ? "rgba(249,115,22,0.15)" : "#0f0f0f",
+              border: `2px dashed ${iconPreview ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
+              cursor: "pointer", transition: "all 0.2s"
+            }} onMouseEnter={e => { if (!iconPreview) e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
+              onMouseLeave={e => { if (!iconPreview) e.currentTarget.style.borderColor = "#2a2a2a"; }}>
+              {iconPreview ? (
+                <>
+                  <img src={iconPreview} alt="preview" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
+                  <span style={{ fontSize: 12, color: "#f5f5f5", flex: 1 }}>Custom icon uploaded</span>
+                  <button onClick={(e) => { e.preventDefault(); setIconPreview(null); setIconFile(null); setSelectedIcon("Bot"); }} style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 32, height: 32, borderRadius: 8, background: "rgba(239,68,68,0.1)",
+                    border: "1px solid rgba(239,68,68,0.3)", cursor: "pointer", transition: "all 0.2s",
+                    color: "#ef4444", flexShrink: 0
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}>
+                    <Trash2 style={{ width: 14, height: 14 }} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Upload style={{ width: 16, height: 16, color: "#555" }} />
+                  <span style={{ fontSize: 12, color: "#555" }}>Or upload custom icon</span>
+                </>
               )}
-            </div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleIconChange}
+                style={{ display: "none" }}
+              />
+            </label>
           </div>
 
           {/* Tools Access */}
@@ -303,8 +299,8 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
                     flexDirection: "column",
                     gap: 4
                   }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kb.name}</span>
-                    <span style={{ fontSize: 9, color: "#555", fontWeight: 400 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#f5f5f5" }}>{kb.name}</span>
+                    <span style={{ fontSize: 9, color: "#f97316", fontWeight: 400 }}>
                       {kb.files ? kb.files.length : 1} file{(kb.files ? kb.files.length : 1) !== 1 ? "s" : ""}
                     </span>
                   </button>
