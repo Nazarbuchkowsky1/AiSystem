@@ -102,7 +102,7 @@ export default function Agents() {
             <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, overflow: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, overflow: "auto" }}>
             {agents.map((agent) => (
               <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} />
             ))}

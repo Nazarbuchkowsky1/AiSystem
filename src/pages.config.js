@@ -50,9 +50,9 @@
 import Agents from './pages/Agents';
 import Analytics from './pages/Analytics';
 import Calendar from './pages/Calendar';
+import KnowledgeBase from './pages/KnowledgeBase';
 import Settings from './pages/Settings';
 import Tools from './pages/Tools';
-import KnowledgeBase from './pages/KnowledgeBase';
 import __Layout from './Layout.jsx';
 
 
@@ -60,9 +60,9 @@ export const PAGES = {
     "Agents": Agents,
     "Analytics": Analytics,
     "Calendar": Calendar,
+    "KnowledgeBase": KnowledgeBase,
     "Settings": Settings,
     "Tools": Tools,
-    "KnowledgeBase": KnowledgeBase,
 }
 
 export const pagesConfig = {

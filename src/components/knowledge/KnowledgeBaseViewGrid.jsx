@@ -24,7 +24,7 @@ export default function KnowledgeBaseViewGrid({ knowledgeBases = [] }) {
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, overflow: "auto" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, overflow: "auto" }}>
       {knowledgeBases.map((kb) => (
         <div key={kb.id} style={{
           background: "#181818", border: "1px solid #2a2a2a", borderRadius: 12, padding: 16,
