@@ -209,7 +209,6 @@ export default function AgentWorkspace({ agent, onBack }) {
   const hasMessages = messages.length > 0;
   const hasContent = !!(input.trim() || attachedFiles.length > 0);
   const showFilesBar = attachedFiles.length > 0;
-  const isExpanded = isMultiLineSt || showFilesBar;
 
   // Input bar styles
   const barBg = inputFocused ? "#1e1e1e" : "#181818";
