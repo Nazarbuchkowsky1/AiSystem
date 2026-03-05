@@ -18,8 +18,18 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState("");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);
+  const [selectedIcon, setSelectedIcon] = useState("Bot");
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const ICON_OPTIONS = [
+    { name: "Bot", icon: Bot },
+    { name: "Zap", icon: Zap },
+    { name: "Brain", icon: Brain },
+    { name: "Sparkles", icon: Sparkles },
+    { name: "Cpu", icon: Cpu },
+    { name: "Settings", icon: Settings },
+  ];
 
   const handleIconChange = (e) => {
     const file = e.target.files?.[0];
