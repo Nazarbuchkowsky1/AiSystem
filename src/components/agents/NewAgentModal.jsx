@@ -329,11 +329,11 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
           background: transparent;
         }
         div::-webkit-scrollbar-thumb {
-          background: rgba(249,115,22,0.3);
+          background: transparent;
           border-radius: 3px;
         }
         div::-webkit-scrollbar-thumb:hover {
-          background: rgba(249,115,22,0.5);
+          background: transparent;
         }
       `}</style>
     </div>
