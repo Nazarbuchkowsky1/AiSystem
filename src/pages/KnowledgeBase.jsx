@@ -56,12 +56,11 @@ export default function KnowledgeBasePage({ onBack }) {
           <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, overflow: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, overflow: "auto" }}>
           {knowledgeBases.map((kb) => (
             <KnowledgeBaseCard
               key={kb.id}
               kb={kb}
-              isSelected={selectedKBId === kb.id}
               onSelect={setSelectedKBId}
             />
           ))}
