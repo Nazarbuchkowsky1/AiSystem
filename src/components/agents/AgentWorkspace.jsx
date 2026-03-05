@@ -220,6 +220,43 @@ export default function AgentWorkspace({ agent, onBack }) {
   const barBorder = inputFocused ? "rgba(249,115,22,0.4)" : "#2a2a2a";
   const barShadow = inputFocused ? "0 0 0 3px rgba(249,115,22,0.08)" : "none";
 
+  const renderRightButtons = () => isRecording ? (
+    isFinalizing ? (
+      <Loader2 style={{ width: 16, height: 16, color: "#f97316", animation: "spin 1s linear infinite" }} />
+    ) : (
+      <>
+        <button onMouseDown={e => e.preventDefault()} onClick={stopRecording}
+          style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#ef4444", display: "flex" }}>
+          <X style={{ width: 16, height: 16 }} />
+        </button>
+        <button onMouseDown={e => e.preventDefault()} onClick={confirmRecording}
+          style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Send style={{ width: 14, height: 14, color: "#fff" }} />
+        </button>
+      </>
+    )
+  ) : (
+    <>
+      <button onMouseDown={e => e.preventDefault()} onClick={startRecording} disabled={isLoading}
+        style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: isLoading ? "not-allowed" : "pointer", color: "#555", display: "flex", transition: "color 0.2s", opacity: isLoading ? 0.4 : 1 }}
+        onMouseEnter={e => { if (!isLoading) e.currentTarget.style.color = "#f5f5f5"; }}
+        onMouseLeave={e => e.currentTarget.style.color = "#555"}>
+        <Mic style={{ width: 17, height: 17 }} />
+      </button>
+      {isLoading ? (
+        <button onMouseDown={e => e.preventDefault()} onClick={stopGeneration}
+          style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Square style={{ width: 14, height: 14, color: "#fff" }} />
+        </button>
+      ) : (
+        <button onMouseDown={e => e.preventDefault()} onClick={handleSend} disabled={!hasContent}
+          style={{ width: 36, height: 36, borderRadius: 12, border: "none", cursor: hasContent ? "pointer" : "not-allowed", background: hasContent ? "#f97316" : "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", opacity: hasContent ? 1 : 0.5, transition: "all 0.2s" }}>
+          <Send style={{ width: 14, height: 14, color: hasContent ? "#fff" : "#f97316" }} />
+        </button>
+      )}
+    </>
+  );
+
   const renderInputBar = () => (
     <div
       style={{
