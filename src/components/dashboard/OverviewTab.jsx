@@ -285,7 +285,7 @@ export default function OverviewTab() {
         </div>
 
         {/* Resource Allocation */}
-        <div className="glass-panel" style={{ padding: 12, flex: 1 }}>
+        <div style={{ background: "#1c1c1c", border: "1px solid #2a2a2a", borderRadius: 14, padding: 12, flex: 1 }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 8 }}>Resource Allocation</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
             {resourceData.map((r) => (
