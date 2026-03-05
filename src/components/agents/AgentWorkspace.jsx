@@ -356,13 +356,19 @@ export default function AgentWorkspace({ agent, onBack }) {
     setMessages(newMessages);
     setIsLoading(true);
 
-    const systemPrompt = agent.system_prompt || `You are ${agent.name}. ${agent.description || ""}. ${
-      mode === "thinking" ? "Think deeply and provide thorough, detailed responses." : "Be concise and direct."
-    }`;
-    const prompt = `${systemPrompt}\n\nConversation:\n${newMessages.map(m => `${m.role}: ${m.content}`).join("\n")}\n\nassistant:`;
-
     abortControllerRef.current = new AbortController();
-    const response = await base44.integrations.Core.InvokeLLM({ prompt });
+    const res = await base44.functions.invoke("agentChat", {
+      messages: newMessages,
+      agent: {
+        name: agent.name,
+        description: agent.description || "",
+        system_instructions: agent.system_instructions || agent.system_prompt || "",
+        knowledge_base_ids: agent.knowledge_base_ids || [],
+        tools: agent.tools || [],
+      },
+      mode,
+    });
+    const response = res.data?.response || "Error generating response.";
     setMessages(prev => [...prev, { role: "assistant", content: response }]);
     setIsLoading(false);
     abortControllerRef.current = null;
