@@ -62,27 +62,27 @@ export default function Layout({ children, currentPageName }) {
             flexShrink: 0,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 10,
-                background: "rgba(249,115,22,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
-            </div>
-            {!collapsed && (
+          {!collapsed && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: "rgba(249,115,22,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
+              </div>
               <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
                 NEXUS AI
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
             style={{
@@ -95,6 +95,7 @@ export default function Layout({ children, currentPageName }) {
               padding: 6,
               flexShrink: 0,
               transition: "color 0.2s",
+              marginLeft: collapsed ? "auto" : 0,
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
             onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
