@@ -38,10 +38,10 @@ export default function DashboardTabs({ activeTab, onTabChange }) {
                 bottom: -1,
                 left: 0,
                 right: 0,
-                height: 2,
+                height: 1,
                 background: "#f97316",
                 borderRadius: "1px 1px 0 0",
-                boxShadow: "0 0 8px rgba(249,115,22,0.5)",
+                boxShadow: "none",
               }} />
             )}
           </button>
