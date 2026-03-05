@@ -5,7 +5,7 @@ import { Plus, Bot, BookOpen, Upload } from "lucide-react";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
-import KnowledgeBaseViewGrid from "../components/knowledge/KnowledgeBaseViewGrid";
+import KnowledgeBaseViewGrid from "../components/knowledge/KnowledgeBaseViewGrid.jsx";
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
