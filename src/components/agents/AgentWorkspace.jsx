@@ -48,8 +48,6 @@ export default function AgentWorkspace({ agent, onBack }) {
   const streamRef = useRef(null);
 
   const MAX_HEIGHT = 188;
-  const LINE_HEIGHT = 24;
-  const SINGLE_LINE_THRESHOLD = 45;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
