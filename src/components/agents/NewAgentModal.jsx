@@ -201,7 +201,8 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
                   width: 52, height: 52, borderRadius: 10,
                   background: selectedIcon === iconName ? "rgba(249,115,22,0.15)" : "#0f0f0f",
                   border: `1px solid ${selectedIcon === iconName ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
-                  cursor: "pointer", transition: "all 0.2s", color: selectedIcon === iconName ? "#f97316" : "#555"
+                  cursor: "pointer", transition: "all 0.2s", color: selectedIcon === iconName ? "#f97316" : "#555",
+                  padding: 0
                 }} title={iconName}>
                   <IconComponent style={{ width: 24, height: 24 }} />
                 </button>
