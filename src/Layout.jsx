@@ -34,6 +34,16 @@ export default function Layout({ children, currentPageName }) {
         color: "#f5f5f5",
       }}
     >
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(-12px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(-12px); opacity: 0; }
+        }
+      `}</style>
       {/* Sidebar */}
       <aside
         style={{
