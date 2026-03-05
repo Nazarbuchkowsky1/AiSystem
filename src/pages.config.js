@@ -52,6 +52,7 @@ import Analytics from './pages/Analytics';
 import Calendar from './pages/Calendar';
 import Settings from './pages/Settings';
 import Tools from './pages/Tools';
+import KnowledgeBase from './pages/KnowledgeBase';
 import __Layout from './Layout.jsx';
 
 
@@ -61,6 +62,7 @@ export const PAGES = {
     "Calendar": Calendar,
     "Settings": Settings,
     "Tools": Tools,
+    "KnowledgeBase": KnowledgeBase,
 }
 
 export const pagesConfig = {
