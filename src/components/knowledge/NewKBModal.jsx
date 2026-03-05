@@ -28,7 +28,6 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
-      processing: true,
     });
     setIsCreating(false);
   };
