@@ -94,39 +94,14 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Ref to track multiLine without causing dependency loops
-  const multiLineRef = useRef(false);
-
-  useLayoutEffect(() => {
+  // Auto-resize textarea
+  useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-
-    // Measure with current layout
     ta.style.height = "auto";
-    void ta.offsetHeight;
     const sh = ta.scrollHeight;
-
-    // Clamp height
     ta.style.height = Math.min(sh, MAX_HEIGHT) + "px";
     ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
-
-    // Hysteresis using ref (no setState in layout effect)
-    const prev = multiLineRef.current;
-    let next;
-    if (input.length === 0) {
-      next = false;
-    } else if (!prev && sh > 45) {
-      next = true;
-    } else if (prev && sh <= 40) {
-      next = false;
-    } else {
-      next = prev;
-    }
-
-    if (next !== prev) {
-      multiLineRef.current = next;
-      setMultiLine(next);
-    }
   }, [input, attachedFiles.length, isRecording]);
 
   // ResizeObserver for wave container
