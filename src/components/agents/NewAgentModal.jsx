@@ -10,7 +10,7 @@ const AVAILABLE_TOOLS = [
   { name: "email", label: "Email" },
 ];
 
-export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBases = [], editAgent = null }) {
+export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, knowledgeBases = [], editAgent = null }) {
   const isEditing = !!editAgent;
   const [name, setName] = useState(editAgent?.name || "");
   const [description, setDescription] = useState(editAgent?.description || "");
@@ -23,6 +23,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
   const [isCreating, setIsCreating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const ICON_OPTIONS = [
     { name: "Bot", icon: Bot },
@@ -327,6 +328,46 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, knowledgeBa
               {isCreating ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Agent")}
             </button>
           </div>
+
+          {isEditing && !showDeleteConfirm && (
+            <button onClick={() => setShowDeleteConfirm(true)} style={{
+              width: "100%", padding: "10px 16px", borderRadius: 10,
+              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+              color: "#ef4444", fontSize: 14, fontWeight: 500, cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}>
+              Видалити бота
+            </button>
+          )}
+
+          {isEditing && showDeleteConfirm && (
+            <div style={{
+              padding: 14, borderRadius: 10, background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.3)", display: "flex", flexDirection: "column", gap: 10
+            }}>
+              <p style={{ fontSize: 13, color: "#ef4444", fontWeight: 500, textAlign: "center" }}>
+                Ви впевнені, що хочете видалити цього бота?
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setShowDeleteConfirm(false)} style={{
+                  flex: 1, padding: "8px 14px", borderRadius: 8, background: "transparent",
+                  border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 13, fontWeight: 500,
+                  cursor: "pointer", transition: "all 0.2s"
+                }}>
+                  Скасувати
+                </button>
+                <button onClick={() => { onDelete(editAgent.id); onClose(); }} style={{
+                  flex: 1, padding: "8px 14px", borderRadius: 8, background: "#ef4444",
+                  border: "none", color: "#fff", fontSize: 13, fontWeight: 500,
+                  cursor: "pointer", transition: "all 0.2s"
+                }}>
+                  Так, видалити
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
