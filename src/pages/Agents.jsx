@@ -12,6 +12,7 @@ export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showNewKBModal, setShowNewKBModal] = useState(false);
+  const [editingAgent, setEditingAgent] = useState(null);
   const [currentTab, setCurrentTab] = useState("agents");
   const queryClient = useQueryClient();
 
@@ -27,6 +28,13 @@ export default function Agents() {
 
   const createAgentMutation = useMutation({
     mutationFn: (agentData) => base44.entities.Agent.create(agentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+
+  const updateAgentMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Agent.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
@@ -90,11 +98,13 @@ export default function Agents() {
         )}
       </div>
 
-      {showNewModal && (
+      {(showNewModal || editingAgent) && (
         <NewAgentModal
-          onClose={() => setShowNewModal(false)}
+          onClose={() => { setShowNewModal(false); setEditingAgent(null); }}
           onCreate={(agentData) => createAgentMutation.mutate(agentData)}
+          onUpdate={(id, data) => updateAgentMutation.mutate({ id, data })}
           knowledgeBases={knowledgeBases}
+          editAgent={editingAgent}
         />
       )}
 
@@ -118,7 +128,7 @@ export default function Agents() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, overflow: "auto" }}>
             {agents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} />
+              <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} onEdit={(a) => setEditingAgent(a)} />
             ))}
           </div>
         )
