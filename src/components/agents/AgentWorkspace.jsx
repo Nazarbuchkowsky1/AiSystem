@@ -82,6 +82,7 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   const MAX_HEIGHT = 200;
   const isMultilineRef = useRef(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
