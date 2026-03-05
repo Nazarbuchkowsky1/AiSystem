@@ -76,7 +76,7 @@ function NewKBModal({ onClose, onCreate, isLoading }) {
   const [files, setFiles] = useState([]);
 
   const handleCreate = async () => {
-    if (!name.trim() || files.length === 0) return;
+    if (!name.trim() || files.length === 0 || isLoading) return;
     
     const uploadedFiles = [];
     for (const file of files) {
@@ -90,15 +90,11 @@ function NewKBModal({ onClose, onCreate, isLoading }) {
       });
     }
 
-    await onCreate({
+    onCreate({
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
     });
-    setName("");
-    setDescription("");
-    setFiles([]);
-    onClose();
   };
 
   return (
