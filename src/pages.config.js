@@ -50,6 +50,8 @@
 import Analytics from './pages/Analytics';
 import Agents from './pages/Agents';
 import Tools from './pages/Tools';
+import Calendar from './pages/Calendar';
+import Settings from './pages/Settings';
 import __Layout from './Layout.jsx';
 
 
@@ -57,6 +59,8 @@ export const PAGES = {
     "Analytics": Analytics,
     "Agents": Agents,
     "Tools": Tools,
+    "Calendar": Calendar,
+    "Settings": Settings,
 }
 
 export const pagesConfig = {
