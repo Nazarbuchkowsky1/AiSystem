@@ -385,8 +385,10 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0,
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "16px 8px 8px",
+              padding: "0 8px",
               overflowY: "hidden",
+              alignSelf: "center",
+              height: 24,
             }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
