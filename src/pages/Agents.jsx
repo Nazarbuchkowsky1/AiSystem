@@ -18,27 +18,24 @@ export default function Agents() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Agents</h1>
-        <button
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:opacity-90"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          <Plus className="w-4 h-4" /> New Agent
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
+        <button style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+          <Plus style={{ width: 12, height: 12 }} /> New Agent
         </button>
       </div>
 
       {agents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "var(--accent-dim)" }}>
-            <Bot className="w-7 h-7" style={{ color: "var(--accent)" }} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
+            <Bot style={{ width: 24, height: 24, color: "#f97316" }} />
           </div>
-          <p className="text-sm mb-1" style={{ color: "var(--text-primary)" }}>No agents yet</p>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>Create your first AI agent to get started</p>
+          <p style={{ fontSize: 13, color: "#f5f5f5" }}>No agents yet</p>
+          <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, overflow: "auto" }}>
           {agents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgent(agent)} />
           ))}
