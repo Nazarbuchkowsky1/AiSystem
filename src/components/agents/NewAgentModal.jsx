@@ -260,31 +260,27 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
 
           {/* Knowledge Base */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Knowledge Base (Optional)</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Knowledge Bases (Optional)</p>
             {knowledgeBases.length === 0 ? (
               <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base first to connect it</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <button onClick={() => setSelectedKnowledgeBase("")} style={{
-                  padding: "8px 12px", borderRadius: 10,
-                  background: selectedKnowledgeBase === "" ? "rgba(249,115,22,0.2)" : "#0f0f0f",
-                  border: `1px solid ${selectedKnowledgeBase === "" ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
-                  cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
-                  color: selectedKnowledgeBase === "" ? "#f97316" : "#f5f5f5",
-                  textAlign: "left"
-                }}>
-                  None
-                </button>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                 {knowledgeBases.map(kb => (
                   <button key={kb.id} onClick={() => setSelectedKnowledgeBase(kb.id)} style={{
-                    padding: "8px 12px", borderRadius: 10,
+                    padding: "10px 12px", borderRadius: 10,
                     background: selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.2)" : "#0f0f0f",
                     border: `1px solid ${selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
-                    cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                    cursor: "pointer", transition: "all 0.2s", fontSize: 11, fontWeight: 500,
                     color: selectedKnowledgeBase === kb.id ? "#f97316" : "#f5f5f5",
-                    textAlign: "left"
+                    textAlign: "left",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4
                   }}>
-                    {kb.name}
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kb.name}</span>
+                    <span style={{ fontSize: 9, color: "#555", fontWeight: 400 }}>
+                      {kb.files ? kb.files.length : 1} file{(kb.files ? kb.files.length : 1) !== 1 ? "s" : ""}
+                    </span>
                   </button>
                 ))}
               </div>
