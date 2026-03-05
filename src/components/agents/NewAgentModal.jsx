@@ -234,55 +234,67 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
           </div>
 
           {/* Tools Access */}
-          <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Tool Access</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-              {AVAILABLE_TOOLS.map(tool => (
-                <label key={tool.name} style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10,
-                  background: selectedTools.includes(tool.name) ? "rgba(249,115,22,0.15)" : "#0f0f0f",
-                  border: `1px solid ${selectedTools.includes(tool.name) ? "rgba(249,115,22,0.4)" : "#2a2a2a"}`,
-                  cursor: "pointer", transition: "all 0.2s"
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTools.includes(tool.name)}
-                    onChange={() => toggleTool(tool.name)}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span style={{ fontSize: 12, color: "#f5f5f5" }}>{tool.label}</span>
-                </label>
-              ))}
-            </div>
-            <button onClick={analyzeAndSuggest} disabled={!name.trim() || isAnalyzing} style={{
-              marginTop: 10, padding: "6px 12px", borderRadius: 8, background: "rgba(249,115,22,0.1)",
-              border: "1px solid rgba(249,115,22,0.2)", color: "#f97316", fontSize: 11, fontWeight: 500,
-              cursor: isAnalyzing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6
-            }}>
-              {isAnalyzing ? <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} /> : null}
-              {isAnalyzing ? "Analyzing..." : "AI Suggest Tools"}
-            </button>
-          </div>
+           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Tool Access</p>
+             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+               {AVAILABLE_TOOLS.map(tool => (
+                 <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
+                   display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10,
+                   background: selectedTools.includes(tool.name) ? "rgba(249,115,22,0.2)" : "#0f0f0f",
+                   border: `1px solid ${selectedTools.includes(tool.name) ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
+                   cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                   color: selectedTools.includes(tool.name) ? "#f97316" : "#f5f5f5",
+                   textAlign: "left"
+                 }}>
+                   <div style={{
+                     width: 8, height: 8, borderRadius: "50%", 
+                     background: selectedTools.includes(tool.name) ? "#f97316" : "#2a2a2a",
+                     flexShrink: 0
+                   }} />
+                   {tool.label}
+                 </button>
+               ))}
+             </div>
+             <button onClick={analyzeAndSuggest} disabled={!name.trim() || isAnalyzing} style={{
+               marginTop: 10, padding: "6px 12px", borderRadius: 8, background: "rgba(249,115,22,0.1)",
+               border: "1px solid rgba(249,115,22,0.2)", color: "#f97316", fontSize: 11, fontWeight: 500,
+               cursor: isAnalyzing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6
+             }}>
+               {isAnalyzing ? <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} /> : null}
+               {isAnalyzing ? "Analyzing..." : "AI Suggest Tools"}
+             </button>
+           </div>
 
           {/* Knowledge Base */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Knowledge Base (Optional)</p>
-            <select
-              value={selectedKnowledgeBase}
-              onChange={e => setSelectedKnowledgeBase(e.target.value)}
-              style={{
-                width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
-                border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
-                outline: "none", cursor: "pointer"
-              }}
-            >
-              <option value="">None</option>
-              {knowledgeBases.map(kb => (
-                <option key={kb.id} value={kb.id}>{kb.name}</option>
-              ))}
-            </select>
-            {knowledgeBases.length === 0 && (
-              <p style={{ fontSize: 10, color: "#444", marginTop: 6 }}>Create a knowledge base first to connect it</p>
+            {knowledgeBases.length === 0 ? (
+              <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base first to connect it</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button onClick={() => setSelectedKnowledgeBase("")} style={{
+                  padding: "8px 12px", borderRadius: 10,
+                  background: selectedKnowledgeBase === "" ? "rgba(249,115,22,0.2)" : "#0f0f0f",
+                  border: `1px solid ${selectedKnowledgeBase === "" ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
+                  cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                  color: selectedKnowledgeBase === "" ? "#f97316" : "#f5f5f5",
+                  textAlign: "left"
+                }}>
+                  None
+                </button>
+                {knowledgeBases.map(kb => (
+                  <button key={kb.id} onClick={() => setSelectedKnowledgeBase(kb.id)} style={{
+                    padding: "8px 12px", borderRadius: 10,
+                    background: selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.2)" : "#0f0f0f",
+                    border: `1px solid ${selectedKnowledgeBase === kb.id ? "rgba(249,115,22,0.5)" : "#2a2a2a"}`,
+                    cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                    color: selectedKnowledgeBase === kb.id ? "#f97316" : "#f5f5f5",
+                    textAlign: "left"
+                  }}>
+                    {kb.name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
