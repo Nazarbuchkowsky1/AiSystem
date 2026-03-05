@@ -512,7 +512,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {/* Textarea full width */}
+          {/* Textarea full width, left-aligned with the plus button (plus has p:8 + icon offset ≈ 14px left) */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -527,7 +527,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               width: "100%", minWidth: 0, boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: "10px 14px 4px",
+              padding: "10px 16px 4px 16px",
               overflowY: "hidden",
             }}
           />
