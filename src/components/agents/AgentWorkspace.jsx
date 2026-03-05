@@ -211,7 +211,7 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   const hasMessages = messages.length > 0;
   const hasContent = !!(input.trim() || attachedFiles.length > 0);
-  const isMultiLine = textareaHeight > LINE_HEIGHT + 8;
+  const isMultiLine = input.length > 0 && textareaHeight > SINGLE_LINE_THRESHOLD;
   const showFilesBar = attachedFiles.length > 0;
   const isExpanded = isMultiLine || showFilesBar;
 
