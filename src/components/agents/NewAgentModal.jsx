@@ -189,18 +189,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>System Instructions</p>
             <textarea
               value={systemInstructions}
-              onChange={e => {
-                setSystemInstructions(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = e.target.scrollHeight + "px";
-              }}
-              ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+              onChange={e => setSystemInstructions(e.target.value)}
               placeholder="Define the agent's behavior, constraints, and guidelines..."
               rows={3}
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
                 border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
-                outline: "none", fontFamily: "inherit", resize: "none", overflow: "hidden"
+                outline: "none", fontFamily: "inherit", resize: "none",
+                overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none"
               }}
               onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
               onBlur={e => e.target.style.borderColor = "#2a2a2a"}
