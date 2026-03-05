@@ -120,7 +120,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       if (prev && sh <= 40) return false;
       return prev; // hysteresis band: keep current mode
     });
-  }, [input, attachedFiles.length, isRecording, multiLine]);
+  }, [input, attachedFiles.length, isRecording]);
 
   // ResizeObserver for wave container
   useEffect(() => {
