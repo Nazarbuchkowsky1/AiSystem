@@ -23,12 +23,12 @@ export default function DashboardTabs({ activeTab, onTabChange }) {
               fontSize: 12,
               fontWeight: isActive ? 700 : 400,
               color: isActive ? "#f97316" : "#4a4a4a",
-              background: isActive ? "rgba(249,115,22,0.06)" : "transparent",
+              background: "transparent",
               border: "none",
               cursor: "pointer",
               transition: "color 0.2s",
               outline: "none",
-              textShadow: isActive ? "0 0 12px rgba(249,115,22,0.5)" : "none",
+              textShadow: "none",
             }}
           >
             {tab}
