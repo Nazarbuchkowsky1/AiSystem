@@ -83,7 +83,7 @@ export default function NewAgentModal({ onClose, onCreate, knowledgeBases = [] }
         description: description.trim(),
         system_instructions: systemInstructions.trim(),
         icon_url: iconUrl,
-        icon_name: "Bot",
+        icon_name: selectedIcon,
         tools: selectedTools.map(t => ({ name: t, enabled: true })),
         knowledge_base_ids: selectedKnowledgeBase ? [selectedKnowledgeBase] : [],
         status: "active"
