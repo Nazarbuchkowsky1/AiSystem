@@ -24,7 +24,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       });
     }
 
-    const createdKB = await onCreate({
+    onCreate({
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
@@ -32,13 +32,6 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
     });
     
     setIsCreating(false);
-    onClose();
-    
-    if (createdKB?.id) {
-      setTimeout(async () => {
-        await base44.entities.KnowledgeBase.update(createdKB.id, { processing: false });
-      }, 2000);
-    }
   };
 
   return (
