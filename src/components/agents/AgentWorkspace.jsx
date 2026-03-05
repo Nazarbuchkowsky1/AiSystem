@@ -68,9 +68,11 @@ export default function AgentWorkspace({ agent, onBack }) {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = "auto";
-    const sh = Math.min(ta.scrollHeight, MAX_HEIGHT);
-    ta.style.height = sh + "px";
-    setTextareaHeight(sh);
+    const sh = ta.scrollHeight;
+    const clamped = Math.min(sh, MAX_HEIGHT);
+    ta.style.height = clamped + "px";
+    ta.style.overflowY = sh > MAX_HEIGHT ? "auto" : "hidden";
+    setTextareaHeight(clamped);
   }, [input]);
 
   const loadHistory = async () => {
