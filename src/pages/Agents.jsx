@@ -1,16 +1,26 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Bot } from "lucide-react";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
+import NewAgentModal from "../components/agents/NewAgentModal";
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: agents = [] } = useQuery({
     queryKey: ["agents"],
     queryFn: () => base44.entities.Agent.list("-created_date"),
+  });
+
+  const createAgentMutation = useMutation({
+    mutationFn: (agentData) => base44.entities.Agent.create(agentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
   });
 
   if (selectedAgent) {
