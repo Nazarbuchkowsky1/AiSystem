@@ -31,6 +31,12 @@ export default function Agents() {
     return () => window.removeEventListener("mobile-new-agent", handler);
   }, []);
 
+  useEffect(() => {
+    const handler = () => setShowNewKBModal(true);
+    window.addEventListener("mobile-new-kb", handler);
+    return () => window.removeEventListener("mobile-new-kb", handler);
+  }, []);
+
   const { data: agents = [] } = useQuery({
     queryKey: ["agents"],
     queryFn: () => base44.entities.Agent.list("-created_date"),
@@ -114,7 +120,7 @@ export default function Agents() {
             <Plus style={{ width: 12, height: 12 }} /> New Agent
           </button>
         )}
-        {currentTab === "knowledge" && (
+        {currentTab === "knowledge" && !isMobile && (
           <button onClick={() => setShowNewKBModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
             <Plus style={{ width: 12, height: 12 }} /> New KB
           </button>
