@@ -39,6 +39,13 @@ export default function Layout({ children, currentPageName }) {
   // Close mobile menu on page change
   useEffect(() => { setMobileOpen(false); }, [currentPageName]);
 
+  const [agentsTab, setAgentsTab] = useState("agents");
+  useEffect(() => {
+    const handler = (e) => setAgentsTab(e.detail);
+    window.addEventListener("agents-tab-change", handler);
+    return () => window.removeEventListener("agents-tab-change", handler);
+  }, []);
+
   return (
     <div
       style={{
