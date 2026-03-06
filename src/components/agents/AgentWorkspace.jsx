@@ -552,11 +552,14 @@ export default function AgentWorkspace({ agent, onBack }) {
             onPaste={handlePaste}
             placeholder="Message agent..."
             rows={1}
+            disabled={isLoading}
             style={{
               flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 15, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              padding: multiLine || attachedFiles.length > 0 ? "10px 16px 4px 16px" : "0 8px",
+              fontSize: 16, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
+              paddingTop: 13, paddingBottom: 7,
+              paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
+              paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
               overflowY: "hidden", overflowX: "hidden", wordBreak: "break-word",
             }}
           />
