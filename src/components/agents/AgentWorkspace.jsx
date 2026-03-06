@@ -533,7 +533,7 @@ export default function AgentWorkspace({ agent, onBack }) {
 
       {/* Text input row */}
       {!inVoiceMode && (
-        <div style={{ display: "flex", flexDirection: multiLine || attachedFiles.length > 0 ? "column" : "row", alignItems: multiLine || attachedFiles.length > 0 ? "stretch" : "center", height: multiLine || attachedFiles.length > 0 ? undefined : 56, padding: multiLine || attachedFiles.length > 0 ? undefined : "0 8px" }}>
+        <div style={{ display: "flex", flexDirection: multiLine || attachedFiles.length > 0 ? "column" : "row", alignItems: multiLine || attachedFiles.length > 0 ? "stretch" : "center", minHeight: multiLine || attachedFiles.length > 0 ? undefined : 56, padding: multiLine || attachedFiles.length > 0 ? undefined : "0 8px" }}>
 
           {/* Single-line: attach left of textarea */}
           {!multiLine && attachedFiles.length === 0 && (
