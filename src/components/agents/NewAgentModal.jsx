@@ -136,13 +136,15 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
       alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)"
     }} onClick={onClose}>
       <div style={{
-        background: "#181818", border: window.innerWidth < 768 ? "none" : "1px solid rgba(255,255,255,0.06)",
-        borderRadius: window.innerWidth < 768 ? 0 : 16,
-        padding: 24, width: "100%", maxWidth: window.innerWidth < 768 ? "100%" : 600,
-        height: window.innerWidth < 768 ? "100%" : "auto",
-        maxHeight: window.innerWidth < 768 ? "100%" : "90vh",
+        background: isMobile ? "#0a0a0a" : "#181818",
+        border: isMobile ? "none" : "1px solid rgba(255,255,255,0.06)",
+        borderRadius: isMobile ? 0 : 16,
+        padding: 24, width: "100%",
+        maxWidth: isMobile ? "100%" : 600,
+        height: isMobile ? "100%" : "auto",
+        maxHeight: isMobile ? "100%" : "90vh",
         overflow: "auto",
-        boxShadow: window.innerWidth < 768 ? "none" : "0 20px 25px rgba(0,0,0,0.5)",
+        boxShadow: isMobile ? "none" : "0 20px 25px rgba(0,0,0,0.5)",
         msOverflowStyle: "none", scrollbarWidth: "none"
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
