@@ -28,15 +28,25 @@ export default function Calendar() {
     queryFn: () => base44.entities.CalendarEvent.list("-date"),
   });
 
+  // Apply pending updates on top of server data to prevent flicker
+  const eventsWithPending = React.useMemo(() => {
+    return allEvents.map(ev => {
+      if (pendingUpdates[ev.id]) {
+        return { ...ev, ...pendingUpdates[ev.id] };
+      }
+      return ev;
+    });
+  }, [allEvents, pendingUpdates]);
+
   // Filter events by search
   const events = searchQuery.trim()
-    ? allEvents.filter(e => {
+    ? eventsWithPending.filter(e => {
         const q = searchQuery.toLowerCase();
         return (e.title || "").toLowerCase().includes(q)
           || (e.description || "").toLowerCase().includes(q)
           || (e.event_type || "").toLowerCase().includes(q);
       })
-    : allEvents;
+    : eventsWithPending;
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.CalendarEvent.create(data),
@@ -115,9 +125,21 @@ export default function Calendar() {
     }
   }, [view]);
 
+  // Track pending drag updates to avoid flicker
+  const [pendingUpdates, setPendingUpdates] = useState({});
+
   // Inline event update (drag/resize)
   const handleEventUpdate = useCallback((id, data) => {
-    updateMutation.mutate({ id, data });
+    setPendingUpdates(prev => ({ ...prev, [id]: data }));
+    updateMutation.mutate({ id, data }, {
+      onSettled: () => {
+        setPendingUpdates(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    });
   }, [updateMutation]);
 
   // Duplicate event
