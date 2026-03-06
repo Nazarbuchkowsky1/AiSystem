@@ -19,6 +19,13 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const ICON_OPTIONS = [
     { name: "Bot", icon: Bot },
