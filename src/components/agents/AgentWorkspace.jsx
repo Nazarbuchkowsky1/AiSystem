@@ -108,9 +108,10 @@ export default function AgentWorkspace({ agent, onBack }) {
     ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 
     setMultiLine(prevMultiLine => {
-      const isNowMultiLine = realScrollHeight > (prevMultiLine ? 40 : 45);
       if (input.length === 0) return false;
-      return isNowMultiLine;
+      // Single line with padding = ~56px scrollHeight. Switch to multi at 2+ lines (~72px+)
+      const threshold = prevMultiLine ? 50 : 60;
+      return realScrollHeight > threshold;
     });
   }, [input, isRecording, attachedFiles.length]);
 
