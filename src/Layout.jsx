@@ -73,17 +73,15 @@ export default function Layout({ children, currentPageName }) {
           background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
           display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex", padding: 4 }}>
-              {mobileOpen ? <X style={{ width: 20, height: 20 }} /> : <Menu style={{ width: 20, height: 20 }} />}
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
-              </div>
-              <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}
+          >
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
             </div>
-          </div>
+            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
+          </button>
         </div>
       )}
 
