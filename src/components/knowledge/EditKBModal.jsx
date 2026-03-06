@@ -17,6 +17,11 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   const [isSaving, setIsSaving] = useState(false);
   const [removedFileIndexes, setRemovedFileIndexes] = useState(new Set());
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
+    return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
+  }, []);
+
   const originalFiles = kb.files || [];
 
   const handleRemoveExisting = (index) => {
