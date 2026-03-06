@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 import { format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from "date-fns";
 
 export default function CalendarHeader({ currentDate, setCurrentDate, view, setView, onNewEvent }) {
@@ -13,53 +13,78 @@ export default function CalendarHeader({ currentDate, setCurrentDate, view, setV
   const label = view === "month"
     ? format(currentDate, "MMMM yyyy")
     : view === "week"
-    ? `Week of ${format(currentDate, "MMM d, yyyy")}`
-    : format(currentDate, "EEEE, MMM d, yyyy");
+    ? format(currentDate, "MMMM yyyy")
+    : format(currentDate, "MMMM d, yyyy");
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Calendar</h1>
-        <div className="flex items-center gap-1 sm:ml-4">
-          <button onClick={() => navigate("prev")} className="p-1.5 rounded-lg hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-white/5 transition"
-            style={{ color: "var(--accent)" }}
-          >
-            Today
-          </button>
-          <button onClick={() => navigate("next")} className="p-1.5 rounded-lg hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        <span className="text-sm font-medium ml-2" style={{ color: "var(--text-secondary)" }}>{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: "var(--border-subtle)" }}>
-          {["month", "week", "day"].map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className="px-3 py-1.5 text-xs font-medium transition capitalize"
-              style={{
-                background: view === v ? "var(--accent-dim)" : "transparent",
-                color: view === v ? "var(--accent)" : "var(--text-muted)",
-              }}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+      flexShrink: 0, gap: 12, flexWrap: "wrap", minHeight: 52
+    }}>
+      {/* Left side */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
           onClick={onNewEvent}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium hover:opacity-90 transition"
-          style={{ background: "var(--accent)", color: "#fff" }}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 20px", borderRadius: 24,
+            background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.25)",
+            color: "#f97316", fontSize: 14, fontWeight: 500, cursor: "pointer",
+            transition: "all 0.2s", whiteSpace: "nowrap"
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.2)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.12)"}
         >
-          <Plus className="w-4 h-4" /> New Event
+          <Plus style={{ width: 18, height: 18 }} />
+          Create
         </button>
+      </div>
+
+      {/* Center - Navigation */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "center" }}>
+        <button
+          onClick={() => setCurrentDate(new Date())}
+          style={{
+            padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+            background: "transparent", border: "1px solid rgba(255,255,255,0.12)",
+            color: "#f5f5f5", cursor: "pointer", transition: "all 0.2s"
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        >
+          Today
+        </button>
+        <button onClick={() => navigate("prev")} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", display: "flex", padding: 6, borderRadius: 20, transition: "all 0.15s" }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+          onMouseLeave={e => e.currentTarget.style.background = "none"}>
+          <ChevronLeft style={{ width: 18, height: 18 }} />
+        </button>
+        <button onClick={() => navigate("next")} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", display: "flex", padding: 6, borderRadius: 20, transition: "all 0.15s" }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+          onMouseLeave={e => e.currentTarget.style.background = "none"}>
+          <ChevronRight style={{ width: 18, height: 18 }} />
+        </button>
+        <span style={{ fontSize: 18, fontWeight: 400, color: "#f5f5f5", marginLeft: 4, whiteSpace: "nowrap" }}>{label}</span>
+      </div>
+
+      {/* Right side - View Selector */}
+      <div style={{ display: "flex", alignItems: "center", gap: 2, background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: 2, border: "1px solid rgba(255,255,255,0.06)" }}>
+        {["day", "week", "month"].map(v => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+              background: view === v ? "rgba(249,115,22,0.15)" : "transparent",
+              color: view === v ? "#f97316" : "#888",
+              border: view === v ? "1px solid rgba(249,115,22,0.25)" : "1px solid transparent",
+              cursor: "pointer", transition: "all 0.15s", textTransform: "capitalize"
+            }}
+          >
+            {v === "day" ? "Day" : v === "week" ? "Week" : "Month"}
+          </button>
+        ))}
       </div>
     </div>
   );
