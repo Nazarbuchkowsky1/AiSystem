@@ -45,7 +45,23 @@ export default function Calendar() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.CalendarEvent.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); },
+    onMutate: async ({ id, data }) => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["events"] });
+      const previous = queryClient.getQueryData(["events"]);
+      // Optimistically update the cache
+      queryClient.setQueryData(["events"], (old) =>
+        (old || []).map(ev => ev.id === id ? { ...ev, ...data } : ev)
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      // Roll back on error
+      if (context?.previous) queryClient.setQueryData(["events"], context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
   });
 
   const deleteMutation = useMutation({
