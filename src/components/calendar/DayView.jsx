@@ -1,24 +1,25 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import { format, isSameDay, isToday } from "date-fns";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const HOUR_HEIGHT = 60;
+const SNAP_MINUTES = 15;
 
 const EVENT_COLORS = {
-  task: { bg: "rgba(249,115,22,0.18)", border: "#f97316", text: "#f97316" },
-  meeting: { bg: "rgba(59,130,246,0.18)", border: "#3b82f6", text: "#3b82f6" },
-  reminder: { bg: "rgba(168,85,247,0.18)", border: "#a855f7", text: "#a855f7" },
-  activity: { bg: "rgba(34,197,94,0.18)", border: "#22c55e", text: "#22c55e" },
+  task: { bg: "rgba(249,115,22,0.22)", border: "#f97316", text: "#f97316" },
+  meeting: { bg: "rgba(59,130,246,0.22)", border: "#3b82f6", text: "#3b82f6" },
+  reminder: { bg: "rgba(168,85,247,0.22)", border: "#a855f7", text: "#a855f7" },
+  activity: { bg: "rgba(34,197,94,0.22)", border: "#22c55e", text: "#22c55e" },
 };
+
+function snapMin(m) { return Math.round(m / SNAP_MINUTES) * SNAP_MINUTES; }
+function minToTime(m) { return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; }
+function timeToMin(t) { if (!t) return 0; const [h,m]=t.split(":").map(Number); return h*60+m; }
 
 function CurrentTimeLine() {
   const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(interval);
-  }, []);
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const top = (minutes / 60) * HOUR_HEIGHT;
+  useEffect(() => { const i = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(i); }, []);
+  const top = ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT;
   return (
     <div style={{ position: "absolute", left: 0, right: 0, top, zIndex: 20, pointerEvents: "none" }}>
       <div style={{ position: "relative" }}>
@@ -29,35 +30,124 @@ function CurrentTimeLine() {
   );
 }
 
-export default function DayView({ currentDate, events, onDateClick, onEventClick }) {
+export default function DayView({ currentDate, events, onSlotClick, onEventClick, onEventUpdate }) {
   const dayEvents = events.filter((e) => isSameDay(new Date(e.date), currentDate));
   const scrollRef = useRef(null);
+  const colRef = useRef(null);
   const today = isToday(currentDate);
+
+  const [createDrag, setCreateDrag] = useState(null);
+  const createRef = useRef(null);
+  const [dragState, setDragState] = useState(null);
+  const dragRef = useRef(null);
+  const [resizeState, setResizeState] = useState(null);
+  const resizeRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
-      const now = new Date();
-      const scrollTo = Math.max(0, (now.getHours() - 2) * HOUR_HEIGHT);
-      scrollRef.current.scrollTop = scrollTo;
+      scrollRef.current.scrollTop = Math.max(0, (new Date().getHours() - 2) * HOUR_HEIGHT);
     }
   }, []);
 
-  const getEventStyle = (event) => {
-    if (!event.start_time) return { top: 0, height: HOUR_HEIGHT };
-    const [sh, sm] = event.start_time.split(":").map(Number);
-    const [eh, em] = (event.end_time || event.start_time).split(":").map(Number);
-    const top = ((sh * 60 + sm) / 60) * HOUR_HEIGHT;
-    const height = Math.max(((eh * 60 + em - sh * 60 - sm) / 60) * HOUR_HEIGHT, 30);
-    return { top, height };
+  const getMinFromY = useCallback((clientY) => {
+    if (!colRef.current) return 0;
+    const rect = colRef.current.getBoundingClientRect();
+    const scrollTop = scrollRef.current?.scrollTop || 0;
+    const rawM = ((clientY - rect.top + scrollTop) / HOUR_HEIGHT) * 60;
+    return snapMin(Math.max(0, Math.min(rawM, 23 * 60 + 45)));
+  }, []);
+
+  const getEventPos = (ev) => {
+    if (!ev.start_time) return { top: 0, height: HOUR_HEIGHT };
+    const s = timeToMin(ev.start_time), e = timeToMin(ev.end_time || ev.start_time);
+    return { top: (s / 60) * HOUR_HEIGHT, height: Math.max(((e - s) / 60) * HOUR_HEIGHT, 28) };
   };
 
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    const m = getMinFromY(e.clientY);
+    const s = { startMin: m, endMin: m + SNAP_MINUTES };
+    setCreateDrag(s); createRef.current = s;
+  }, [getMinFromY]);
+
+  const handleEventMouseDown = useCallback((e, ev) => {
+    e.stopPropagation(); e.preventDefault();
+    const startM = timeToMin(ev.start_time);
+    const endM = timeToMin(ev.end_time || ev.start_time);
+    const dur = (endM - startM) || 60;
+    const offset = getMinFromY(e.clientY) - startM;
+    const s = { event: ev, startMin: startM, duration: dur, clickOffset: offset };
+    setDragState(s); dragRef.current = s;
+  }, [getMinFromY]);
+
+  const handleResizeMouseDown = useCallback((e, ev) => {
+    e.stopPropagation(); e.preventDefault();
+    const startM = timeToMin(ev.start_time);
+    const endM = timeToMin(ev.end_time || ev.start_time) || startM + 60;
+    const s = { event: ev, startMin: startM, endMin: endM };
+    setResizeState(s); resizeRef.current = s;
+  }, []);
+
+  useEffect(() => {
+    const handleMove = (e) => {
+      if (createRef.current) {
+        const m = getMinFromY(e.clientY);
+        const s = createRef.current;
+        const n = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
+        setCreateDrag(n); createRef.current = n;
+      }
+      if (dragRef.current) {
+        const m = getMinFromY(e.clientY);
+        const offset = dragRef.current.clickOffset || 0;
+        const newStart = snapMin(Math.max(0, m - offset));
+        const n = { ...dragRef.current, startMin: newStart };
+        setDragState(n); dragRef.current = n;
+      }
+      if (resizeRef.current) {
+        const m = getMinFromY(e.clientY);
+        const s = resizeRef.current;
+        const n = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
+        setResizeState(n); resizeRef.current = n;
+      }
+    };
+    const handleUp = () => {
+      if (createRef.current) {
+        const { startMin, endMin } = createRef.current;
+        const rs = Math.min(startMin, endMin), re = Math.max(startMin, endMin);
+        if (re - rs >= SNAP_MINUTES) {
+          onSlotClick(currentDate, minToTime(rs), minToTime(re));
+        }
+        setCreateDrag(null); createRef.current = null;
+      }
+      if (dragRef.current) {
+        const { event, startMin, duration } = dragRef.current;
+        onEventUpdate(event.id, {
+          start_time: minToTime(startMin),
+          end_time: minToTime(startMin + duration),
+        });
+        setDragState(null); dragRef.current = null;
+      }
+      if (resizeRef.current) {
+        const { event, startMin, endMin } = resizeRef.current;
+        onEventUpdate(event.id, {
+          start_time: minToTime(startMin),
+          end_time: minToTime(endMin),
+        });
+        setResizeState(null); resizeRef.current = null;
+      }
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
+  }, [getMinFromY, currentDate, onSlotClick, onEventUpdate]);
+
+  const isDragging = !!(createDrag || dragState || resizeState);
+  const filteredEvents = dragState ? dayEvents.filter(ev => ev.id !== dragState.event.id) : dayEvents;
+
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", userSelect: isDragging ? "none" : "auto" }}>
       {/* Day header */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0
-      }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: today ? "#f97316" : "#555", letterSpacing: "0.03em" }}>
             {format(currentDate, "EEEE").toUpperCase()}
@@ -67,8 +157,7 @@ export default function DayView({ currentDate, events, onDateClick, onEventClick
             color: today ? "#fff" : "#ccc",
             background: today ? "#f97316" : "transparent",
             width: 52, height: 52, borderRadius: "50%",
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            marginTop: 4
+            display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 4
           }}>
             {format(currentDate, "d")}
           </div>
@@ -89,48 +178,76 @@ export default function DayView({ currentDate, events, onDateClick, onEventClick
         </div>
 
         {/* Main column */}
-        <div style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+        <div ref={colRef} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,0.06)", cursor: "crosshair" }}
+          onMouseDown={handleMouseDown}>
           {HOURS.map(h => (
-            <div key={h}
-              style={{ height: HOUR_HEIGHT, borderBottom: "1px solid rgba(255,255,255,0.04)", cursor: "pointer" }}
-              onClick={() => onDateClick(currentDate)}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.01)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            />
+            <div key={h} style={{ height: HOUR_HEIGHT, borderBottom: "1px solid rgba(255,255,255,0.04)" }} />
           ))}
 
           {today && <CurrentTimeLine />}
 
-          {dayEvents.map(ev => {
-            const { top, height } = getEventStyle(ev);
+          {/* Create drag preview */}
+          {createDrag && (
+            <div style={{
+              position: "absolute", left: 4, right: 24,
+              top: (Math.min(createDrag.startMin, createDrag.endMin) / 60) * HOUR_HEIGHT,
+              height: (Math.abs(createDrag.endMin - createDrag.startMin) / 60) * HOUR_HEIGHT,
+              background: "rgba(249,115,22,0.25)", border: "1px solid rgba(249,115,22,0.5)",
+              borderRadius: 8, zIndex: 30, pointerEvents: "none", padding: "6px 12px"
+            }}>
+              <span style={{ fontSize: 11, color: "#f97316", fontWeight: 600 }}>
+                {minToTime(Math.min(createDrag.startMin, createDrag.endMin))} – {minToTime(Math.max(createDrag.startMin, createDrag.endMin))}
+              </span>
+            </div>
+          )}
+
+          {/* Move drag preview */}
+          {dragState && (
+            <div style={{
+              position: "absolute", left: 4, right: 24,
+              top: (dragState.startMin / 60) * HOUR_HEIGHT,
+              height: (dragState.duration / 60) * HOUR_HEIGHT,
+              background: "rgba(249,115,22,0.3)", border: "1px dashed #f97316",
+              borderRadius: 8, zIndex: 30, pointerEvents: "none", padding: "6px 12px", opacity: 0.8
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#f97316" }}>{dragState.event.title}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{minToTime(dragState.startMin)} – {minToTime(dragState.startMin + dragState.duration)}</div>
+            </div>
+          )}
+
+          {/* Events */}
+          {filteredEvents.map(ev => {
+            const { top, height } = getEventPos(ev);
             const colors = EVENT_COLORS[ev.event_type] || EVENT_COLORS.task;
+            const isResizing = resizeState && resizeState.event.id === ev.id;
+            const dTop = isResizing ? (resizeState.startMin / 60) * HOUR_HEIGHT : top;
+            const dHeight = isResizing ? ((resizeState.endMin - resizeState.startMin) / 60) * HOUR_HEIGHT : height;
             return (
-              <div
-                key={ev.id}
-                onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
+              <div key={ev.id}
                 style={{
-                  position: "absolute", left: 4, right: 24, top,
-                  height, minHeight: 28, borderRadius: 8,
+                  position: "absolute", left: 4, right: 24, top: dTop,
+                  height: dHeight, minHeight: 28, borderRadius: 8,
                   background: colors.bg, borderLeft: `3px solid ${colors.border}`,
-                  padding: "6px 12px", cursor: "pointer",
-                  overflow: "hidden", zIndex: 10, transition: "opacity 0.15s"
+                  padding: "6px 12px", cursor: "grab", overflow: "hidden", zIndex: 10
                 }}
-                onMouseEnter={e => e.currentTarget.style.opacity = "0.8"}
-                onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                onMouseDown={(e) => handleEventMouseDown(e, ev)}
+                onClick={(e) => { if (!isDragging) { e.stopPropagation(); onEventClick(e, ev); } }}
               >
                 <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {ev.title}
                 </div>
-                {height > 40 && (
+                {dHeight > 40 && (
                   <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-                    {ev.start_time}{ev.end_time ? ` – ${ev.end_time}` : ""}
+                    {isResizing ? `${minToTime(resizeState.startMin)} – ${minToTime(resizeState.endMin)}` : `${ev.start_time}${ev.end_time ? ` – ${ev.end_time}` : ""}`}
                   </div>
                 )}
-                {height > 60 && ev.description && (
+                {dHeight > 60 && ev.description && (
                   <div style={{ fontSize: 11, color: "#666", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {ev.description}
                   </div>
                 )}
+                <div onMouseDown={(e) => handleResizeMouseDown(e, ev)}
+                  style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 8, cursor: "s-resize", borderRadius: "0 0 8px 8px" }} />
               </div>
             );
           })}
