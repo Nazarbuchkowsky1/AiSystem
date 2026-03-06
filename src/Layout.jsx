@@ -69,7 +69,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile header bar */}
       {isMobile && (
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 30,
+          position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 55,
           background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
           display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
         }}>
