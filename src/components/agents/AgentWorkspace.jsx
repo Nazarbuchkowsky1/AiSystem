@@ -95,12 +95,19 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-expand textarea with hysteresis to prevent spring/flapping bug
+  // Auto-expand textarea
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
 
-    ta.style.height = "auto";
+    if (input.length === 0) {
+      ta.style.height = "24px"; // single line height (lineHeight 24px)
+      ta.style.overflowY = "hidden";
+      setMultiLine(false);
+      return;
+    }
+
+    ta.style.height = "24px"; // reset to measure
     void ta.offsetHeight;
     const realScrollHeight = ta.scrollHeight;
 
@@ -108,9 +115,7 @@ export default function AgentWorkspace({ agent, onBack }) {
     ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 
     setMultiLine(prevMultiLine => {
-      if (input.length === 0) return false;
-      // Single line with padding = ~56px scrollHeight. Switch to multi at 2+ lines (~72px+)
-      const threshold = prevMultiLine ? 50 : 60;
+      const threshold = prevMultiLine ? 28 : 36;
       return realScrollHeight > threshold;
     });
   }, [input, isRecording, attachedFiles.length]);
