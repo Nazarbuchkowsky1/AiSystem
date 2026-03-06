@@ -84,21 +84,21 @@ export default function Layout({ children, currentPageName }) {
             </div>
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
           </button>
-          {currentPageName === "Agents" && (
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-kb"))}
-                style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 10px", borderRadius: 10, fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}
-              >
-                <Plus style={{ width: 11, height: 11 }} /> KB
-              </button>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-agent"))}
-                style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 10px", borderRadius: 10, fontSize: 11, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}
-              >
-                <Plus style={{ width: 11, height: 11 }} /> Agent
-              </button>
-            </div>
+          {currentPageName === "Agents" && agentsTab === "agents" && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-agent"))}
+              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New Agent
+            </button>
+          )}
+          {currentPageName === "Agents" && agentsTab === "knowledge" && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-kb"))}
+              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New KB
+            </button>
           )}
         </div>
       )}

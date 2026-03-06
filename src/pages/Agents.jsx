@@ -37,6 +37,11 @@ export default function Agents() {
     return () => window.removeEventListener("mobile-new-kb", handler);
   }, []);
 
+  // Broadcast current tab to layout header
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("agents-tab-change", { detail: currentTab }));
+  }, [currentTab]);
+
   const { data: agents = [] } = useQuery({
     queryKey: ["agents"],
     queryFn: () => base44.entities.Agent.list("-created_date"),
