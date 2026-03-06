@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -10,7 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Flame,
-  BookOpen
+  BookOpen,
+  Menu,
+  X
 } from "lucide-react";
 
 const NAV_ITEMS = [
