@@ -560,10 +560,11 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 16, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              paddingTop: (multiLine || attachedFiles.length > 0) ? 10 : 0,
-              paddingBottom: (multiLine || attachedFiles.length > 0) ? 4 : 0,
+              paddingTop: (multiLine || attachedFiles.length > 0) ? 10 : 16,
+              paddingBottom: (multiLine || attachedFiles.length > 0) ? 4 : 16,
               paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
               paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
+              maxHeight: MAX_HEIGHT,
               overflowX: "hidden", wordBreak: "break-word",
               scrollbarWidth: "none", msOverflowStyle: "none",
             }}
