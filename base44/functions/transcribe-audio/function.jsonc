@@ -1,0 +1,4 @@
+{
+  "name": "transcribeAudio",
+  "entry": "main.ts"
+}

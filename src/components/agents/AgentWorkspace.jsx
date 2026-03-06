@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from
 import { base44 } from "@/api/base44Client";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
-  Loader2, X, FileText, Code2, Check
+  Loader2, X, FileText, Code2, Check, Trash2
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -21,6 +21,23 @@ function getFileType(file) {
   const ext = file.name.split(".").pop()?.toLowerCase();
   if (CODE_EXTS.includes(ext)) return "code";
   return "document";
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read audio blob"));
+        return;
+      }
+      const [, base64 = ""] = result.split(",");
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read audio blob"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 const noSelect = { userSelect: "none", WebkitUserSelect: "none", MozUserSelect: "none", msUserSelect: "none" };
@@ -156,50 +173,74 @@ export default function AgentWorkspace({ agent, onBack }) {
     return () => window.removeEventListener("keydown", handler, true);
   }, [isRecording, isFinalizing]);
 
+  const waveStoppedRef = useRef(true);
+  const waveTimerRef = useRef(null);
+
   const startWaveform = (stream) => {
+    waveStoppedRef.current = false;
+    const count = waveBarCountRef.current;
+    waveLevelsRef.current = new Array(count).fill(0);
+    setWaveLevels([...waveLevelsRef.current]);
+
     try {
       const ac = new AudioContext();
       audioContextRef.current = ac;
       const analyser = ac.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.4;
       analyserRef.current = analyser;
       const src = ac.createMediaStreamSource(stream);
       src.connect(analyser);
 
-      const buf = new Float32Array(analyser.fftSize);
+      const freqBuf = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
-        analyser.getFloatTimeDomainData(buf);
+        if (waveStoppedRef.current) return;
+        analyser.getByteFrequencyData(freqBuf);
         let sum = 0;
-        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-        const rms = Math.sqrt(sum / buf.length);
-        const level = Math.min(1, rms * 6);
-        const count = waveBarCountRef.current;
-        waveLevelsRef.current = [...waveLevelsRef.current.slice(-(count - 1)), level];
-        setWaveLevels([...waveLevelsRef.current]);
-        animFrameRef.current = requestAnimationFrame(tick);
+        const bins = Math.min(64, freqBuf.length);
+        for (let i = 0; i < bins; i++) sum += freqBuf[i];
+        const avg = sum / bins / 255;
+        const level = Math.min(1, Math.pow(avg, 0.5) * 1.3);
+        const c = waveBarCountRef.current;
+        const prev = waveLevelsRef.current;
+        const next = prev.length >= c ? [...prev.slice(1), level] : [...prev, level];
+        waveLevelsRef.current = next;
+        setWaveLevels([...next]);
+        waveTimerRef.current = setTimeout(tick, 50);
       };
-      animFrameRef.current = requestAnimationFrame(tick);
+      waveTimerRef.current = setTimeout(tick, 50);
     } catch (e) {
-      // fallback: animate baseline
       startFallbackWaveform();
     }
   };
 
   const startFallbackWaveform = () => {
+    waveStoppedRef.current = false;
+    const count = waveBarCountRef.current;
+    waveLevelsRef.current = new Array(count).fill(0);
+    setWaveLevels([...waveLevelsRef.current]);
+
     const tick = () => {
-      const count = waveBarCountRef.current;
+      if (waveStoppedRef.current) return;
+      const c = waveBarCountRef.current;
       const level = 0.05 + Math.random() * 0.08;
-      waveLevelsRef.current = [...waveLevelsRef.current.slice(-(count - 1)), level];
-      setWaveLevels([...waveLevelsRef.current]);
-      animFrameRef.current = setTimeout(() => { animFrameRef.current = requestAnimationFrame(tick); }, 50);
+      const prev = waveLevelsRef.current;
+      const next = prev.length >= c ? [...prev.slice(1), level] : [...prev, level];
+      waveLevelsRef.current = next;
+      setWaveLevels([...next]);
+      waveTimerRef.current = setTimeout(tick, 80);
     };
-    animFrameRef.current = requestAnimationFrame(tick);
+    waveTimerRef.current = setTimeout(tick, 80);
   };
 
   const stopWaveform = () => {
+    waveStoppedRef.current = true;
+    if (waveTimerRef.current) {
+      clearTimeout(waveTimerRef.current);
+      waveTimerRef.current = null;
+    }
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
-      clearTimeout(animFrameRef.current);
       animFrameRef.current = null;
     }
     if (analyserRef.current) { analyserRef.current = null; }
@@ -223,6 +264,7 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   const startRecording = async () => {
     if (isLoading || isRecording || isFinalizing) return;
+    cleanupAudio();
     recordedChunksRef.current = [];
     recordingMimeRef.current = "";
     setIsRecording(true);
@@ -243,61 +285,65 @@ export default function AgentWorkspace({ agent, onBack }) {
   };
 
   const cancelRecording = () => {
-    setIsFinalizing(false);
-    setIsRecording(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
     cleanupAudio();
+    setIsFinalizing(false);
+    setIsRecording(false);
   };
 
   const confirmRecording = async () => {
     if (isFinalizing) return;
-    setIsFinalizing(true);
+
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== "inactive") {
       await new Promise(resolve => { mr.onstop = resolve; mr.stop(); });
     }
-    setIsRecording(false);
-    const chunks = recordedChunksRef.current;
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    stopWaveform();
+
+    const chunks = [...recordedChunksRef.current];
     const mime = recordingMimeRef.current || "audio/webm";
+    mediaRecorderRef.current = null;
+    recordedChunksRef.current = [];
+
+    setIsRecording(false);
 
     if (!chunks.length) {
-      cleanupAudio();
       setIsFinalizing(false);
       return;
     }
 
     const blob = new Blob(chunks, { type: mime });
     if (blob.size < 100) {
-      cleanupAudio();
       setIsFinalizing(false);
       return;
     }
 
+    setIsFinalizing(true);
+
     try {
-      const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
-      const res = await fetch("/api/voice/transcribe", { method: "POST", body: formData });
-      const data = await res.json();
-      let text = (data.text || "").trim();
+      const audioBase64 = await blobToBase64(blob);
+      const res = await base44.functions.invoke("transcribeAudio", {
+        audio: audioBase64,
+        mimeType: mime,
+      });
+      let text = (res?.data?.text || "").trim();
       if (text) {
-        // Normalize spacing after punctuation
         text = text.replace(/([.,!?;:])([^\s])/g, "$1 $2");
         text = text.replace(/\s+/g, " ").trim();
-        // Capitalize first letter
         text = text.charAt(0).toUpperCase() + text.slice(1);
-        // Capitalize after sentence boundaries
         text = text.replace(/([.!?]\s+)([a-zа-яёіїєґ])/g, (_, p, c) => p + c.toUpperCase());
         setPendingTranscript(text);
       }
     } catch (e) {
       console.error("Transcription error:", e);
-      // fallback: insert placeholder
-      setInput(prev => prev ? prev + " [voice message]" : "[voice message]");
-      setTimeout(() => textareaRef.current?.focus(), 0);
     } finally {
-      cleanupAudio();
       setIsFinalizing(false);
     }
   };
@@ -411,7 +457,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         <>
           <button onMouseDown={e => e.preventDefault()} onClick={cancelRecording}
             style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#ef4444", display: "flex" }}>
-            <X style={{ width: 16, height: 16 }} />
+            <Trash2 style={{ width: 16, height: 16 }} />
           </button>
           <button disabled
             style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -425,7 +471,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         <>
           <button onMouseDown={e => e.preventDefault()} onClick={cancelRecording}
             style={{ padding: 8, borderRadius: 12, background: "none", border: "none", cursor: "pointer", color: "#ef4444", display: "flex" }}>
-            <X style={{ width: 16, height: 16 }} />
+            <Trash2 style={{ width: 16, height: 16 }} />
           </button>
           <button onMouseDown={e => e.preventDefault()} onClick={confirmRecording}
             style={{ width: 36, height: 36, borderRadius: 12, background: "#f97316", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -461,21 +507,20 @@ export default function AgentWorkspace({ agent, onBack }) {
   const renderWaveform = () => (
     <div
       ref={waveContainerRef}
-      style={{ flex: 1, height: 48, display: "flex", alignItems: "center", gap: BAR_GAP + "px", overflow: "hidden", padding: "0 4px" }}
+      style={{ flex: 1, height: 48, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: BAR_GAP + "px", overflow: "hidden", padding: "0 4px" }}
     >
-      {Array.from({ length: waveBarCount }).map((_, i) => {
-        const level = waveLevels[i] ?? 0;
+      {waveLevels.slice(-waveBarCount).map((level, i, arr) => {
         const heightPct = Math.max(4, Math.round(level * 88));
-        const isFresh = i > waveBarCount * 0.6;
-        const opacity = 0.35 + (i / waveBarCount) * 0.65;
+        const t = arr.length <= 1 ? 1 : i / (arr.length - 1);
+        const opacity = 0.3 + t * 0.7;
         return (
           <div key={i} style={{
             width: BAR_WIDTH,
             height: heightPct + "%",
             borderRadius: 2,
-            background: level > 0.15 ? "#f97316" : "rgba(249,115,22,0.4)",
+            background: level > 0.12 ? "#f97316" : "rgba(249,115,22,0.4)",
             opacity,
-            transition: "height 0.05s linear",
+            transition: "height 60ms ease-out",
             flexShrink: 0,
           }} />
         );
@@ -525,13 +570,21 @@ export default function AgentWorkspace({ agent, onBack }) {
         </div>
       )}
 
-      {/* Voice mode */}
-      {inVoiceMode && (
+      {/* Voice mode — recording */}
+      {isRecording && (
         <div style={{ display: "flex", alignItems: "center", padding: "8px 8px" }}>
           {renderWaveform()}
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             {renderRightButtons()}
           </div>
+        </div>
+      )}
+
+      {/* Voice mode — finalizing (processing transcript) */}
+      {!isRecording && isFinalizing && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 16px" }}>
+          <Loader2 style={{ width: 16, height: 16, color: "#f97316", animation: "spin 1s linear infinite" }} />
+          <span style={{ fontSize: 13, color: "#888" }}>Processing voice...</span>
         </div>
       )}
 
@@ -574,8 +627,8 @@ export default function AgentWorkspace({ agent, onBack }) {
                 lineHeight: "24px",
                 color: "#f5f5f5",
                 fontFamily: "inherit",
-                paddingTop: 10,
-                paddingBottom: 10,
+                paddingTop: (multiLine || attachedFiles.length > 0) ? 13 : 10,
+                paddingBottom: (multiLine || attachedFiles.length > 0) ? 7 : 10,
                 paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
                 paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
                 overflowX: "hidden",
@@ -714,9 +767,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               </div>
             </div>
             <div style={{ padding: "8px 24px 16px", flexShrink: 0 }}>
-              <div style={{ width: "100%", maxWidth: 920, margin: "0 auto" }}>
-                {renderInputBar()}
-              </div>
+              {renderInputBar()}
             </div>
           </>
         )}
