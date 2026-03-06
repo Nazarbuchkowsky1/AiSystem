@@ -82,7 +82,7 @@ export default function Layout({ children, currentPageName }) {
       )}
 
       {/* Mobile header bar */}
-      {isMobile && (
+      {isMobile && !modalOpen && (
         <div style={{
           height: 52, flexShrink: 0, position: "relative", zIndex: 55,
           background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
