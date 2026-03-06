@@ -80,7 +80,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
 
-  const MAX_HEIGHT = 188;
+  const MAX_HEIGHT = 200;
   const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
