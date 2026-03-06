@@ -1,0 +1,42 @@
+{
+  "name": "CalendarEvent",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "start_time": {
+      "type": "string",
+      "description": "HH:mm format"
+    },
+    "end_time": {
+      "type": "string",
+      "description": "HH:mm format"
+    },
+    "description": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "task",
+        "reminder",
+        "meeting",
+        "activity"
+      ],
+      "default": "task"
+    },
+    "color": {
+      "type": "string",
+      "default": "#f97316"
+    }
+  },
+  "required": [
+    "title",
+    "date"
+  ]
+}

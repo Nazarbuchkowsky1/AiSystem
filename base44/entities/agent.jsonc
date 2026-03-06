@@ -1,0 +1,63 @@
+{
+  "name": "Agent",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Agent name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of the agent"
+    },
+    "icon_url": {
+      "type": "string",
+      "description": "URL of uploaded icon image"
+    },
+    "icon_name": {
+      "type": "string",
+      "description": "Icon name from lucide-react (fallback)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "offline"
+      ],
+      "default": "active"
+    },
+    "system_instructions": {
+      "type": "string",
+      "description": "System instructions for the agent"
+    },
+    "knowledge_base_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs of connected knowledge bases"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Tools available to the agent"
+    },
+    "message_count": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

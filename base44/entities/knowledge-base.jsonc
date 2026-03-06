@@ -1,0 +1,70 @@
+{
+  "name": "KnowledgeBase",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Knowledge base name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the knowledge base"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string"
+          },
+          "processed": {
+            "type": "boolean",
+            "default": false
+          },
+          "index_tree": {
+            "type": "object",
+            "description": "Hierarchical PageIndex-style tree for this file"
+          },
+          "doc_description": {
+            "type": "string",
+            "description": "High-level description of this document generated during indexing"
+          }
+        }
+      },
+      "description": "Array of files in the knowledge base"
+    },
+    "processing": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether KB is currently processing files"
+    },
+    "index_status": {
+      "type": "string",
+      "enum": ["idle", "indexing", "succeeded", "failed"],
+      "default": "idle",
+      "description": "Status of the latest indexing run"
+    },
+    "index_progress": {
+      "type": "number",
+      "default": 0,
+      "description": "Indexing progress from 0 to 100"
+    },
+    "last_error": {
+      "type": "string",
+      "description": "Last indexing error message (if any)"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

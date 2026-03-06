@@ -50,6 +50,10 @@ export default function Agents() {
   const { data: knowledgeBases = [] } = useQuery({
     queryKey: ["knowledgeBases"],
     queryFn: () => base44.entities.KnowledgeBase.list("-created_date"),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return Array.isArray(data) && data.some((kb) => kb.processing || kb.index_status === "indexing") ? 3000 : false;
+    },
   });
 
   const createAgentMutation = useMutation({
@@ -74,24 +78,14 @@ export default function Agents() {
   });
 
   const createKBMutation = useMutation({
-    mutationFn: async (kbData) => {
-      const created = await base44.entities.KnowledgeBase.create(kbData);
-      
-      // Auto-process after 2 seconds
-      setTimeout(async () => {
-        const processedFiles = kbData.files.map(f => ({ ...f, processed: true }));
-        await base44.entities.KnowledgeBase.update(created.id, { 
-          files: processedFiles,
-          processing: false 
-        });
-        queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-      }, 2000);
-      
-      return created;
-    },
-    onSuccess: () => {
+    mutationFn: (kbData) => base44.entities.KnowledgeBase.create(kbData),
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       setShowNewKBModal(false);
+      // Trigger real PageIndex tree indexing (runs in background, 30+ sec for docs)
+      if (created?.id && created?.files?.length) {
+        base44.functions.invoke("indexKnowledgeBase", { kbId: created.id }).catch(() => {});
+      }
     },
   });
 

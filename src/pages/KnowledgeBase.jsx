@@ -12,12 +12,19 @@ export default function KnowledgeBasePage({ onBack }) {
   const { data: knowledgeBases = [] } = useQuery({
     queryKey: ["knowledgeBases"],
     queryFn: () => base44.entities.KnowledgeBase.list("-created_date"),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return Array.isArray(data) && data.some((kb) => kb.processing || kb.index_status === "indexing") ? 3000 : false;
+    },
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.KnowledgeBase.create(data),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+      if (created?.id && created?.files?.length) {
+        base44.functions.invoke("indexKnowledgeBase", { kbId: created.id }).catch(() => {});
+      }
     },
   });
 
@@ -94,6 +101,7 @@ function NewKBModal({ onClose, onCreate, isLoading }) {
       name: name.trim(),
       description: description.trim(),
       files: uploadedFiles,
+      processing: true,
     });
   };
 

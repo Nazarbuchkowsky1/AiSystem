@@ -74,16 +74,9 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
 
     await base44.entities.KnowledgeBase.update(kb.id, updateData);
 
-    // If files changed, simulate reprocessing
+    // If files changed, trigger real PageIndex tree indexing (runs in background)
     if (filesChanged) {
-      setTimeout(async () => {
-        const processedFiles = finalFiles.map(f => ({ ...f, processed: true }));
-        await base44.entities.KnowledgeBase.update(kb.id, {
-          files: processedFiles,
-          processing: false,
-        });
-        onSaved();
-      }, 2000);
+      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
     }
 
     onSaved();

@@ -1,0 +1,34 @@
+{
+  "name": "Conversation",
+  "type": "object",
+  "properties": {
+    "agent_id": {
+      "type": "string"
+    },
+    "agent_name": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "instant",
+        "thinking"
+      ],
+      "default": "instant"
+    },
+    "message_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_message_preview": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "agent_name"
+  ]
+}

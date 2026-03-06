@@ -95,7 +95,7 @@ export default function Layout({ children, currentPageName }) {
             <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
             </div>
-            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
+            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS</span>
           </button>
           {currentPageName === "Agents" && agentsTab === "agents" && (
             <button
@@ -189,7 +189,7 @@ export default function Layout({ children, currentPageName }) {
                   <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
                 </div>
                 <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                  NEXUS AI
+                  NEXUS
                 </span>
               </div>
               <button

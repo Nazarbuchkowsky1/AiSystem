@@ -39,21 +39,28 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
     queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     setShowFileInput(false);
 
-    // Simulate processing completion after 2 seconds
-    setTimeout(async () => {
-      const processedFiles = updatedFiles.map(f => ({ ...f, processed: true }));
-      await base44.entities.KnowledgeBase.update(kb.id, { 
-        files: processedFiles,
-        processing: false 
-      });
+    // Trigger real PageIndex tree indexing (runs in background, 30+ sec for docs)
+    base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
+  };
+
+  const handleRetryIndexing = (e) => {
+    e.stopPropagation();
+    base44.entities.KnowledgeBase.update(kb.id, { processing: true }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-    }, 2000);
+      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
+    });
   };
 
   const files = kb.files || [];
+  const indexableTypes = ["txt", "md", "csv", "json"];
+  const indexableFiles = files.filter(f => indexableTypes.includes(f.type));
   const processedCount = files.filter(f => f.processed).length;
   const totalCount = files.length;
-  const isProcessing = kb.processing || false;
+  const isProcessing = kb.processing || kb.index_status === "indexing";
+  const hasFailedIndexing = kb.index_status === "failed";
+  const kbProgress = typeof kb.index_progress === "number" ? kb.index_progress : null;
+  const derivedProgress = indexableFiles.length > 0 ? Math.round((processedCount / indexableFiles.length) * 100) : null;
+  const progress = kbProgress !== null ? kbProgress : (derivedProgress !== null ? derivedProgress : 0);
 
   return (
     <>
@@ -132,8 +139,30 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
             </p>
             {isProcessing && (
               <p style={{ fontSize: 10, color: "#f97316", fontWeight: 500 }}>
-                Processing...
+                Indexing{progress > 0 ? ` ${progress}%` : "..."}
               </p>
+            )}
+            {hasFailedIndexing && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <p style={{ fontSize: 10, color: "#ef4444", fontWeight: 500 }}>
+                  Indexing failed
+                </p>
+                <button
+                  onClick={handleRetryIndexing}
+                  style={{
+                    fontSize: 10,
+                    color: "#f97316",
+                    fontWeight: 500,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    textDecoration: "underline",
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
             )}
           </div>
           {isProcessing && (
