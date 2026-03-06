@@ -272,11 +272,9 @@ export default function Layout({ children, currentPageName }) {
           overflow: "auto",
           background: "#0a0a0a",
           minWidth: 0,
-          paddingTop: isMobile ? 52 : 0,
-          position: "relative",
-          zIndex: 1,
         }}
       >
+        {isMobile && <div style={{ height: 52, flexShrink: 0 }} />}
         {children}
       </main>
     </div>
