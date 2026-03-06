@@ -142,7 +142,7 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
       if (createRef.current) {
         const m = getMinFromY(e.clientY);
         const s = createRef.current;
-        const newState = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
+        const newState = { ...s, endMin: m < s.startMin ? m : Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
         setCreateDrag(newState);
         createRef.current = newState;
       }

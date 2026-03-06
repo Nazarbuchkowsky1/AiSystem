@@ -119,7 +119,7 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
       if (createRef.current) {
         const m = getMinFromY(e.clientY);
         const s = createRef.current;
-        const n = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
+        const n = { ...s, endMin: m < s.startMin ? m : Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
         setCreateDrag(n);
         createRef.current = n;
       }
