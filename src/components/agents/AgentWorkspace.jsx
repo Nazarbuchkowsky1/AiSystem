@@ -561,7 +561,8 @@ export default function AgentWorkspace({ agent, onBack }) {
               paddingBottom: (multiLine || attachedFiles.length > 0) ? 7 : 0,
               paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
               paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
-              overflowY: "hidden", overflowX: "hidden", wordBreak: "break-word",
+              overflowX: "hidden", wordBreak: "break-word",
+              scrollbarWidth: "none", msOverflowStyle: "none",
             }}
           />
 
