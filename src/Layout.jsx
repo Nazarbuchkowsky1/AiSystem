@@ -272,7 +272,9 @@ export default function Layout({ children, currentPageName }) {
           overflow: "auto",
           background: "#0a0a0a",
           minWidth: 0,
-          marginTop: isMobile ? 52 : 0,
+          paddingTop: isMobile ? 52 : 0,
+          position: "relative",
+          zIndex: 1,
         }}
       >
         {children}
