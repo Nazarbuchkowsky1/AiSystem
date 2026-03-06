@@ -13,6 +13,8 @@ const CODE_EXTS = ["js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs","jav
 const BAR_WIDTH = 3;
 const BAR_GAP = 3;
 const WAVE_UNIT = BAR_WIDTH + BAR_GAP;
+const SINGLE_LINE_TEXTAREA_HEIGHT = 44;
+const MAX_VISIBLE_TEXTAREA_HEIGHT = 188;
 
 function getFileType(file) {
   if (SUPPORTED_IMAGES.includes(file.type)) return "image";
@@ -80,7 +82,6 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
 
-  const MAX_HEIGHT = 200;
   const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
@@ -95,30 +96,31 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
   }, [attachedFiles]);
 
-  // Auto-expand textarea
   useLayoutEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.overflowY = "hidden";
+    void textarea.offsetHeight;
+
+    const realScrollHeight = textarea.scrollHeight;
+    const newHeight = Math.max(
+      SINGLE_LINE_TEXTAREA_HEIGHT,
+      Math.min(realScrollHeight, MAX_VISIBLE_TEXTAREA_HEIGHT),
+    );
+
+    textarea.style.height = `${newHeight}px`;
+    textarea.style.overflowY = realScrollHeight > MAX_VISIBLE_TEXTAREA_HEIGHT ? "auto" : "hidden";
+
+    const isNowMultiLine = realScrollHeight > (multiLine ? 40 : 45);
 
     if (input.length === 0) {
-      ta.style.height = "24px"; // single line height (lineHeight 24px)
-      ta.style.overflowY = "hidden";
-      setMultiLine(false);
-      return;
+      if (multiLine) setMultiLine(false);
+    } else if (isNowMultiLine !== multiLine) {
+      setMultiLine(isNowMultiLine);
     }
-
-    ta.style.height = "24px"; // reset to measure
-    void ta.offsetHeight;
-    const realScrollHeight = ta.scrollHeight;
-
-    ta.style.height = Math.min(realScrollHeight, MAX_HEIGHT) + "px";
-    ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
-
-    setMultiLine(prevMultiLine => {
-      const threshold = prevMultiLine ? 28 : 36;
-      return realScrollHeight > threshold;
-    });
-  }, [input, isRecording, attachedFiles.length]);
+  }, [input, isRecording, attachedFiles.length, multiLine]);
 
   // ResizeObserver for wave container
   useEffect(() => {
@@ -490,7 +492,6 @@ export default function AgentWorkspace({ agent, onBack }) {
       borderRadius: 20,
       boxShadow: barShadow,
       transition: "border-color 0.2s, box-shadow 0.2s",
-      overflow: "hidden",
       display: "flex",
       flexDirection: "column",
     }}>
@@ -548,29 +549,42 @@ export default function AgentWorkspace({ agent, onBack }) {
             </button>
           )}
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={handlePaste}
-            placeholder="Message agent..."
-            rows={1}
-            disabled={isLoading}
-            style={{
-              flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
-              background: "transparent", border: "none", outline: "none", resize: "none",
-              fontSize: 16, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              paddingTop: (multiLine || attachedFiles.length > 0) ? 13 : 16,
-              paddingBottom: (multiLine || attachedFiles.length > 0) ? 7 : 16,
-              paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
-              paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
-              overflowX: "hidden", wordBreak: "break-word",
-              scrollbarWidth: "none", msOverflowStyle: "none",
-            }}
-          />
+          <div style={{ flex: 1, minWidth: 0, width: (multiLine || attachedFiles.length > 0) ? "100%" : undefined, paddingTop: (multiLine || attachedFiles.length > 0) ? 2 : 0 }}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              onPaste={handlePaste}
+              placeholder="Message agent..."
+              rows={1}
+              disabled={isLoading}
+              style={{
+                display: "block",
+                width: "100%",
+                minWidth: 0,
+                boxSizing: "border-box",
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                resize: "none",
+                fontSize: 16,
+                lineHeight: "24px",
+                color: "#f5f5f5",
+                fontFamily: "inherit",
+                paddingTop: 10,
+                paddingBottom: 10,
+                paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
+                paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
+                overflowX: "hidden",
+                overflowWrap: "break-word",
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              }}
+            />
+          </div>
 
           {/* Single-line: mic + send right of textarea */}
           {!multiLine && attachedFiles.length === 0 && (
@@ -700,7 +714,9 @@ export default function AgentWorkspace({ agent, onBack }) {
               </div>
             </div>
             <div style={{ padding: "8px 24px 16px", flexShrink: 0 }}>
-              {renderInputBar()}
+              <div style={{ width: "100%", maxWidth: 920, margin: "0 auto" }}>
+                {renderInputBar()}
+              </div>
             </div>
           </>
         )}
