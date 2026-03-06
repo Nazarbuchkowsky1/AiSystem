@@ -27,6 +27,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Hide mobile header when modal is open
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
+    return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
+  }, []);
+
   const ICON_OPTIONS = [
     { name: "Bot", icon: Bot },
     { name: "Zap", icon: Zap },
