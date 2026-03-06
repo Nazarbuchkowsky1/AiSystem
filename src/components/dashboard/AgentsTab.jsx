@@ -37,9 +37,9 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function AgentsTab() {
   return (
-    <div className="grid grid-cols-12 gap-4 h-full">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-full overflow-auto">
       {/* Agent Activity */}
-      <div className="col-span-7 glass-panel p-5">
+      <div className="md:col-span-7 glass-panel p-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Agent Activity</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={agentActivity}>
@@ -57,7 +57,7 @@ export default function AgentsTab() {
       </div>
 
       {/* Response Time */}
-      <div className="col-span-5 glass-panel p-5">
+      <div className="md:col-span-5 glass-panel p-5">
         <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Avg Response Time (s)</h3>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={responseTime}>
@@ -71,7 +71,7 @@ export default function AgentsTab() {
       </div>
 
       {/* Prompts Per Agent */}
-      <div className="col-span-5 glass-panel p-5">
+      <div className="md:col-span-5 glass-panel p-5">
         <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Prompts Per Agent</h3>
         <div className="space-y-3">
           {agentActivity.map((a) => (
@@ -87,7 +87,7 @@ export default function AgentsTab() {
       </div>
 
       {/* Usage Distribution */}
-      <div className="col-span-7 glass-panel p-5 flex items-center">
+      <div className="md:col-span-7 glass-panel p-5 flex items-center flex-col sm:flex-row">
         <div className="w-1/2">
           <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Usage Distribution</h3>
           <div className="space-y-2">

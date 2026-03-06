@@ -27,7 +27,7 @@ export default function Analytics() {
       </div>
 
       {/* Metrics Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, flexShrink: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, flexShrink: 0 }}>
         {METRICS.map((m, i) => (
           <MetricCard key={i} {...m} />
         ))}

@@ -10,6 +10,10 @@ export default function DashboardTabs({ activeTab, onTabChange }) {
       gap: 2,
       borderBottom: "1px solid rgba(255,255,255,0.06)",
       flexShrink: 0,
+      overflowX: "auto",
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+      WebkitOverflowScrolling: "touch",
     }}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab;
@@ -21,6 +25,8 @@ export default function DashboardTabs({ activeTab, onTabChange }) {
               position: "relative",
               padding: "6px 14px",
               fontSize: 12,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
               fontWeight: isActive ? 700 : 400,
               color: isActive ? "#f97316" : "#4a4a4a",
               background: "transparent",

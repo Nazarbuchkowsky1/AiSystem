@@ -45,9 +45,9 @@ export default function Settings() {
     <div className="p-6 h-full overflow-auto">
       <h1 className="text-xl font-semibold mb-6" style={{ color: "var(--text-primary)" }}>Settings</h1>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar */}
-        <div className="w-56 flex-shrink-0 space-y-1">
+        <div className="w-full md:w-56 flex-shrink-0 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             const isActive = activeSection === s.id;
@@ -55,7 +55,7 @@ export default function Settings() {
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition whitespace-nowrap flex-shrink-0"
                 style={{
                   background: isActive ? "var(--accent-dim)" : "transparent",
                   color: isActive ? "var(--accent)" : "var(--text-muted)",

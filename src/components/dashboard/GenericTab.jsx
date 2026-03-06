@@ -65,7 +65,7 @@ const pieData = [
 
 function ChartPanel({ title, type, span }) {
   const data = generateData(12, 100);
-  const spanClass = span === 7 ? "col-span-7" : "col-span-5";
+  const spanClass = span === 7 ? "col-span-1 md:col-span-7" : "col-span-1 md:col-span-5";
 
   return (
     <div className={`${spanClass} glass-panel p-5`}>
@@ -119,7 +119,7 @@ export default function GenericTab({ tabName }) {
   if (!config) return null;
 
   return (
-    <div className="grid grid-cols-12 gap-4 h-full">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-full overflow-auto">
       {config.panels.map((panel, i) => (
         <ChartPanel key={i} {...panel} />
       ))}

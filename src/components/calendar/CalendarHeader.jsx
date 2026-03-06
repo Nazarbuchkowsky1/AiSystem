@@ -17,10 +17,10 @@ export default function CalendarHeader({ currentDate, setCurrentDate, view, setV
     : format(currentDate, "EEEE, MMM d, yyyy");
 
   return (
-    <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Calendar</h1>
-        <div className="flex items-center gap-1 ml-4">
+        <div className="flex items-center gap-1 sm:ml-4">
           <button onClick={() => navigate("prev")} className="p-1.5 rounded-lg hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
             <ChevronLeft className="w-4 h-4" />
           </button>

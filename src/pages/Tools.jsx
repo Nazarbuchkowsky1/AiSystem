@@ -13,7 +13,7 @@ export default function Tools() {
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, overflow: "auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, overflow: "auto" }}>
         {TOOLS_LIST.map((tool) => {
           const Icon = tool.icon;
           const isActive = tool.status === "active";

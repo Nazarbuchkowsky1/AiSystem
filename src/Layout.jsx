@@ -25,6 +25,18 @@ const NAV_ITEMS = [
 
 export default function Layout({ children, currentPageName }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Close mobile menu on page change
+  useEffect(() => { setMobileOpen(false); }, [currentPageName]);
 
   return (
     <div
@@ -46,25 +58,58 @@ export default function Layout({ children, currentPageName }) {
           to { transform: translateX(-12px); opacity: 0; }
         }
       `}</style>
+      {/* Mobile overlay */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, backdropFilter: "blur(4px)" }}
+        />
+      )}
+
+      {/* Mobile header bar */}
+      {isMobile && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 30,
+          background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setMobileOpen(!mobileOpen)} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex", padding: 4 }}>
+              {mobileOpen ? <X style={{ width: 20, height: 20 }} /> : <Menu style={{ width: 20, height: 20 }} />}
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
+              </div>
+              <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside
         style={{
-          position: "relative",
+          position: isMobile ? "fixed" : "relative",
+          top: isMobile ? 52 : 0,
+          left: 0,
+          bottom: 0,
           display: "flex",
           flexDirection: "column",
-          width: collapsed ? 72 : 240,
-          minWidth: collapsed ? 72 : 240,
+          width: isMobile ? 240 : collapsed ? 72 : 240,
+          minWidth: isMobile ? 240 : collapsed ? 72 : 240,
           flexShrink: 0,
           background: "linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 100%)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
-          transition: "width 0.3s ease, min-width 0.3s ease",
-          zIndex: 10,
+          transition: isMobile ? "transform 0.3s ease" : "width 0.3s ease, min-width 0.3s ease",
+          zIndex: isMobile ? 50 : 10,
+          transform: isMobile ? (mobileOpen ? "translateX(0)" : "translateX(-100%)") : "none",
         }}
       >
         {/* Logo */}
         <div
           style={{
-            display: "flex",
+            display: isMobile ? "none" : "flex",
             alignItems: "center",
             justifyContent: collapsed ? "center" : "space-between",
             gap: 12,
@@ -180,7 +225,7 @@ export default function Layout({ children, currentPageName }) {
                     }}
                   >
                 <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
-                {!collapsed && <span>{item.name}</span>}
+                {(isMobile || !collapsed) && <span>{item.name}</span>}
               </Link>
             );
           })}
@@ -220,6 +265,7 @@ export default function Layout({ children, currentPageName }) {
           overflow: "auto",
           background: "#0a0a0a",
           minWidth: 0,
+          marginTop: isMobile ? 52 : 0,
         }}
       >
         {children}
