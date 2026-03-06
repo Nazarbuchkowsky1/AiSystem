@@ -80,7 +80,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
 
-  const MAX_HEIGHT = 188; // ~5 lines of text (5 * 24px line-height + 13px pt + 7px pb = 140px, but 188 gives room)
+  const MAX_HEIGHT = 188;
   const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
@@ -100,20 +100,17 @@ export default function AgentWorkspace({ agent, onBack }) {
     const ta = textareaRef.current;
     if (!ta) return;
 
-    // Reset to measure true content height
     ta.style.height = "auto";
     void ta.offsetHeight;
-
     const realScrollHeight = ta.scrollHeight;
-    const newHeight = Math.min(realScrollHeight, MAX_HEIGHT);
 
-    ta.style.height = newHeight + "px";
-    // Enable scroll when content exceeds max, but scrollbar is hidden via CSS
+    ta.style.height = Math.min(realScrollHeight, MAX_HEIGHT) + "px";
     ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 
-    setMultiLine(prev => {
+    setMultiLine(prevMultiLine => {
+      const isNowMultiLine = realScrollHeight > (prevMultiLine ? 40 : 45);
       if (input.length === 0) return false;
-      return realScrollHeight > (prev ? 40 : 45);
+      return isNowMultiLine;
     });
   }, [input, isRecording, attachedFiles.length]);
 
@@ -533,7 +530,7 @@ export default function AgentWorkspace({ agent, onBack }) {
 
       {/* Text input row */}
       {!inVoiceMode && (
-        <div style={{ display: "flex", flexDirection: multiLine || attachedFiles.length > 0 ? "column" : "row", alignItems: multiLine || attachedFiles.length > 0 ? "stretch" : "center", minHeight: multiLine || attachedFiles.length > 0 ? undefined : 56, padding: multiLine || attachedFiles.length > 0 ? undefined : "0 8px" }}>
+        <div style={{ display: "flex", flexDirection: multiLine || attachedFiles.length > 0 ? "column" : "row", alignItems: multiLine || attachedFiles.length > 0 ? "stretch" : "center", height: multiLine || attachedFiles.length > 0 ? undefined : 56, padding: multiLine || attachedFiles.length > 0 ? undefined : "0 8px" }}>
 
           {/* Single-line: attach left of textarea */}
           {!multiLine && attachedFiles.length === 0 && (
@@ -560,13 +557,10 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 16, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              paddingTop: (multiLine || attachedFiles.length > 0) ? 10 : 16,
-              paddingBottom: (multiLine || attachedFiles.length > 0) ? 4 : 16,
+              paddingTop: 13, paddingBottom: 7,
               paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
               paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
-              maxHeight: MAX_HEIGHT,
-              overflowX: "hidden", wordBreak: "break-word",
-              scrollbarWidth: "none", msOverflowStyle: "none",
+              overflowY: "hidden", overflowX: "hidden", wordBreak: "break-word",
             }}
           />
 
