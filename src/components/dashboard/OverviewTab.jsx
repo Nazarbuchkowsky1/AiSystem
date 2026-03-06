@@ -321,6 +321,11 @@ export default function OverviewTab() {
         </div>
       </div>
 
+      <style>{`
+        .overview-grid { grid-template-columns: 5fr 4fr 3fr; }
+        @media (max-width: 1024px) { .overview-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 640px) { .overview-grid { grid-template-columns: 1fr; } }
+      `}</style>
     </div>
   );
 }
