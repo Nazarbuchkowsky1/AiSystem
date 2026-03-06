@@ -76,9 +76,9 @@ export default function Layout({ children, currentPageName }) {
         }}>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "0 8px", height: "100%", WebkitTapHighlightColor: "transparent" }}
           >
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
             </div>
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
