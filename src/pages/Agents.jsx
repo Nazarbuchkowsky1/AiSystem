@@ -77,34 +77,37 @@ export default function Agents() {
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
-          <div style={{ display: "flex", gap: 4, borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
-            {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(([tab, Icon, label]) => (
-             <button key={tab} onClick={() => setCurrentTab(tab)}
-               style={{
-                 display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
-                 background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
-                 color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
-                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-               }}>
-               <Icon style={{ width: 11, height: 11 }} />
-               {label}
-             </button>
-            ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Agents</h1>
+            <div style={{ display: "flex", gap: 4, borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+              {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(([tab, Icon, label]) => (
+               <button key={tab} onClick={() => setCurrentTab(tab)}
+                 style={{
+                   display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
+                   background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
+                   color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
+                   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                   whiteSpace: "nowrap",
+                 }}>
+                 <Icon style={{ width: 11, height: 11 }} />
+                 {label}
+               </button>
+              ))}
+            </div>
           </div>
+          {currentTab === "agents" && (
+            <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+              <Plus style={{ width: 12, height: 12 }} /> New Agent
+            </button>
+          )}
+          {currentTab === "knowledge" && (
+            <button onClick={() => setShowNewKBModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+              <Plus style={{ width: 12, height: 12 }} /> New KB
+            </button>
+          )}
         </div>
-        {currentTab === "agents" && (
-          <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            <Plus style={{ width: 12, height: 12 }} /> New Agent
-          </button>
-        )}
-        {currentTab === "knowledge" && (
-          <button onClick={() => setShowNewKBModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            <Plus style={{ width: 12, height: 12 }} /> New Knowledge Base
-          </button>
-        )}
       </div>
 
       {(showNewModal || editingAgent) && (
