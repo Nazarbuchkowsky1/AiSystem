@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Bot, BookOpen } from "lucide-react";
@@ -16,7 +16,20 @@ export default function Agents() {
   const [editingAgent, setEditingAgent] = useState(null);
   const [editingKB, setEditingKB] = useState(null);
   const [currentTab, setCurrentTab] = useState("agents");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setShowNewModal(true);
+    window.addEventListener("mobile-new-agent", handler);
+    return () => window.removeEventListener("mobile-new-agent", handler);
+  }, []);
 
   const { data: agents = [] } = useQuery({
     queryKey: ["agents"],
@@ -96,7 +109,7 @@ export default function Agents() {
             ))}
           </div>
         </div>
-        {currentTab === "agents" && (
+        {currentTab === "agents" && !isMobile && (
           <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
             <Plus style={{ width: 12, height: 12 }} /> New Agent
           </button>
