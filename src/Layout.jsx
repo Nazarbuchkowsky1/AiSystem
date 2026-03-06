@@ -40,10 +40,16 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => { setMobileOpen(false); }, [currentPageName]);
 
   const [agentsTab, setAgentsTab] = useState("agents");
+  const [modalOpen, setModalOpen] = useState(false);
   useEffect(() => {
     const handler = (e) => setAgentsTab(e.detail);
     window.addEventListener("agents-tab-change", handler);
     return () => window.removeEventListener("agents-tab-change", handler);
+  }, []);
+  useEffect(() => {
+    const handler = (e) => setModalOpen(e.detail);
+    window.addEventListener("modal-open", handler);
+    return () => window.removeEventListener("modal-open", handler);
   }, []);
 
   return (
