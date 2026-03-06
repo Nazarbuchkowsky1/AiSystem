@@ -3,7 +3,7 @@ import TOOLS_LIST from "../components/shared/toolsList";
 
 export default function Tools() {
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Tools</h1>
         <button
