@@ -100,17 +100,20 @@ export default function AgentWorkspace({ agent, onBack }) {
     const ta = textareaRef.current;
     if (!ta) return;
 
+    // Reset to measure true content height
     ta.style.height = "auto";
     void ta.offsetHeight;
-    const realScrollHeight = ta.scrollHeight;
 
-    ta.style.height = Math.min(realScrollHeight, MAX_HEIGHT) + "px";
+    const realScrollHeight = ta.scrollHeight;
+    const newHeight = Math.min(realScrollHeight, MAX_HEIGHT);
+
+    ta.style.height = newHeight + "px";
+    // Enable scroll when content exceeds max, but scrollbar is hidden via CSS
     ta.style.overflowY = realScrollHeight > MAX_HEIGHT ? "auto" : "hidden";
 
-    setMultiLine(prevMultiLine => {
-      const isNowMultiLine = realScrollHeight > (prevMultiLine ? 40 : 45);
+    setMultiLine(prev => {
       if (input.length === 0) return false;
-      return isNowMultiLine;
+      return realScrollHeight > (prev ? 40 : 45);
     });
   }, [input, isRecording, attachedFiles.length]);
 
