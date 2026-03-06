@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Trash2, Clock, AlignLeft, Tag, CalendarDays } from "lucide-react";
+import { X, Trash2, Clock, AlignLeft, Tag, Copy } from "lucide-react";
 import { format } from "date-fns";
 
 const EVENT_TYPES = [
@@ -9,7 +9,7 @@ const EVENT_TYPES = [
   { value: "activity", label: "Activity", color: "#22c55e" },
 ];
 
-export default function EventModal({ event, selectedDate, onSave, onDelete, onClose }) {
+export default function EventModal({ event, selectedDate, prefillTimes, onSave, onDelete, onDuplicate, onClose }) {
   const [form, setForm] = useState({
     title: "",
     date: format(new Date(), "yyyy-MM-dd"),
@@ -42,10 +42,16 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
         description: event.description || "",
         event_type: event.event_type || "task",
       });
-    } else if (selectedDate) {
-      setForm(f => ({ ...f, date: format(selectedDate, "yyyy-MM-dd") }));
+    } else {
+      const newForm = { ...form };
+      if (selectedDate) newForm.date = format(selectedDate, "yyyy-MM-dd");
+      if (prefillTimes) {
+        newForm.start_time = prefillTimes.start_time;
+        newForm.end_time = prefillTimes.end_time;
+      }
+      setForm(newForm);
     }
-  }, [event, selectedDate]);
+  }, [event, selectedDate, prefillTimes]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -78,21 +84,25 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
         overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none",
         boxShadow: isMobile ? "none" : "0 25px 50px rgba(0,0,0,0.5)"
       }} onClick={e => e.stopPropagation()}>
-        
-        {/* Top color bar */}
+
         <div style={{ height: 4, background: currentTypeColor, borderRadius: isMobile ? 0 : "12px 12px 0 0" }} />
-        
+
         <form onSubmit={handleSubmit} style={{ padding: 24 }}>
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: "#f5f5f5" }}>
               {event ? "Edit Event" : "New Event"}
             </span>
-            <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#666", display: "flex", padding: 6, borderRadius: 8, transition: "all 0.15s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-              onMouseLeave={e => e.currentTarget.style.background = "none"}>
-              <X style={{ width: 18, height: 18 }} />
-            </button>
+            <div style={{ display: "flex", gap: 4 }}>
+              {event && onDuplicate && (
+                <button type="button" onClick={() => { onDuplicate(event); onClose(); }} title="Duplicate" style={iconBtnStyle}>
+                  <Copy style={{ width: 16, height: 16 }} />
+                </button>
+              )}
+              <button type="button" onClick={onClose} style={iconBtnStyle}>
+                <X style={{ width: 18, height: 18 }} />
+              </button>
+            </div>
           </div>
 
           {/* Title */}
@@ -111,31 +121,26 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
             onBlur={e => e.target.style.borderBottomColor = "rgba(255,255,255,0.08)"}
           />
 
-          {/* Date & Time row */}
+          {/* Date & Time */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
             <Clock style={{ width: 18, height: 18, color: "#555", marginTop: 10, flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <input
-                type="date"
-                value={form.date}
+                type="date" value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
                 style={{ ...inputStyle, marginBottom: 8, colorScheme: "dark" }}
                 onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
                 onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
               />
               <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="time"
-                  value={form.start_time}
+                <input type="time" value={form.start_time}
                   onChange={(e) => setForm({ ...form, start_time: e.target.value })}
                   style={{ ...inputStyle, flex: 1, colorScheme: "dark" }}
                   onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
                   onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
                 />
                 <span style={{ color: "#555", alignSelf: "center", fontSize: 13 }}>–</span>
-                <input
-                  type="time"
-                  value={form.end_time}
+                <input type="time" value={form.end_time}
                   onChange={(e) => setForm({ ...form, end_time: e.target.value })}
                   style={{ ...inputStyle, flex: 1, colorScheme: "dark" }}
                   onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
@@ -150,9 +155,7 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
             <Tag style={{ width: 18, height: 18, color: "#555", marginTop: 6, flexShrink: 0 }} />
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {EVENT_TYPES.map(t => (
-                <button
-                  key={t.value}
-                  type="button"
+                <button key={t.value} type="button"
                   onClick={() => setForm({ ...form, event_type: t.value })}
                   style={{
                     padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500,
@@ -176,10 +179,7 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Add description"
               rows={3}
-              style={{
-                ...inputStyle, resize: "none",
-                overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none"
-              }}
+              style={{ ...inputStyle, resize: "none", overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none" }}
               onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
               onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
             />
@@ -188,9 +188,7 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
           {/* Actions */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             {event ? (
-              <button
-                type="button"
-                onClick={() => onDelete(event.id)}
+              <button type="button" onClick={() => onDelete(event.id)}
                 style={{
                   display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
                   borderRadius: 8, background: "rgba(239,68,68,0.08)",
@@ -204,9 +202,7 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
               </button>
             ) : <div />}
             <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={onClose}
+              <button type="button" onClick={onClose}
                 style={{
                   padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 500,
                   background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
@@ -217,23 +213,37 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
               >
                 Cancel
               </button>
-              <button
-                type="submit"
+              <button type="submit"
                 style={{
                   padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 500,
                   background: currentTypeColor, color: "#fff", border: "none",
                   cursor: form.title.trim() ? "pointer" : "not-allowed",
                   opacity: form.title.trim() ? 1 : 0.5, transition: "all 0.15s"
                 }}
-                onMouseEnter={e => { if (form.title.trim()) e.currentTarget.style.opacity = "0.85"; }}
-                onMouseLeave={e => e.currentTarget.style.opacity = form.title.trim() ? "1" : "0.5"}
               >
                 {event ? "Save" : "Create"}
               </button>
             </div>
           </div>
+
+          {/* Keyboard hints */}
+          {!event && (
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", gap: 16, flexWrap: "wrap" }}>
+              {[["Esc", "Close"], ["C", "New event"], ["T", "Today"], ["D/W/M", "Views"]].map(([key, label]) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "rgba(255,255,255,0.06)", color: "#666", fontFamily: "monospace", fontWeight: 600 }}>{key}</span>
+                  <span style={{ fontSize: 10, color: "#444" }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </form>
       </div>
     </div>
   );
 }
+
+const iconBtnStyle = {
+  background: "none", border: "none", cursor: "pointer", color: "#666",
+  display: "flex", padding: 6, borderRadius: 8, transition: "all 0.15s"
+};

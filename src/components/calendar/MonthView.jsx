@@ -20,9 +20,7 @@ export default function MonthView({ currentDate, events, onDateClick, onEventCli
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: calStart, end: calEnd });
   const weeks = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
 
   const getEventsForDay = (day) =>
     events.filter((e) => isSameDay(new Date(e.date), day))
@@ -30,16 +28,12 @@ export default function MonthView({ currentDate, events, onDateClick, onEventCli
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Day Headers */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         {DAYS.map((d) => (
-          <div key={d} style={{ padding: "8px 0", textAlign: "center", fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.05em" }}>
-            {d}
-          </div>
+          <div key={d} style={{ padding: "8px 0", textAlign: "center", fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.05em" }}>{d}</div>
         ))}
       </div>
 
-      {/* Weeks */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {weeks.map((week, wi) => (
           <div key={wi} style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", minHeight: 0, borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
@@ -47,11 +41,8 @@ export default function MonthView({ currentDate, events, onDateClick, onEventCli
               const dayEvents = getEventsForDay(day);
               const inMonth = isSameMonth(day, currentDate);
               const today = isToday(day);
-
               return (
-                <div
-                  key={di}
-                  onClick={() => onDateClick(day)}
+                <div key={di} onClick={() => onDateClick(day)}
                   style={{
                     borderRight: di < 6 ? "1px solid rgba(255,255,255,0.04)" : "none",
                     padding: 4, cursor: "pointer", overflow: "hidden",
@@ -62,28 +53,21 @@ export default function MonthView({ currentDate, events, onDateClick, onEventCli
                   onMouseEnter={e => { if (!today) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
                   onMouseLeave={e => { if (!today) e.currentTarget.style.background = "transparent"; }}
                 >
-                  {/* Date number */}
                   <div style={{ display: "flex", justifyContent: "center", padding: "2px 0 4px" }}>
                     <span style={{
                       fontSize: 12, fontWeight: today ? 600 : 400,
                       color: today ? "#fff" : inMonth ? "#ccc" : "#444",
                       background: today ? "#f97316" : "transparent",
                       width: 26, height: 26, borderRadius: "50%",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "all 0.15s"
-                    }}>
-                      {format(day, "d")}
-                    </span>
+                      display: "flex", alignItems: "center", justifyContent: "center"
+                    }}>{format(day, "d")}</span>
                   </div>
-
-                  {/* Events */}
                   <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", gap: 1 }}>
                     {dayEvents.slice(0, 3).map((ev) => {
                       const colors = EVENT_COLORS[ev.event_type] || EVENT_COLORS.task;
                       return (
-                        <div
-                          key={ev.id}
-                          onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
+                        <div key={ev.id}
+                          onClick={(e) => { e.stopPropagation(); onEventClick(e, ev); }}
                           style={{
                             fontSize: 10, fontWeight: 500, padding: "2px 6px",
                             borderRadius: 4, cursor: "pointer",
@@ -101,9 +85,7 @@ export default function MonthView({ currentDate, events, onDateClick, onEventCli
                       );
                     })}
                     {dayEvents.length > 3 && (
-                      <div style={{ fontSize: 10, color: "#888", padding: "1px 6px", fontWeight: 500 }}>
-                        +{dayEvents.length - 3} more
-                      </div>
+                      <div style={{ fontSize: 10, color: "#888", padding: "1px 6px", fontWeight: 500 }}>+{dayEvents.length - 3} more</div>
                     )}
                   </div>
                 </div>
