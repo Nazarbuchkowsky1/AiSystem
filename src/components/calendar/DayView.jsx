@@ -4,6 +4,7 @@ import { format, isSameDay, isToday } from "date-fns";
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const HOUR_HEIGHT = 60;
 const SNAP_MINUTES = 15;
+const DRAG_THRESHOLD = 4;
 
 const EVENT_COLORS = {
   task: { bg: "rgba(249,115,22,0.22)", border: "#f97316", text: "#f97316" },
@@ -43,6 +44,9 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
   const [resizeState, setResizeState] = useState(null);
   const resizeRef = useRef(null);
 
+  const mouseDownPos = useRef(null);
+  const hasDragged = useRef(false);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = Math.max(0, (new Date().getHours() - 2) * HOUR_HEIGHT);
@@ -63,90 +67,137 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
     return { top: (s / 60) * HOUR_HEIGHT, height: Math.max(((e - s) / 60) * HOUR_HEIGHT, 28) };
   };
 
-  const handleMouseDown = useCallback((e) => {
+  const handleSlotMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
-    const m = getMinFromY(e.clientY);
-    const s = { startMin: m, endMin: m + SNAP_MINUTES };
-    setCreateDrag(s); createRef.current = s;
-  }, [getMinFromY]);
+    mouseDownPos.current = { x: e.clientX, y: e.clientY };
+    hasDragged.current = false;
+  }, []);
 
   const handleEventMouseDown = useCallback((e, ev) => {
-    e.stopPropagation(); e.preventDefault();
-    const startM = timeToMin(ev.start_time);
-    const endM = timeToMin(ev.end_time || ev.start_time);
-    const dur = (endM - startM) || 60;
-    const offset = getMinFromY(e.clientY) - startM;
-    const s = { event: ev, startMin: startM, duration: dur, clickOffset: offset };
-    setDragState(s); dragRef.current = s;
-  }, [getMinFromY]);
+    e.stopPropagation();
+    e.preventDefault();
+    mouseDownPos.current = { x: e.clientX, y: e.clientY, isEvent: true, event: ev };
+    hasDragged.current = false;
+  }, []);
 
   const handleResizeMouseDown = useCallback((e, ev) => {
-    e.stopPropagation(); e.preventDefault();
+    e.stopPropagation();
+    e.preventDefault();
     const startM = timeToMin(ev.start_time);
     const endM = timeToMin(ev.end_time || ev.start_time) || startM + 60;
     const s = { event: ev, startMin: startM, endMin: endM };
-    setResizeState(s); resizeRef.current = s;
+    setResizeState(s);
+    resizeRef.current = s;
+    hasDragged.current = true;
   }, []);
 
   useEffect(() => {
     const handleMove = (e) => {
+      if (mouseDownPos.current && !hasDragged.current) {
+        const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+        const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+        if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+          hasDragged.current = true;
+          if (mouseDownPos.current.isEvent) {
+            const ev = mouseDownPos.current.event;
+            const startM = timeToMin(ev.start_time);
+            const endM = timeToMin(ev.end_time || ev.start_time);
+            const dur = (endM - startM) || 60;
+            const offset = getMinFromY(mouseDownPos.current.y) - startM;
+            const s = { event: ev, startMin: startM, duration: dur, clickOffset: offset };
+            setDragState(s);
+            dragRef.current = s;
+          } else {
+            const m = getMinFromY(mouseDownPos.current.y);
+            const s = { startMin: m, endMin: m + SNAP_MINUTES };
+            setCreateDrag(s);
+            createRef.current = s;
+          }
+        }
+      }
+
       if (createRef.current) {
         const m = getMinFromY(e.clientY);
         const s = createRef.current;
         const n = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
-        setCreateDrag(n); createRef.current = n;
+        setCreateDrag(n);
+        createRef.current = n;
       }
       if (dragRef.current) {
         const m = getMinFromY(e.clientY);
         const offset = dragRef.current.clickOffset || 0;
         const newStart = snapMin(Math.max(0, m - offset));
         const n = { ...dragRef.current, startMin: newStart };
-        setDragState(n); dragRef.current = n;
+        setDragState(n);
+        dragRef.current = n;
       }
       if (resizeRef.current) {
         const m = getMinFromY(e.clientY);
         const s = resizeRef.current;
         const n = { ...s, endMin: Math.max(m + SNAP_MINUTES, s.startMin + SNAP_MINUTES) };
-        setResizeState(n); resizeRef.current = n;
+        setResizeState(n);
+        resizeRef.current = n;
       }
     };
-    const handleUp = () => {
-      if (createRef.current) {
+
+    const handleUp = (e) => {
+      const wasRealDrag = hasDragged.current;
+      const downPos = mouseDownPos.current;
+
+      if (createRef.current && wasRealDrag) {
         const { startMin, endMin } = createRef.current;
         const rs = Math.min(startMin, endMin), re = Math.max(startMin, endMin);
         if (re - rs >= SNAP_MINUTES) {
           onSlotClick(currentDate, minToTime(rs), minToTime(re));
         }
-        setCreateDrag(null); createRef.current = null;
       }
-      if (dragRef.current) {
+      setCreateDrag(null);
+      createRef.current = null;
+
+      if (dragRef.current && wasRealDrag) {
         const { event, startMin, duration } = dragRef.current;
         onEventUpdate(event.id, {
           start_time: minToTime(startMin),
           end_time: minToTime(startMin + duration),
         });
-        setDragState(null); dragRef.current = null;
       }
+      setDragState(null);
+      dragRef.current = null;
+
       if (resizeRef.current) {
         const { event, startMin, endMin } = resizeRef.current;
         onEventUpdate(event.id, {
           start_time: minToTime(startMin),
           end_time: minToTime(endMin),
         });
-        setResizeState(null); resizeRef.current = null;
       }
+      setResizeState(null);
+      resizeRef.current = null;
+
+      // Simple click
+      if (!wasRealDrag && downPos) {
+        if (downPos.isEvent) {
+          onEventClick(e, downPos.event);
+        } else {
+          const m = getMinFromY(downPos.y);
+          onSlotClick(currentDate, minToTime(m), minToTime(m + 60));
+        }
+      }
+
+      mouseDownPos.current = null;
+      hasDragged.current = false;
     };
+
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [getMinFromY, currentDate, onSlotClick, onEventUpdate]);
+  }, [getMinFromY, currentDate, onSlotClick, onEventUpdate, onEventClick]);
 
   const isDragging = !!(createDrag || dragState || resizeState);
   const filteredEvents = dragState ? dayEvents.filter(ev => ev.id !== dragState.event.id) : dayEvents;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", userSelect: isDragging ? "none" : "auto" }}>
-      {/* Day header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: today ? "#f97316" : "#555", letterSpacing: "0.03em" }}>
@@ -164,9 +215,7 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
         </div>
       </div>
 
-      {/* Scrollable grid */}
       <div ref={scrollRef} style={{ flex: 1, overflow: "auto", display: "flex", msOverflowStyle: "none", scrollbarWidth: "none" }}>
-        {/* Time gutter */}
         <div style={{ width: 64, flexShrink: 0 }}>
           {HOURS.map(h => (
             <div key={h} style={{ height: HOUR_HEIGHT, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 12 }}>
@@ -177,16 +226,14 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
           ))}
         </div>
 
-        {/* Main column */}
         <div ref={colRef} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,0.06)", cursor: "crosshair" }}
-          onMouseDown={handleMouseDown}>
+          onMouseDown={handleSlotMouseDown}>
           {HOURS.map(h => (
             <div key={h} style={{ height: HOUR_HEIGHT, borderBottom: "1px solid rgba(255,255,255,0.04)" }} />
           ))}
 
           {today && <CurrentTimeLine />}
 
-          {/* Create drag preview */}
           {createDrag && (
             <div style={{
               position: "absolute", left: 4, right: 24,
@@ -201,7 +248,6 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
             </div>
           )}
 
-          {/* Move drag preview */}
           {dragState && (
             <div style={{
               position: "absolute", left: 4, right: 24,
@@ -215,7 +261,6 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
             </div>
           )}
 
-          {/* Events */}
           {filteredEvents.map(ev => {
             const { top, height } = getEventPos(ev);
             const colors = EVENT_COLORS[ev.event_type] || EVENT_COLORS.task;
@@ -231,7 +276,6 @@ export default function DayView({ currentDate, events, onSlotClick, onEventClick
                   padding: "6px 12px", cursor: "grab", overflow: "hidden", zIndex: 10
                 }}
                 onMouseDown={(e) => handleEventMouseDown(e, ev)}
-                onClick={(e) => { if (!isDragging) { e.stopPropagation(); onEventClick(e, ev); } }}
               >
                 <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {ev.title}

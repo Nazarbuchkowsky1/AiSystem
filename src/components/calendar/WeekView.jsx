@@ -4,6 +4,7 @@ import { startOfWeek, addDays, format, isSameDay, isToday } from "date-fns";
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const HOUR_HEIGHT = 60;
 const SNAP_MINUTES = 15;
+const DRAG_THRESHOLD = 4;
 
 const EVENT_COLORS = {
   task: { bg: "rgba(249,115,22,0.22)", border: "#f97316", text: "#f97316" },
@@ -44,6 +45,10 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
   const [createDrag, setCreateDrag] = useState(null);
   const createRef = useRef(null);
 
+  // Track whether a real drag happened vs simple click
+  const mouseDownPos = useRef(null);
+  const hasDragged = useRef(false);
+
   useEffect(() => {
     if (scrollRef.current) {
       const now = new Date();
@@ -75,27 +80,21 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
     return Math.max(0, Math.min(6, Math.floor((clientX - rect.left) / colW)));
   }, []);
 
-  // --- Drag to create ---
-  const handleMouseDown = useCallback((e, dayIndex) => {
+  // --- Drag to create (mousedown on empty slot) ---
+  const handleSlotMouseDown = useCallback((e, dayIndex) => {
     if (e.button !== 0) return;
-    const m = getMinFromY(e.clientY);
-    const s = { dayIndex, startMin: m, endMin: m + SNAP_MINUTES, active: true };
-    setCreateDrag(s);
-    createRef.current = s;
-  }, [getMinFromY]);
+    mouseDownPos.current = { x: e.clientX, y: e.clientY, dayIndex };
+    hasDragged.current = false;
+    // Don't start createDrag yet — wait for threshold in mousemove
+  }, []);
 
-  // --- Drag to move ---
+  // --- Drag to move (mousedown on event) ---
   const handleEventMouseDown = useCallback((e, ev, dayIndex) => {
     e.stopPropagation();
     e.preventDefault();
-    const startM = timeToMin(ev.start_time);
-    const endM = timeToMin(ev.end_time || ev.start_time);
-    const dur = (endM - startM) || 60;
-    const clickOffset = getMinFromY(e.clientY) - startM;
-    const s = { event: ev, dayIndex, startMin: startM, duration: dur, clickOffset };
-    setDragState(s);
-    dragRef.current = s;
-  }, [getMinFromY]);
+    mouseDownPos.current = { x: e.clientX, y: e.clientY, isEvent: true, event: ev, dayIndex };
+    hasDragged.current = false;
+  }, []);
 
   // --- Drag to resize ---
   const handleResizeMouseDown = useCallback((e, ev, dayIndex) => {
@@ -106,12 +105,40 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
     const s = { event: ev, dayIndex, startMin: startM, endMin: endM };
     setResizeState(s);
     resizeRef.current = s;
+    hasDragged.current = true; // resize is always a drag
   }, []);
 
   // Global mouse handlers
   useEffect(() => {
     const handleMove = (e) => {
-      // Create drag
+      // Check if we passed the drag threshold
+      if (mouseDownPos.current && !hasDragged.current) {
+        const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+        const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+        if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+          hasDragged.current = true;
+          // Start the appropriate drag
+          if (mouseDownPos.current.isEvent) {
+            const ev = mouseDownPos.current.event;
+            const di = mouseDownPos.current.dayIndex;
+            const startM = timeToMin(ev.start_time);
+            const endM = timeToMin(ev.end_time || ev.start_time);
+            const dur = (endM - startM) || 60;
+            const clickOffset = getMinFromY(mouseDownPos.current.y) - startM;
+            const s = { event: ev, dayIndex: di, startMin: startM, duration: dur, clickOffset };
+            setDragState(s);
+            dragRef.current = s;
+          } else {
+            const di = mouseDownPos.current.dayIndex;
+            const m = getMinFromY(mouseDownPos.current.y);
+            const s = { dayIndex: di, startMin: m, endMin: m + SNAP_MINUTES };
+            setCreateDrag(s);
+            createRef.current = s;
+          }
+        }
+      }
+
+      // Update create drag
       if (createRef.current) {
         const m = getMinFromY(e.clientY);
         const s = createRef.current;
@@ -119,7 +146,7 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
         setCreateDrag(newState);
         createRef.current = newState;
       }
-      // Move drag
+      // Update move drag
       if (dragRef.current) {
         const m = getMinFromY(e.clientY);
         const di = getDayFromX(e.clientX);
@@ -129,7 +156,7 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
         setDragState(newState);
         dragRef.current = newState;
       }
-      // Resize drag
+      // Update resize drag
       if (resizeRef.current) {
         const m = getMinFromY(e.clientY);
         const s = resizeRef.current;
@@ -140,21 +167,24 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
       }
     };
 
-    const handleUp = () => {
-      // End create
-      if (createRef.current) {
+    const handleUp = (e) => {
+      const wasRealDrag = hasDragged.current;
+      const downPos = mouseDownPos.current;
+
+      // End create drag
+      if (createRef.current && wasRealDrag) {
         const { dayIndex, startMin, endMin } = createRef.current;
         const realStart = Math.min(startMin, endMin);
         const realEnd = Math.max(startMin, endMin);
         if (realEnd - realStart >= SNAP_MINUTES) {
-          const dateStr = format(days[dayIndex], "yyyy-MM-dd");
           onSlotClick(days[dayIndex], minToTime(realStart), minToTime(realEnd));
         }
-        setCreateDrag(null);
-        createRef.current = null;
       }
-      // End move
-      if (dragRef.current) {
+      setCreateDrag(null);
+      createRef.current = null;
+
+      // End move drag
+      if (dragRef.current && wasRealDrag) {
         const { event, dayIndex, startMin, duration } = dragRef.current;
         const dateStr = format(days[dayIndex], "yyyy-MM-dd");
         onEventUpdate(event.id, {
@@ -162,25 +192,41 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
           start_time: minToTime(startMin),
           end_time: minToTime(startMin + duration),
         });
-        setDragState(null);
-        dragRef.current = null;
       }
-      // End resize
+      setDragState(null);
+      dragRef.current = null;
+
+      // End resize drag
       if (resizeRef.current) {
         const { event, startMin, endMin } = resizeRef.current;
         onEventUpdate(event.id, {
           start_time: minToTime(startMin),
           end_time: minToTime(endMin),
         });
-        setResizeState(null);
-        resizeRef.current = null;
       }
+      setResizeState(null);
+      resizeRef.current = null;
+
+      // Simple click (no drag) — on slot: open create modal; on event: open event
+      if (!wasRealDrag && downPos) {
+        if (downPos.isEvent) {
+          // Simple click on event — open popover/modal
+          onEventClick(e, downPos.event);
+        } else {
+          // Simple click on slot — open create modal with time pre-filled
+          const m = getMinFromY(downPos.y);
+          onSlotClick(days[downPos.dayIndex], minToTime(m), minToTime(m + 60));
+        }
+      }
+
+      mouseDownPos.current = null;
+      hasDragged.current = false;
     };
 
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [getMinFromY, getDayFromX, days, onSlotClick, onEventUpdate]);
+  }, [getMinFromY, getDayFromX, days, onSlotClick, onEventUpdate, onEventClick]);
 
   const isDragging = !!(createDrag || dragState || resizeState);
 
@@ -229,10 +275,7 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
           {days.map((day, di) => {
             const dayEvents = getEventsForDay(day);
             const today = isToday(day);
-
-            // Check if an event is being moved here
             const movedEvent = dragState && dragState.dayIndex === di ? dragState : null;
-            // Filter out the event being moved from its original day
             const filteredEvents = dragState
               ? dayEvents.filter(ev => ev.id !== dragState.event.id)
               : dayEvents;
@@ -241,9 +284,8 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
               <div
                 key={di}
                 style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,0.04)", cursor: "crosshair" }}
-                onMouseDown={(e) => handleMouseDown(e, di)}
+                onMouseDown={(e) => handleSlotMouseDown(e, di)}
               >
-                {/* Hour lines */}
                 {HOURS.map(h => (
                   <div key={h} style={{ height: HOUR_HEIGHT, borderBottom: "1px solid rgba(255,255,255,0.04)" }} />
                 ))}
@@ -285,7 +327,6 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
                 {filteredEvents.map(ev => {
                   const { top, height } = getEventPos(ev);
                   const colors = EVENT_COLORS[ev.event_type] || EVENT_COLORS.task;
-                  // If resizing this event
                   const isResizing = resizeState && resizeState.event.id === ev.id;
                   const displayTop = isResizing ? (resizeState.startMin / 60) * HOUR_HEIGHT : top;
                   const displayHeight = isResizing ? ((resizeState.endMin - resizeState.startMin) / 60) * HOUR_HEIGHT : height;
@@ -299,7 +340,6 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
                         padding: "3px 6px", cursor: "grab", overflow: "hidden", zIndex: 10
                       }}
                       onMouseDown={(e) => handleEventMouseDown(e, ev, di)}
-                      onClick={(e) => { if (!isDragging) { e.stopPropagation(); onEventClick(e, ev); } }}
                     >
                       <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, lineHeight: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {ev.title}
@@ -309,7 +349,6 @@ export default function WeekView({ currentDate, events, onSlotClick, onEventClic
                           {isResizing ? `${minToTime(resizeState.startMin)} – ${minToTime(resizeState.endMin)}` : `${ev.start_time}${ev.end_time ? ` – ${ev.end_time}` : ""}`}
                         </div>
                       )}
-                      {/* Resize handle */}
                       <div
                         onMouseDown={(e) => handleResizeMouseDown(e, ev, di)}
                         style={{
