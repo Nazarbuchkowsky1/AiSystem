@@ -8,6 +8,11 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
   const [files, setFiles] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
 
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
+    return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
+  }, []);
+
   const handleCreate = async () => {
     if (!name.trim() || files.length === 0 || isLoading || isCreating) return;
     
