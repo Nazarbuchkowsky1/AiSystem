@@ -9,7 +9,7 @@ import EventModal from "../components/calendar/EventModal";
 
 export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState("month");
+  const [view, setView] = useState("week");
   const [showModal, setShowModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -74,7 +74,7 @@ export default function Calendar() {
   const ViewComponent = view === "month" ? MonthView : view === "week" ? WeekView : DayView;
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-hidden">
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <CalendarHeader
         currentDate={currentDate}
         setCurrentDate={setCurrentDate}

@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Clock, AlignLeft, Tag, CalendarDays } from "lucide-react";
 import { format } from "date-fns";
 
-const EVENT_TYPES = ["task", "reminder", "meeting", "activity"];
+const EVENT_TYPES = [
+  { value: "task", label: "Task", color: "#f97316" },
+  { value: "meeting", label: "Meeting", color: "#3b82f6" },
+  { value: "reminder", label: "Reminder", color: "#a855f7" },
+  { value: "activity", label: "Activity", color: "#22c55e" },
+];
 
 export default function EventModal({ event, selectedDate, onSave, onDelete, onClose }) {
   const [form, setForm] = useState({
@@ -13,6 +18,19 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
     description: "",
     event_type: "task",
   });
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
+    return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
+  }, []);
 
   useEffect(() => {
     if (event) {
@@ -25,7 +43,7 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
         event_type: event.event_type || "task",
       });
     } else if (selectedDate) {
-      setForm((f) => ({ ...f, date: format(selectedDate, "yyyy-MM-dd") }));
+      setForm(f => ({ ...f, date: format(selectedDate, "yyyy-MM-dd") }));
     }
   }, [event, selectedDate]);
 
@@ -35,124 +53,182 @@ export default function EventModal({ event, selectedDate, onSave, onDelete, onCl
     onSave(form, event?.id);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}>
-      <div className="glass-panel w-full max-w-md p-6" style={{ border: "1px solid rgba(249,115,22,0.15)" }}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            {event ? "Edit Event" : "New Event"}
-          </h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/5 transition" style={{ color: "var(--text-muted)" }}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+  const currentTypeColor = EVENT_TYPES.find(t => t.value === form.event_type)?.color || "#f97316";
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>Title</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition"
-              style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
-              placeholder="Event title..."
-            />
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
+    background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.08)",
+    color: "#f5f5f5", outline: "none", boxSizing: "border-box",
+    transition: "border-color 0.15s", fontFamily: "inherit"
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)"
+    }} onClick={onClose}>
+      <div style={{
+        background: isMobile ? "#0a0a0a" : "#151515",
+        border: isMobile ? "none" : "1px solid rgba(255,255,255,0.08)",
+        borderRadius: isMobile ? 0 : 12,
+        width: "100%", maxWidth: isMobile ? "100%" : 480,
+        height: isMobile ? "100%" : "auto",
+        maxHeight: isMobile ? "100%" : "90vh",
+        overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none",
+        boxShadow: isMobile ? "none" : "0 25px 50px rgba(0,0,0,0.5)"
+      }} onClick={e => e.stopPropagation()}>
+        
+        {/* Top color bar */}
+        <div style={{ height: 4, background: currentTypeColor, borderRadius: isMobile ? 0 : "12px 12px 0 0" }} />
+        
+        <form onSubmit={handleSubmit} style={{ padding: 24 }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#f5f5f5" }}>
+              {event ? "Edit Event" : "New Event"}
+            </span>
+            <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#666", display: "flex", padding: 6, borderRadius: 8, transition: "all 0.15s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <X style={{ width: 18, height: 18 }} />
+            </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>Date</label>
+          {/* Title */}
+          <input
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Add title"
+            autoFocus
+            style={{
+              ...inputStyle, fontSize: 20, fontWeight: 500,
+              background: "transparent", border: "none",
+              borderBottom: "2px solid rgba(255,255,255,0.08)",
+              borderRadius: 0, padding: "8px 0 12px", marginBottom: 24
+            }}
+            onFocus={e => e.target.style.borderBottomColor = currentTypeColor}
+            onBlur={e => e.target.style.borderBottomColor = "rgba(255,255,255,0.08)"}
+          />
+
+          {/* Date & Time row */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+            <Clock style={{ width: 18, height: 18, color: "#555", marginTop: 10, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
               <input
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)", colorScheme: "dark" }}
+                style={{ ...inputStyle, marginBottom: 8, colorScheme: "dark" }}
+                onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+                onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
               />
-            </div>
-            <div>
-              <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>Start</label>
-              <input
-                type="time"
-                value={form.start_time}
-                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)", colorScheme: "dark" }}
-              />
-            </div>
-            <div>
-              <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>End</label>
-              <input
-                type="time"
-                value={form.end_time}
-                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)", colorScheme: "dark" }}
-              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="time"
+                  value={form.start_time}
+                  onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                  style={{ ...inputStyle, flex: 1, colorScheme: "dark" }}
+                  onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+                  onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
+                />
+                <span style={{ color: "#555", alignSelf: "center", fontSize: 13 }}>–</span>
+                <input
+                  type="time"
+                  value={form.end_time}
+                  onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                  style={{ ...inputStyle, flex: 1, colorScheme: "dark" }}
+                  onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+                  onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
+                />
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>Type</label>
-            <div className="flex gap-2">
-              {EVENT_TYPES.map((t) => (
+          {/* Event Type */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+            <Tag style={{ width: 18, height: 18, color: "#555", marginTop: 6, flexShrink: 0 }} />
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {EVENT_TYPES.map(t => (
                 <button
-                  key={t}
+                  key={t.value}
                   type="button"
-                  onClick={() => setForm({ ...form, event_type: t })}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize"
+                  onClick={() => setForm({ ...form, event_type: t.value })}
                   style={{
-                    background: form.event_type === t ? "var(--accent-dim)" : "var(--bg-secondary)",
-                    color: form.event_type === t ? "var(--accent)" : "var(--text-muted)",
-                    border: `1px solid ${form.event_type === t ? "rgba(249,115,22,0.3)" : "var(--border-subtle)"}`,
+                    padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500,
+                    background: form.event_type === t.value ? t.color : "rgba(255,255,255,0.04)",
+                    color: form.event_type === t.value ? "#fff" : "#888",
+                    border: `1px solid ${form.event_type === t.value ? t.color : "rgba(255,255,255,0.08)"}`,
+                    cursor: "pointer", transition: "all 0.15s"
                   }}
                 >
-                  {t}
+                  {t.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div>
-            <label className="text-xs mb-1.5 block" style={{ color: "var(--text-muted)" }}>Description</label>
+          {/* Description */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 28 }}>
+            <AlignLeft style={{ width: 18, height: 18, color: "#555", marginTop: 10, flexShrink: 0 }} />
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Add description"
               rows={3}
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
-              style={{ background: "var(--bg-secondary)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
-              placeholder="Optional description..."
+              style={{
+                ...inputStyle, resize: "none",
+                overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none"
+              }}
+              onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+              onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"}
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          {/* Actions */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             {event ? (
               <button
                 type="button"
                 onClick={() => onDelete(event.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition hover:bg-red-500/10"
-                style={{ color: "#ef4444" }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
+                  borderRadius: 8, background: "rgba(239,68,68,0.08)",
+                  border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444",
+                  fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all 0.15s"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.15)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.08)"}
               >
-                <Trash2 className="w-3 h-3" /> Delete
+                <Trash2 style={{ width: 14, height: 14 }} /> Delete
               </button>
-            ) : (
-              <div />
-            )}
-            <div className="flex gap-2">
+            ) : <div />}
+            <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs font-medium transition hover:bg-white/5"
-                style={{ color: "var(--text-muted)" }}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+                  background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#aaa", cursor: "pointer", transition: "all 0.15s"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl text-xs font-medium transition hover:opacity-90"
-                style={{ background: "var(--accent)", color: "#fff" }}
+                style={{
+                  padding: "8px 24px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+                  background: currentTypeColor, color: "#fff", border: "none",
+                  cursor: form.title.trim() ? "pointer" : "not-allowed",
+                  opacity: form.title.trim() ? 1 : 0.5, transition: "all 0.15s"
+                }}
+                onMouseEnter={e => { if (form.title.trim()) e.currentTarget.style.opacity = "0.85"; }}
+                onMouseLeave={e => e.currentTarget.style.opacity = form.title.trim() ? "1" : "0.5"}
               >
-                {event ? "Update" : "Create"}
+                {event ? "Save" : "Create"}
               </button>
             </div>
           </div>
