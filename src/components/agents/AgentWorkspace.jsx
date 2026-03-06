@@ -80,7 +80,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
 
-  const MAX_HEIGHT = 188;
+  const MAX_HEIGHT = 188; // ~5 lines of text (5 * 24px line-height + 13px pt + 7px pb = 140px, but 188 gives room)
   const [multiLine, setMultiLine] = useState(false);
 
   useEffect(() => {
@@ -557,10 +557,12 @@ export default function AgentWorkspace({ agent, onBack }) {
               flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box",
               background: "transparent", border: "none", outline: "none", resize: "none",
               fontSize: 16, lineHeight: "24px", color: "#f5f5f5", fontFamily: "inherit",
-              paddingTop: 13, paddingBottom: 7,
+              paddingTop: (multiLine || attachedFiles.length > 0) ? 10 : 0,
+              paddingBottom: (multiLine || attachedFiles.length > 0) ? 4 : 0,
               paddingLeft: (multiLine || attachedFiles.length > 0) ? 16 : 8,
               paddingRight: (multiLine || attachedFiles.length > 0) ? 16 : 8,
-              overflowY: "hidden", overflowX: "hidden", wordBreak: "break-word",
+              overflowX: "hidden", wordBreak: "break-word",
+              scrollbarWidth: "none", msOverflowStyle: "none",
             }}
           />
 
