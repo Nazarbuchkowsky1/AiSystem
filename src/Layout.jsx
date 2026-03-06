@@ -43,6 +43,7 @@ export default function Layout({ children, currentPageName }) {
     <div
       style={{
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         height: "100vh",
         overflow: "hidden",
         background: "#0a0a0a",
@@ -70,7 +71,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile header bar */}
       {isMobile && (
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, height: 52, zIndex: 55,
+          height: 52, flexShrink: 0, position: "relative", zIndex: 55,
           background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
           display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
         }}>
@@ -99,6 +100,7 @@ export default function Layout({ children, currentPageName }) {
         style={{
           position: isMobile ? "fixed" : "relative",
           top: isMobile ? 52 : 0,
+          height: isMobile ? "calc(100vh - 52px)" : undefined,
           left: 0,
           bottom: 0,
           display: "flex",
@@ -272,9 +274,6 @@ export default function Layout({ children, currentPageName }) {
           overflow: "auto",
           background: "#0a0a0a",
           minWidth: 0,
-          paddingTop: isMobile ? 52 : 0,
-          position: "relative",
-          zIndex: 1,
         }}
       >
         {children}
