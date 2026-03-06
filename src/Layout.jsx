@@ -233,7 +233,7 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Bottom Status */}
         <div style={{ padding: 16, flexShrink: 0 }}>
-          {!collapsed && (
+          {(isMobile || !collapsed) && (
             <div
               style={{
                 borderRadius: 12,
