@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
   Loader2, X, FileText, Code2, Check, Trash2
@@ -69,12 +70,14 @@ function SegmentedSpinner() {
 }
 
 export default function AgentWorkspace({ agent, onBack }) {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("instant");
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -354,8 +357,11 @@ export default function AgentWorkspace({ agent, onBack }) {
   };
 
   const loadConversation = async (convo) => {
-    const msgs = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 100);
-    setMessages(msgs.map(m => ({ role: m.role, content: m.content })));
+    const msgs = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 3000);
+    const list = Array.isArray(msgs) ? msgs : [];
+    const chronological = list.map((m) => ({ role: m.role || "user", content: m.content || "" }));
+    setMessages(chronological);
+    setCurrentConversationId(convo.id);
     setShowHistory(false);
   };
 
@@ -427,17 +433,27 @@ export default function AgentWorkspace({ agent, onBack }) {
     setIsLoading(false);
     abortControllerRef.current = null;
 
-    if (messages.length === 0) {
+    if (messages.length === 0 && !currentConversationId) {
       const convo = await base44.entities.Conversation.create({
         agent_id: String(agent.id), agent_name: agent.name,
         title: (userMsg || "File upload").substring(0, 60), mode,
         message_count: 2, last_message_preview: response.substring(0, 100),
       });
-      await base44.entities.Message.bulkCreate([
-        { conversation_id: String(convo.id), role: "user", content: displayContent },
-        { conversation_id: String(convo.id), role: "assistant", content: response },
-      ]);
+      const cid = String(convo.id);
+      await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
+      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response });
+      setCurrentConversationId(convo.id);
       loadHistory();
+      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
+    } else if (currentConversationId) {
+      const cid = String(currentConversationId);
+      await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
+      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response });
+      await base44.entities.Conversation.update(currentConversationId, {
+        last_message_preview: response.substring(0, 100),
+      });
+      loadHistory();
+      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
     }
   };
 
@@ -766,8 +782,8 @@ export default function AgentWorkspace({ agent, onBack }) {
                 <div ref={messagesEndRef} />
               </div>
             </div>
-            <div style={{ padding: "8px 24px 16px", flexShrink: 0 }}>
-              {renderInputBar()}
+            <div style={{ padding: "8px 24px 16px", flexShrink: 0, display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 680 }}>{renderInputBar()}</div>
             </div>
           </>
         )}
