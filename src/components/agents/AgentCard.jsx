@@ -18,10 +18,14 @@ export default function AgentCard({ agent, onClick, onEdit }) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onClick?.()}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }}
       className="glass-panel-hover"
       style={{ padding: 14, textAlign: "left", cursor: "pointer", transition: "all 0.2s", width: "100%", background: "#181818", border: "1px solid #2a2a2a", borderRadius: 14, display: "flex", flexDirection: "column", height: "100%" }}
     >
-      <div onClick={onClick} style={{ flex: 1 }}>
+      <div style={{ flex: 1 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
            <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)", overflow: "hidden", flexShrink: 0 }}>
              {agent.icon_url ? (
@@ -38,10 +42,14 @@ export default function AgentCard({ agent, onClick, onEdit }) {
         <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>{agent.name}</p>
         <p style={{ fontSize: 11, color: "#555", marginBottom: 8, lineHeight: 1.5 }}>{agent.description}</p>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", cursor: "pointer" }}
+        onClick={(e) => { if (!e.target.closest("button")) onClick?.(); }}
+      >
         <span style={{ fontSize: 10, color: "#444" }}>{agent.message_count || 0} messages</span>
         <button
-          onClick={(e) => { e.stopPropagation(); onEdit(agent); }}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onEdit(agent); }}
           style={{
             background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)",
             color: "#f97316", cursor: "pointer", padding: 5, borderRadius: 6,

@@ -88,6 +88,13 @@ async function callGemini(
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
+function hasStructure(text: string): boolean {
+  if (!text || text.length < 80) return true;
+  const hasHeading = /^#{2,3}\s/m.test(text) || text.includes("\n## ") || text.includes("\n### ");
+  const hasList = /^\s*[-*]\s/m.test(text) || /^\s*\d+[.)]\s/m.test(text);
+  return !!(hasHeading || hasList);
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -106,6 +113,19 @@ Deno.serve(async (req) => {
     if (agent.system_instructions) {
       systemParts.push(`\n## Your Instructions:\n${agent.system_instructions}`);
     }
+
+    systemParts.push(`
+## 📋 ФОРМАТ ВІДПОВІДЕЙ
+Your reply is rendered as Markdown. Structure it so it is easy to read — NOT one dense block like Wikipedia.
+
+RULES:
+- Put a BLANK LINE between every paragraph and between sections.
+- Use ## for main sections and ### for subsections (each on its own line, with a blank line before and after).
+- Use bullet lists (- item) or numbered lists (1. 2. 3.) with a blank line before the list and between list groups.
+- Use **bold** for key terms. Keep paragraphs short (2–4 sentences).
+- Never output a continuous wall of text without blank lines and headings.
+
+Content: give ready-to-use copy where useful, and briefly explain why it works.`);
 
     // ─── Collect KB files in one pass ─────────────────────────────────
     type IndexedFile = { name: string; tree: string; doc: any };
@@ -287,10 +307,18 @@ ${retrievedContext}`);
       parts: [{ text: m.content }],
     }));
 
-    const responseText = await callGemini(systemInstruction, geminiContents, {
+    let responseText = await callGemini(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
       maxOutputTokens: mode === "thinking" ? 8192 : 4096,
     });
+
+    if (responseText && !hasStructure(responseText)) {
+      const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
+      responseText = await callGemini(retrySystem, geminiContents, {
+        temperature: mode === "thinking" ? 0.6 : 0.8,
+        maxOutputTokens: mode === "thinking" ? 8192 : 4096,
+      });
+    }
 
     return Response.json({ response: responseText || "I couldn't generate a response. Please try again." });
   } catch (error: any) {
