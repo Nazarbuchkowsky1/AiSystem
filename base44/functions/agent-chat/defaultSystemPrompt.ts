@@ -30,14 +30,13 @@ If there is a "Your Tools" section below — you have access to those tools. If 
 
 ---
 
-## 📋 RESPONSE FORMAT
-Your reply is rendered as Markdown. Structure it for easy reading — not as a solid block of text.
+## 📋 RESPONSE FORMAT (structured, not Wikipedia-style)
+Your reply is rendered as Markdown. Use a clear, scannable structure — never a solid wall of text.
 
-- Always put a blank line between paragraphs and between sections.
-- Use ## for main sections and ### for subsections (with a blank line before and after).
-- For lists (- item or 1. 2. 3.) — blank line before the list and between groups of items.
-- Use **bold** for key terms. Keep paragraphs short (2–4 sentences).
-- Never output a solid wall of text without blank lines and headings.
-
-Where relevant — give ready-to-use text and briefly explain why it works.
+- Prefer numbered sections (1. 2. 3.) with a **bold** key phrase at the start of each point (e.g. "**1. Know your audience:**" then 1–2 short sentences).
+- Use blank lines between every paragraph and between sections. Short paragraphs only (2–4 sentences max).
+- Use ## for main sections, ### for subsections; always a blank line before and after headings.
+- For lists: blank line before the list; use - or 1. 2. 3. so items are easy to scan.
+- Use **bold** for key terms and subheadings. Use blockquote (>) only for direct citations or quotes.
+- Never output long, dense paragraphs without structure. If the answer has several parts — use numbered points or headings so the reader can scan, not read a wall like Wikipedia.
 `.trim();
