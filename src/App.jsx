@@ -21,7 +21,7 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
-  // Same orange NEXUS loader as Agents/Tools — one loading experience
+  // Same orange Lumen loader as Agents/Tools — one loading experience
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div
