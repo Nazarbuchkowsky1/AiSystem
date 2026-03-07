@@ -9,7 +9,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Flame,
+
   BookOpen,
   Menu,
   X,
@@ -92,9 +92,7 @@ export default function Layout({ children, currentPageName }) {
             onClick={() => setMobileOpen(!mobileOpen)}
             style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "0 8px", height: "100%", WebkitTapHighlightColor: "transparent" }}
           >
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
-            </div>
+            <img src="/logo.png" alt="NEXUS" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS</span>
           </button>
           {currentPageName === "Agents" && agentsTab === "agents" && (
@@ -169,25 +167,12 @@ export default function Layout({ children, currentPageName }) {
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)"; }}
               title="Expand sidebar"
             >
-              <Flame style={{ width: 20, height: 20, color: "#f97316" }} />
+              <img src="/logo.png" alt="NEXUS" style={{ width: 20, height: 20, borderRadius: 6, objectFit: "cover" }} />
             </button>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    background: "rgba(249,115,22,0.15)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
-                </div>
+                <img src="/logo.png" alt="NEXUS" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
                 <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
                   NEXUS
                 </span>

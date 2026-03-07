@@ -1,8 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+const INDEXABLE_TYPES = [
+  "txt", "md", "csv", "json", "pdf",
+  "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "cpp", "c", "cs",
+  "java", "php", "swift", "kt", "html", "css", "scss",
+  "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
+];
 
 type PageIndexNode = {
   title: string;
@@ -260,8 +268,7 @@ Deno.serve(async (req) => {
 
     const kb = kbList[0];
     const files = kb.files || [];
-    const indexableTypes = ["txt", "md", "csv", "json"];
-    const indexableFiles = files.filter((f: any) => f.url && indexableTypes.includes(f.type));
+    const indexableFiles = files.filter((f: any) => f.url && INDEXABLE_TYPES.includes(f.type));
 
     if (indexableFiles.length === 0) {
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -287,7 +294,7 @@ Deno.serve(async (req) => {
 
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
-      if (!file.url || !indexableTypes.includes(file.type)) continue;
+      if (!file.url || !INDEXABLE_TYPES.includes(file.type)) continue;
       if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
         completed += 1;
         continue;
@@ -298,7 +305,15 @@ Deno.serve(async (req) => {
         if (!fileResp.ok) {
           throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
         }
-        const text = await fileResp.text();
+
+        let text: string;
+        if (file.type === "pdf") {
+          const arrayBuf = await fileResp.arrayBuffer();
+          const pdfData = await pdf(Buffer.from(arrayBuf));
+          text = pdfData.text || "";
+        } else {
+          text = await fileResp.text();
+        }
 
         const indexDoc = await buildPageIndexForText(text, file.name);
         const finalDoc = indexDoc || buildFallbackTree(text, file.name);

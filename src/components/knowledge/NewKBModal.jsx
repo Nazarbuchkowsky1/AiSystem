@@ -2,11 +2,19 @@ import React, { useState } from "react";
 import { X, Upload, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
+const SUPPORTED_EXTENSIONS = [
+  "pdf","txt","md","csv","json",
+  "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
+  "java","php","swift","kt","html","css","scss",
+  "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+];
+
 export default function NewKBModal({ onClose, onCreate, isLoading }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [rejectedFiles, setRejectedFiles] = useState([]);
 
   React.useEffect(() => {
     window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
@@ -117,13 +125,29 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               )}
               <input
                 type="file"
-                onChange={e => setFiles(Array.from(e.target.files || []).slice(0, 100))}
-                accept=".pdf,.txt,.md,.json,.csv"
+                onChange={e => {
+                  const all = Array.from(e.target.files || []).slice(0, 100);
+                  const accepted = [];
+                  const rejected = [];
+                  for (const f of all) {
+                    const ext = f.name.split(".").pop()?.toLowerCase();
+                    if (ext && SUPPORTED_EXTENSIONS.includes(ext)) accepted.push(f);
+                    else rejected.push(f.name);
+                  }
+                  setFiles(accepted);
+                  setRejectedFiles(rejected);
+                }}
                 multiple
                 style={{ display: "none" }}
               />
             </label>
           </div>
+
+          {rejectedFiles.length > 0 && (
+            <p style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.4 }}>
+              Unsupported format: {rejectedFiles.join(", ")}
+            </p>
+          )}
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onClose} style={{

@@ -102,6 +102,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const waveBarCountRef = useRef(60);
   const waveLevelsRef = useRef([]);
   const recordingMimeRef = useRef("");
+  const lifetimeMessageCountRef = useRef(agent.message_count ?? 0);
 
   const [multiLine, setMultiLine] = useState(false);
 
@@ -110,6 +111,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   }, [messages]);
 
   useEffect(() => { loadHistory(); }, [agent]);
+  useEffect(() => { lifetimeMessageCountRef.current = agent.message_count ?? 0; }, [agent.id, agent.message_count]);
 
   useEffect(() => {
     if (filesScrollRef.current) {
@@ -374,7 +376,6 @@ export default function AgentWorkspace({ agent, onBack }) {
         next.delete(convo.id);
         return next;
       });
-      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
     }, 320);
   };
 
@@ -465,8 +466,11 @@ export default function AgentWorkspace({ agent, onBack }) {
       await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
       await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response });
       setCurrentConversationId(convo.id);
+      const newCount = lifetimeMessageCountRef.current + 1;
+      lifetimeMessageCountRef.current = newCount;
+      await base44.entities.Agent.update(agent.id, { message_count: newCount });
       loadHistory();
-      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     } else if (currentConversationId) {
       const cid = String(currentConversationId);
       await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
@@ -474,8 +478,11 @@ export default function AgentWorkspace({ agent, onBack }) {
       await base44.entities.Conversation.update(currentConversationId, {
         last_message_preview: response.substring(0, 100),
       });
+      const newCount = lifetimeMessageCountRef.current + 1;
+      lifetimeMessageCountRef.current = newCount;
+      await base44.entities.Agent.update(agent.id, { message_count: newCount });
       loadHistory();
-      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     }
   };
 

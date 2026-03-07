@@ -126,7 +126,12 @@ Deno.serve(async (req) => {
               if (treeText) {
                 indexedFiles.push({ name: file.name, tree: treeText, doc: file.index_tree });
               }
-            } else if (file.url && ["txt", "md", "csv", "json"].includes(file.type)) {
+            } else if (file.url && [
+              "txt","md","csv","json","pdf",
+              "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
+              "java","php","swift","kt","html","css","scss",
+              "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+            ].includes(file.type)) {
               unindexedFiles.push({ name: file.name, url: file.url });
             }
           }

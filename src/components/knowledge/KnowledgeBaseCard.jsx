@@ -3,9 +3,17 @@ import { Trash2, Plus, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 
+const SUPPORTED_EXTENSIONS = [
+  "pdf","txt","md","csv","json",
+  "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
+  "java","php","swift","kt","html","css","scss",
+  "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+];
+
 export default function KnowledgeBaseCard({ kb, onSelect }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFileInput, setShowFileInput] = useState(false);
+  const [rejectedFiles, setRejectedFiles] = useState([]);
   const queryClient = useQueryClient();
 
   const handleDeleteKB = async () => {
@@ -15,7 +23,15 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
   };
 
   const handleAddFile = async (e) => {
-    const selectedFiles = Array.from(e.target.files || []).slice(0, 100);
+    const allFiles = Array.from(e.target.files || []).slice(0, 100);
+    const rejected = [];
+    const selectedFiles = allFiles.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (ext && SUPPORTED_EXTENSIONS.includes(ext)) return true;
+      rejected.push(f.name);
+      return false;
+    });
+    setRejectedFiles(rejected);
     if (selectedFiles.length === 0) return;
 
     const updatedFiles = kb.files ? [...kb.files] : [];
@@ -199,7 +215,12 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           )}
         </div>
 
-        {/* File input */}
+        {rejectedFiles.length > 0 && (
+          <p style={{ fontSize: 10, color: "#ef4444", padding: "0 2px" }}>
+            Unsupported: {rejectedFiles.join(", ")}
+          </p>
+        )}
+
         {showFileInput && (
           <label
             style={{
@@ -226,7 +247,6 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
             <input
               type="file"
               onChange={handleAddFile}
-              accept=".pdf,.txt,.md,.json,.csv"
               multiple
               style={{ display: "none" }}
             />

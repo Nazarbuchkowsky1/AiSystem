@@ -2,6 +2,13 @@ import React, { useState, useEffect } from "react";
 import { X, Trash2, Upload, Loader2, FileText } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
+const SUPPORTED_EXTENSIONS = [
+  "pdf","txt","md","csv","json",
+  "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
+  "java","php","swift","kt","html","css","scss",
+  "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+];
+
 function formatFileSize(bytes) {
   if (!bytes) return "";
   if (bytes < 1024) return bytes + " B";
@@ -16,6 +23,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   const [newFiles, setNewFiles] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [removedFileIndexes, setRemovedFileIndexes] = useState(new Set());
+  const [rejectedFiles, setRejectedFiles] = useState([]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
@@ -37,9 +45,17 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   };
 
   const handleAddFiles = (e) => {
-    const selected = Array.from(e.target.files || []);
-    if (selected.length === 0) return;
-    setNewFiles(prev => [...prev, ...selected]);
+    const all = Array.from(e.target.files || []);
+    if (all.length === 0) return;
+    const accepted = [];
+    const rejected = [];
+    for (const f of all) {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (ext && SUPPORTED_EXTENSIONS.includes(ext)) accepted.push(f);
+      else rejected.push(f.name);
+    }
+    setNewFiles(prev => [...prev, ...accepted]);
+    setRejectedFiles(rejected);
     e.target.value = "";
   };
 
@@ -68,7 +84,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
     const updateData = {
       name: name.trim(),
       description: description.trim(),
-      files: filesChanged ? finalFiles.map(f => ({ ...f, processed: false })) : finalFiles,
+      files: finalFiles,
       processing: filesChanged,
     };
 
@@ -154,7 +170,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
                 onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
                 <Upload style={{ width: 12, height: 12 }} />
                 Add Files
-                <input type="file" onChange={handleAddFiles} accept=".pdf,.txt,.md,.json,.csv" multiple style={{ display: "none" }} />
+                <input type="file" onChange={handleAddFiles} multiple style={{ display: "none" }} />
               </label>
             </div>
 
@@ -211,9 +227,14 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
               ))}
             </div>
 
+            {rejectedFiles.length > 0 && (
+              <p style={{ fontSize: 10, color: "#ef4444", marginTop: 8 }}>
+                Unsupported format: {rejectedFiles.join(", ")}
+              </p>
+            )}
             {(removedFileIndexes.size > 0 || newFiles.length > 0) && (
               <p style={{ fontSize: 10, color: "#f97316", marginTop: 8 }}>
-                Files will be reprocessed after saving.
+                New files will be indexed after saving.
               </p>
             )}
           </div>

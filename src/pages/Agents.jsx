@@ -47,28 +47,6 @@ export default function Agents() {
     queryFn: () => base44.entities.Agent.list("-created_date"),
   });
 
-  const { data: agentMessageCounts = {} } = useQuery({
-    queryKey: ["agentMessageCounts"],
-    queryFn: async () => {
-      const [convos, msgs] = await Promise.all([
-        base44.entities.Conversation.list("-created_date", 2000),
-        base44.entities.Message.list("created_date", 5000),
-      ]);
-      const convById = Object.fromEntries((convos || []).map((c) => [String(c.id), c]));
-      const countByAgent = {};
-      for (const m of msgs || []) {
-        if (m.role !== "assistant") continue;
-        const convo = convById[String(m.conversation_id)];
-        if (convo && convo.agent_id) {
-          const aid = String(convo.agent_id);
-          countByAgent[aid] = (countByAgent[aid] || 0) + 1;
-        }
-      }
-      return countByAgent;
-    },
-    enabled: agents.length > 0,
-  });
-
   const { data: knowledgeBases = [] } = useQuery({
     queryKey: ["knowledgeBases"],
     queryFn: () => base44.entities.KnowledgeBase.list("-created_date"),
@@ -192,7 +170,7 @@ export default function Agents() {
             {agents.map((agent) => (
               <AgentCard
                 key={agent.id}
-                agent={{ ...agent, message_count: agentMessageCounts[String(agent.id)] ?? agent.message_count ?? 0 }}
+                agent={agent}
                 onClick={() => setSelectedAgent(agent)}
                 onEdit={(a) => setEditingAgent(a)}
               />
