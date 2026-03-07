@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
-  Loader2, X, FileText, Code2, Check, Trash2
+  Loader2, X, FileText, Code2, Check, Trash2, Copy
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -42,6 +42,24 @@ function blobToBase64(blob) {
 }
 
 const noSelect = { userSelect: "none", WebkitUserSelect: "none", MozUserSelect: "none", msUserSelect: "none" };
+
+function markdownToPlainText(md) {
+  if (!md || typeof md !== "string") return "";
+  let s = md
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/^```\w*\n?|```$/g, "").trim())
+    .replace(/`[^`]+`/g, (m) => m.slice(1, -1))
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^>\s*/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return s;
+}
 
 // Segmented spinner component for finalizing state
 function SegmentedSpinner() {
@@ -86,6 +104,8 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [waveLevels, setWaveLevels] = useState([]);
   const [waveBarCount, setWaveBarCount] = useState(60);
   const [pendingTranscript, setPendingTranscript] = useState(null);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const copiedTimeoutRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -112,6 +132,8 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   useEffect(() => { loadHistory(); }, [agent]);
   useEffect(() => { lifetimeMessageCountRef.current = agent.message_count ?? 0; }, [agent.id, agent.message_count]);
+
+  useEffect(() => () => { if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current); }, []);
 
   useEffect(() => {
     if (filesScrollRef.current) {
@@ -382,7 +404,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const loadConversation = async (convo) => {
     const msgs = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 3000);
     const list = Array.isArray(msgs) ? msgs : [];
-    const chronological = list.map((m) => ({ role: m.role || "user", content: m.content || "" }));
+    const chronological = list.map((m) => ({ role: m.role || "user", content: m.content || "", createdAt: m.created_date || m.created_at }));
     setMessages(chronological);
     setCurrentConversationId(convo.id);
     setShowHistory(false);
@@ -435,7 +457,8 @@ export default function AgentWorkspace({ agent, onBack }) {
       displayContent = userMsg ? `${userMsg}\n\n📎 ${names}` : `📎 ${names}`;
     }
 
-    const newMessages = [...messages, { role: "user", content: displayContent }];
+    const now = new Date().toISOString();
+    const newMessages = [...messages, { role: "user", content: displayContent, createdAt: now }];
     setMessages(newMessages);
     setIsLoading(true);
 
@@ -452,7 +475,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       mode,
     });
     const response = res.data?.response || "Error generating response.";
-    setMessages(prev => [...prev, { role: "assistant", content: response }]);
+    setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
     setIsLoading(false);
     abortControllerRef.current = null;
 
@@ -831,22 +854,44 @@ export default function AgentWorkspace({ agent, onBack }) {
           <>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 24px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: "100%" }}>
-                {messages.map((msg, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                    <div style={{ maxWidth: "75%", minWidth: 0, borderRadius: 18, padding: "10px 16px",
-                      background: msg.role === "user" ? "rgba(249,115,22,0.12)" : "#181818",
-                      border: msg.role === "user" ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
+                {messages.map((msg, i) => {
+                  const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : null;
+                  const isCopied = copiedMessageIndex === i;
+                  const copyMessage = () => {
+                    const plain = markdownToPlainText(msg.content || "");
+                    navigator.clipboard.writeText(plain).then(() => {
+                      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+                      setCopiedMessageIndex(i);
+                      copiedTimeoutRef.current = setTimeout(() => {
+                        setCopiedMessageIndex(null);
+                        copiedTimeoutRef.current = null;
+                      }, 1800);
+                    }).catch(() => {});
+                  };
+                  const isUser = msg.role === "user";
+                  return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
+                    <div style={{ maxWidth: "52%", width: "max-content", minWidth: 0, borderRadius: 18, padding: "10px 16px",
+                      background: isUser ? "rgba(249,115,22,0.12)" : "#181818",
+                      border: isUser ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
                       wordBreak: "break-word", overflowWrap: "break-word" }}>
                       {msg.role === "assistant" ? (
                         <ReactMarkdown className="chat-markdown">
                           {msg.content}
                         </ReactMarkdown>
                       ) : (
-                        <p style={{ fontSize: 14, color: "#f5f5f5", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0 }}>{msg.content}</p>
+                        <p style={{ fontSize: 16, color: "#f5f5f5", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0 }}>{msg.content}</p>
                       )}
                     </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                      {timeStr && <span style={{ fontSize: 12, color: "#555" }}>{timeStr}</span>}
+                      <button type="button" onClick={copyMessage} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: isCopied ? "#f97316" : "#555", display: "flex" }} title={isCopied ? "Copied" : "Copy"}>
+                        {isCopied ? <Check style={{ width: 16, height: 16 }} /> : <Copy style={{ width: 16, height: 16 }} />}
+                      </button>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
                 {isLoading && (
                   <div style={{ display: "flex", justifyContent: "flex-start" }}>
                     <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
@@ -871,12 +916,14 @@ export default function AgentWorkspace({ agent, onBack }) {
         textarea::placeholder { color: #555 !important; }
         textarea::-webkit-scrollbar { display: none; }
         .files-scroll::-webkit-scrollbar { display: none; }
-        .chat-markdown { font-size: 14px; line-height: 1.6; color: #e5e5e5; max-width: 100%; }
+        .chat-markdown { font-size: 16px; line-height: 1.6; color: #e5e5e5; max-width: 100%; }
         .chat-markdown p { margin: 0 0 0.75em; }
         .chat-markdown p:last-child { margin-bottom: 0; }
-        .chat-markdown h2 { font-size: 1.1em; font-weight: 700; color: #f5f5f5; margin: 1em 0 0.5em; line-height: 1.3; }
+        .chat-markdown h1 { font-size: 1.55em; font-weight: 700; color: #f5f5f5; margin: 1em 0 0.5em; line-height: 1.25; }
+        .chat-markdown h1:first-child { margin-top: 0; }
+        .chat-markdown h2 { font-size: 1.4em; font-weight: 700; color: #f5f5f5; margin: 1em 0 0.5em; line-height: 1.3; }
         .chat-markdown h2:first-child { margin-top: 0; }
-        .chat-markdown h3 { font-size: 1em; font-weight: 600; color: #f5f5f5; margin: 0.85em 0 0.4em; line-height: 1.35; }
+        .chat-markdown h3 { font-size: 1.2em; font-weight: 600; color: #f5f5f5; margin: 0.9em 0 0.4em; line-height: 1.35; }
         .chat-markdown ul, .chat-markdown ol { margin: 0.5em 0 0.75em; padding-left: 1.35em; }
         .chat-markdown li { margin: 0.25em 0; }
         .chat-markdown li p { margin: 0; }

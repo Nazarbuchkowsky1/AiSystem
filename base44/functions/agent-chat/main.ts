@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 const GEMINI_MODEL = "gemini-2.0-flash";
@@ -114,18 +115,7 @@ Deno.serve(async (req) => {
       systemParts.push(`\n## Your Instructions:\n${agent.system_instructions}`);
     }
 
-    systemParts.push(`
-## 📋 ФОРМАТ ВІДПОВІДЕЙ
-Your reply is rendered as Markdown. Structure it so it is easy to read — NOT one dense block like Wikipedia.
-
-RULES:
-- Put a BLANK LINE between every paragraph and between sections.
-- Use ## for main sections and ### for subsections (each on its own line, with a blank line before and after).
-- Use bullet lists (- item) or numbered lists (1. 2. 3.) with a blank line before the list and between list groups.
-- Use **bold** for key terms. Keep paragraphs short (2–4 sentences).
-- Never output a continuous wall of text without blank lines and headings.
-
-Content: give ready-to-use copy where useful, and briefly explain why it works.`);
+    systemParts.push(`\n${DEFAULT_AGENT_SYSTEM_PROMPT}`);
 
     // ─── Collect KB files in one pass ─────────────────────────────────
     type IndexedFile = { name: string; tree: string; doc: any };
