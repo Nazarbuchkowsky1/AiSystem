@@ -7,6 +7,7 @@
 html, body, #root {
   background: #0a0a0a !important;
   color: #f5f5f5 !important;
+  overflow-x: hidden !important;
 }
 
 /* Override shadcn CSS variables to dark */
@@ -73,14 +74,18 @@ html, body, #root {
     background: var(--bg-primary);
     color: var(--text-primary);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden !important;
   }
 
+  /* Hide all scrollbars (including horizontal) */
   ::-webkit-scrollbar {
-    width: 0px;
-    height: 0px;
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
   }
   * {
-    scrollbar-width: none;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
   }
 }
 

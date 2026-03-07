@@ -292,7 +292,8 @@ export default function Layout({ children, currentPageName }) {
       <main
         style={{
           flex: 1,
-          overflow: "auto",
+          overflowX: "hidden",
+          overflowY: "auto",
           background: "#0a0a0a",
           minWidth: 0,
         }}

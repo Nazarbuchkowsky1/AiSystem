@@ -78,6 +78,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [deletingConvoIds, setDeletingConvoIds] = useState(new Set());
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -354,6 +355,27 @@ export default function AgentWorkspace({ agent, onBack }) {
   const loadHistory = async () => {
     const convos = await base44.entities.Conversation.filter({ agent_id: String(agent.id) }, "-created_date", 20);
     setConversations(convos);
+  };
+
+  const deleteConversation = (e, convo) => {
+    e.stopPropagation();
+    setDeletingConvoIds((prev) => new Set(prev).add(convo.id));
+    setTimeout(async () => {
+      try {
+        await base44.entities.Conversation.delete(convo.id);
+      } catch (_) {}
+      setConversations((prev) => prev.filter((x) => x.id !== convo.id));
+      if (currentConversationId === convo.id) {
+        setCurrentConversationId(null);
+        setMessages([]);
+      }
+      setDeletingConvoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(convo.id);
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ["agentMessageCounts"] });
+    }, 320);
   };
 
   const loadConversation = async (convo) => {
@@ -719,19 +741,66 @@ export default function AgentWorkspace({ agent, onBack }) {
 
       {/* History Panel */}
       {showHistory && (
-        <div style={{ position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20, background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto" }}>
+        <div style={{ position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20, background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto", overflowX: "hidden" }}>
           <div style={{ padding: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Chat History</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#f97316", marginBottom: 12 }}>Chat History</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {conversations.map(c => (
-                <button key={c.id} onMouseDown={e => e.preventDefault()} onClick={() => loadConversation(c)}
-                  style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, background: "none", border: "1px solid transparent", cursor: "pointer", transition: "all 0.2s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.06)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.15)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "transparent"; }}>
-                  <p style={{ fontSize: 12, fontWeight: 500, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</p>
-                  <p style={{ fontSize: 10, color: "#444", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.last_message_preview}</p>
-                </button>
-              ))}
+              {conversations.map((c) => {
+                const isDeleting = deletingConvoIds.has(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    style={{
+                      overflow: "hidden",
+                      borderRadius: 12,
+                      transition: "transform 0.32s ease-out, opacity 0.32s ease-out",
+                      transform: isDeleting ? "translateX(100%)" : "translateX(0)",
+                      opacity: isDeleting ? 0 : 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "rgba(249,115,22,0.06)",
+                        border: "1px solid rgba(249,115,22,0.15)",
+                        borderRadius: 12,
+                        padding: "10px 12px",
+                        transition: "background 0.2s, border-color 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (isDeleting) return;
+                        e.currentTarget.style.background = "rgba(249,115,22,0.1)";
+                        e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "rgba(249,115,22,0.06)";
+                        e.currentTarget.style.borderColor = "rgba(249,115,22,0.15)";
+                      }}
+                    >
+                      <button
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => loadConversation(c)}
+                        style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 0 }}
+                      >
+                        <p style={{ fontSize: 12, fontWeight: 500, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</p>
+                        <p style={{ fontSize: 10, color: "#444", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.last_message_preview}</p>
+                      </button>
+                      <button
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => deleteConversation(e, c)}
+                        disabled={isDeleting}
+                        style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: "none", border: "none", cursor: isDeleting ? "not-allowed" : "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
+                        onMouseEnter={(e) => { if (!isDeleting) e.currentTarget.style.color = "#ef4444"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = "#555"; }}
+                      >
+                        <Trash2 style={{ width: 14, height: 14 }} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
               {conversations.length === 0 && <p style={{ fontSize: 11, color: "#444", textAlign: "center", padding: 20 }}>No history yet</p>}
             </div>
           </div>
