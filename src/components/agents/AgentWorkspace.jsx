@@ -16,6 +16,8 @@ const BAR_GAP = 3;
 const WAVE_UNIT = BAR_WIDTH + BAR_GAP;
 const SINGLE_LINE_TEXTAREA_HEIGHT = 44;
 const MAX_VISIBLE_TEXTAREA_HEIGHT = 188;
+const INPUT_BAR_EMPTY_MAX_WIDTH = 680;   // empty state + input bar before first message
+const CHAT_CONTENT_MAX_WIDTH = 1020;    // when dialogue started: messages + input bar (~1.5× empty width)
 
 function getFileType(file) {
   if (SUPPORTED_IMAGES.includes(file.type)) return "image";
@@ -741,7 +743,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   return (
     <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 64, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onMouseDown={e => e.preventDefault()} onClick={onBack}
             style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 6, borderRadius: 10, display: "flex", transition: "color 0.2s" }}
@@ -841,7 +843,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {!hasMessages ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
-            <div style={{ textAlign: "center", width: "100%", maxWidth: 680 }}>
+            <div style={{ textAlign: "center", width: "100%", maxWidth: INPUT_BAR_EMPTY_MAX_WIDTH, margin: "0 auto" }}>
               <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                 <Bot style={{ width: 28, height: 28, color: "#f97316" }} />
               </div>
@@ -853,6 +855,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 24px" }}>
+              <div style={{ maxWidth: CHAT_CONTENT_MAX_WIDTH, width: "100%", margin: "0 auto" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: "100%" }}>
                 {messages.map((msg, i) => {
                   const timeStr = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : null;
@@ -871,7 +874,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                   const isUser = msg.role === "user";
                   return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
-                    <div style={{ maxWidth: "52%", width: "max-content", minWidth: 0, borderRadius: 18, padding: "10px 16px",
+                    <div style={{ maxWidth: "68%", width: "max-content", minWidth: 0, borderRadius: 18, padding: "10px 16px",
                       background: isUser ? "rgba(249,115,22,0.12)" : "#181818",
                       border: isUser ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
                       wordBreak: "break-word", overflowWrap: "break-word" }}>
@@ -902,9 +905,10 @@ export default function AgentWorkspace({ agent, onBack }) {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+              </div>
             </div>
             <div style={{ padding: "8px 24px 16px", flexShrink: 0, display: "flex", justifyContent: "center" }}>
-              <div style={{ width: "100%", maxWidth: 680 }}>{renderInputBar()}</div>
+              <div style={{ width: "100%", maxWidth: CHAT_CONTENT_MAX_WIDTH, margin: "0 auto" }}>{renderInputBar()}</div>
             </div>
           </>
         )}
