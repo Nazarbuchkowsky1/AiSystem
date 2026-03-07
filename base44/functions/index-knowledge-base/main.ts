@@ -5,6 +5,9 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI
 const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
+const MAX_PARAGRAPHS_PER_CHUNK = 150;
+const MAX_CHARS_PER_CHUNK = 60000;
+
 const INDEXABLE_TYPES = [
   "txt", "md", "csv", "json", "pdf",
   "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "cpp", "c", "cs",
@@ -69,6 +72,33 @@ Rules:
 - Keep summaries to 1-2 sentences — they should help a retrieval system decide whether this section contains the answer to a query.
 - Extract titles from the document's actual headings where possible. If a section has no clear heading, create a descriptive title.
 - Create as many levels of nesting as the document naturally has — don't flatten a deep structure, don't artificially nest a flat one.`;
+
+function splitParagraphsIntoChunks(paragraphs: string[]): { start: number; end: number }[] {
+  const chunks: { start: number; end: number }[] = [];
+  let start = 0;
+  while (start < paragraphs.length) {
+    let charCount = 0;
+    let count = 0;
+    let end = start;
+    while (end < paragraphs.length && count < MAX_PARAGRAPHS_PER_CHUNK && charCount + paragraphs[end].length <= MAX_CHARS_PER_CHUNK) {
+      charCount += paragraphs[end].length;
+      count += 1;
+      end += 1;
+    }
+    if (end === start) end = start + 1;
+    chunks.push({ start, end });
+    start = end;
+  }
+  return chunks;
+}
+
+function addParagraphOffsetToNode(node: PageIndexNode, offset: number): void {
+  node.start_index += offset;
+  node.end_index += offset;
+  if (node.nodes && node.nodes.length > 0) {
+    for (const child of node.nodes) addParagraphOffsetToNode(child, offset);
+  }
+}
 
 async function buildPageIndexForText(
   text: string,
@@ -173,6 +203,65 @@ async function buildPageIndexForText(
     console.error("Failed to parse Gemini JSON:", e instanceof Error ? e.message : String(e));
     return null;
   }
+}
+
+/** Build PageIndex for large docs by chunking; small docs go to buildPageIndexForText once. */
+async function buildPageIndexWithChunking(
+  text: string,
+  fileName: string
+): Promise<PageIndexDocument | null> {
+  const normalized = (text || "").replace(/\r\n/g, "\n");
+  const paragraphs = normalized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  if (paragraphs.length === 0) return null;
+
+  const totalChars = paragraphs.join("").length;
+  const useChunking = paragraphs.length > MAX_PARAGRAPHS_PER_CHUNK || totalChars > MAX_CHARS_PER_CHUNK;
+
+  if (!useChunking) {
+    return buildPageIndexForText(text, fileName);
+  }
+
+  const chunks = splitParagraphsIntoChunks(paragraphs);
+  const mergedNodes: PageIndexNode[] = [];
+  let docTitle = fileName;
+  let docDescription = "";
+
+  for (const { start, end } of chunks) {
+    const chunkParagraphs = paragraphs.slice(start, end);
+    const chunkText = chunkParagraphs.join("\n\n");
+    const chunkDoc = await buildPageIndexForText(chunkText, fileName);
+    if (!chunkDoc?.root?.nodes?.length) {
+      const fallback = buildFallbackTree(chunkText, fileName);
+      for (const node of fallback.root.nodes || []) {
+        addParagraphOffsetToNode(node, start);
+        mergedNodes.push(node);
+      }
+      if (!docDescription && fallback.doc_description) docDescription = fallback.doc_description;
+    } else {
+      docTitle = chunkDoc.doc_title;
+      if (chunkDoc.doc_description) docDescription = chunkDoc.doc_description;
+      for (const node of chunkDoc.root.nodes) {
+        addParagraphOffsetToNode(node, start);
+        mergedNodes.push(node);
+      }
+    }
+  }
+
+  renumberNodes(mergedNodes);
+
+  return {
+    doc_title: docTitle,
+    doc_description: docDescription || fileName,
+    paragraphs,
+    root: {
+      title: docTitle,
+      node_id: "root",
+      start_index: 0,
+      end_index: paragraphs.length - 1,
+      summary: docDescription || docTitle,
+      nodes: mergedNodes,
+    },
+  };
 }
 
 function renumberNodes(nodes: PageIndexNode[]) {
@@ -315,7 +404,7 @@ Deno.serve(async (req) => {
           text = await fileResp.text();
         }
 
-        const indexDoc = await buildPageIndexForText(text, file.name);
+        const indexDoc = await buildPageIndexWithChunking(text, file.name);
         const finalDoc = indexDoc || buildFallbackTree(text, file.name);
 
         updatedFiles[i] = {
