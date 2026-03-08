@@ -27,6 +27,7 @@ const NAV_ITEMS = [
 export default function Layout({ children, currentPageName }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOverlayClosing, setMobileOverlayClosing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -37,7 +38,14 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   // Close mobile menu on page change
-  useEffect(() => { setMobileOpen(false); }, [currentPageName]);
+  useEffect(() => { setMobileOpen(false); setMobileOverlayClosing(false); }, [currentPageName]);
+
+  // Mobile overlay: wait for fade-out then unmount
+  useEffect(() => {
+    if (!mobileOverlayClosing) return;
+    const id = setTimeout(() => setMobileOverlayClosing(false), 280);
+    return () => clearTimeout(id);
+  }, [mobileOverlayClosing]);
 
   const [agentsTab, setAgentsTab] = useState("agents");
   const [modalOpen, setModalOpen] = useState(false);
@@ -72,12 +80,25 @@ export default function Layout({ children, currentPageName }) {
           from { transform: translateX(0); opacity: 1; }
           to { transform: translateX(-12px); opacity: 0; }
         }
+        @keyframes layoutPageFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `}</style>
       {/* Mobile overlay */}
-      {isMobile && mobileOpen && (
+      {isMobile && (mobileOpen || mobileOverlayClosing) && (
         <div
-          onClick={() => setMobileOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, backdropFilter: "blur(4px)" }}
+          onClick={() => {
+            if (mobileOpen) {
+              setMobileOpen(false);
+              setMobileOverlayClosing(true);
+            }
+          }}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, backdropFilter: "blur(4px)",
+            opacity: mobileOverlayClosing ? 0 : 1,
+            transition: "opacity 0.25s ease-out",
+          }}
         />
       )}
 
@@ -129,7 +150,7 @@ export default function Layout({ children, currentPageName }) {
           flexShrink: 0,
           background: "linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 100%)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
-          transition: isMobile ? "transform 0.3s ease" : "width 0.3s ease, min-width 0.3s ease",
+          transition: isMobile ? "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)" : "width 0.3s ease, min-width 0.3s ease",
           zIndex: isMobile ? 50 : 10,
           transform: isMobile ? (mobileOpen ? "translateX(0)" : "translateX(-100%)") : "none",
         }}
@@ -277,13 +298,27 @@ export default function Layout({ children, currentPageName }) {
       <main
         style={{
           flex: 1,
+          display: "flex",
+          flexDirection: "column",
           overflowX: "hidden",
           overflowY: "auto",
           background: "#0a0a0a",
           minWidth: 0,
+          minHeight: 0,
         }}
       >
-        {children}
+        <div
+          key={currentPageName}
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            animation: "layoutPageFadeIn 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+          }}
+        >
+          {children}
+        </div>
       </main>
     </div>
   );

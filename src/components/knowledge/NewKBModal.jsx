@@ -15,6 +15,24 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
   const [files, setFiles] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
   const [rejectedFiles, setRejectedFiles] = useState([]);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
+
+  React.useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => onClose(), 280);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
+  const handleClose = () => {
+    if (isCreating || closing) return;
+    setClosing(true);
+  };
 
   React.useEffect(() => {
     window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
@@ -47,22 +65,25 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
     setIsCreating(false);
   };
 
+  const show = mounted && !closing;
   return (
     <div style={{
       position: "fixed", inset: 0, background: `rgba(0,0,0,${isCreating ? 0.8 : 0.6})`, display: "flex",
       alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: `blur(${isCreating ? 8 : 4}px)`,
-      transition: "all 0.3s ease"
-    }} onClick={!isCreating ? onClose : undefined}>
+      opacity: show ? 1 : 0,
+      transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+    }} onClick={handleClose}>
       <div style={{
         background: "#181818", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
         padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 20px 25px rgba(0,0,0,0.5)",
-        opacity: isCreating ? 0.3 : 1,
+        opacity: isCreating ? 0.3 : (show ? 1 : 0),
+        transform: show ? "scale(1)" : "scale(0.96)",
         pointerEvents: isCreating ? "none" : "auto",
-        transition: "opacity 0.3s ease"
+        transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>New Knowledge Base</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4 }}>
+          <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4 }}>
             <X style={{ width: 20, height: 20 }} />
           </button>
         </div>

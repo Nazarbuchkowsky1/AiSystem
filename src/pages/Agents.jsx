@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Bot, BookOpen, Loader2 } from "lucide-react";
@@ -18,6 +18,20 @@ export default function Agents() {
   const [currentTab, setCurrentTab] = useState("agents");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const queryClient = useQueryClient();
+
+  const tabContainerRef = useRef(null);
+  const tabRefs = useRef({});
+  const [pillStyle, setPillStyle] = useState({ left: 0, width: 0 });
+
+  useLayoutEffect(() => {
+    const btn = tabRefs.current[currentTab];
+    const container = tabContainerRef.current;
+    if (btn && container) {
+      const cRect = container.getBoundingClientRect();
+      const bRect = btn.getBoundingClientRect();
+      setPillStyle({ left: bRect.left - cRect.left, width: bRect.width });
+    }
+  }, [currentTab]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -100,19 +114,43 @@ export default function Agents() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "auto", flexShrink: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5", flexShrink: 0 }}>Agents</h1>
-          <div style={{ display: "flex", gap: 4, borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", flexShrink: 0 }}>
+          <div ref={tabContainerRef} style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", flexShrink: 0, position: "relative" }}>
+            <div style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: pillStyle.left,
+              width: pillStyle.width,
+              background: "rgba(249,115,22,0.15)",
+              borderRadius: 9,
+              transition: "left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+              zIndex: 0,
+            }} />
             {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(([tab, Icon, label]) => (
-             <button key={tab} onClick={() => setCurrentTab(tab)}
-               style={{
-                 display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
-                 background: currentTab === tab ? "rgba(249,115,22,0.15)" : "transparent",
-                 color: currentTab === tab ? "#f97316" : "#555", border: "none", cursor: "pointer",
-                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                 whiteSpace: "nowrap",
-               }}>
-               <Icon style={{ width: 11, height: 11 }} />
-               {label}
-             </button>
+              <button
+                key={tab}
+                ref={el => { tabRefs.current[tab] = el; }}
+                onClick={() => setCurrentTab(tab)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "5px 12px",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  background: "transparent",
+                  color: currentTab === tab ? "#f97316" : "#555",
+                  border: "none",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  position: "relative",
+                  zIndex: 1,
+                  transition: "color 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+                }}
+              >
+                <Icon style={{ width: 11, height: 11, flexShrink: 0 }} />
+                {label}
+              </button>
             ))}
           </div>
         </div>

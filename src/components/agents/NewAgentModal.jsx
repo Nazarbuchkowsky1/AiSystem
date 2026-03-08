@@ -20,6 +20,24 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
   const [showToolsAsRows, setShowToolsAsRows] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mounted, setMounted] = React.useState(false);
+  const [closing, setClosing] = React.useState(false);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
+
+  React.useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => onClose(), 280);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
+  const handleClose = () => {
+    if (isCreating || closing) return;
+    setClosing(true);
+  };
 
   React.useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -136,11 +154,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     );
   };
 
+  const show = mounted && !closing;
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)"
-    }} onClick={onClose}>
+      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)",
+      opacity: show ? 1 : 0,
+      transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+    }} onClick={handleClose}>
       <div style={{
         background: isMobile ? "#0a0a0a" : "#181818",
         border: isMobile ? "none" : "1px solid rgba(255,255,255,0.06)",
@@ -151,11 +172,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
         maxHeight: isMobile ? "100%" : "90vh",
         overflow: "auto",
         boxShadow: isMobile ? "none" : "0 20px 25px rgba(0,0,0,0.5)",
-        msOverflowStyle: "none", scrollbarWidth: "none"
+        msOverflowStyle: "none", scrollbarWidth: "none",
+        opacity: show ? 1 : 0,
+        transform: show ? "scale(1)" : "scale(0.96)",
+        transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>{isEditing ? "Edit Agent" : "Create New Agent"}</h2>
-          <button onClick={reset} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
+          <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
             <X style={{ width: 20, height: 20 }} />

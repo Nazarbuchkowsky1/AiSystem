@@ -25,6 +25,25 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   const [removedFileIndexes, setRemovedFileIndexes] = useState(new Set());
   const [rejectedFiles, setRejectedFiles] = useState([]);
 
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => onClose(), 280);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
+  const handleClose = () => {
+    if (isSaving || closing) return;
+    setClosing(true);
+  };
+
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("modal-open", { detail: true }));
     return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
@@ -100,22 +119,28 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   };
 
   const visibleExistingFiles = originalFiles.filter((_, i) => !removedFileIndexes.has(i));
+  const show = mounted && !closing;
 
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)"
-    }} onClick={onClose}>
+      alignItems: "center", justifyContent: "center", zIndex: 50, backdropFilter: "blur(4px)",
+      opacity: show ? 1 : 0,
+      transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+    }} onClick={handleClose}>
       <div style={{
         background: "#181818", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16,
         padding: 24, width: "100%", maxWidth: 520, maxHeight: "90vh", overflow: "auto",
-        boxShadow: "0 20px 25px rgba(0,0,0,0.5)", msOverflowStyle: "none", scrollbarWidth: "none"
+        boxShadow: "0 20px 25px rgba(0,0,0,0.5)", msOverflowStyle: "none", scrollbarWidth: "none",
+        opacity: show ? 1 : 0,
+        transform: show ? "scale(1)" : "scale(0.96)",
+        transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Edit Knowledge Base</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
+          <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}
             onMouseLeave={e => e.currentTarget.style.background = "none"}>
             <X style={{ width: 20, height: 20 }} />

@@ -20,6 +20,24 @@ export default function EventModal({ event, selectedDate, prefillTimes, onSave, 
   });
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => onClose(), 280);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
+  const handleClose = () => {
+    if (closing) return;
+    setClosing(true);
+  };
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -68,12 +86,15 @@ export default function EventModal({ event, selectedDate, prefillTimes, onSave, 
     transition: "border-color 0.15s", fontFamily: "inherit"
   };
 
+  const show = mounted && !closing;
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 50, display: "flex",
       alignItems: "center", justifyContent: "center",
-      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)"
-    }} onClick={onClose}>
+      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+      opacity: show ? 1 : 0,
+      transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+    }} onClick={handleClose}>
       <div style={{
         background: isMobile ? "#0a0a0a" : "#151515",
         border: isMobile ? "none" : "1px solid rgba(255,255,255,0.08)",
@@ -82,7 +103,10 @@ export default function EventModal({ event, selectedDate, prefillTimes, onSave, 
         height: isMobile ? "100%" : "auto",
         maxHeight: isMobile ? "100%" : "90vh",
         overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none",
-        boxShadow: isMobile ? "none" : "0 25px 50px rgba(0,0,0,0.5)"
+        boxShadow: isMobile ? "none" : "0 25px 50px rgba(0,0,0,0.5)",
+        opacity: show ? 1 : 0,
+        transform: show ? "scale(1)" : "scale(0.96)",
+        transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
 
         <div style={{ height: 4, background: currentTypeColor, borderRadius: isMobile ? 0 : "12px 12px 0 0" }} />
@@ -95,11 +119,11 @@ export default function EventModal({ event, selectedDate, prefillTimes, onSave, 
             </span>
             <div style={{ display: "flex", gap: 4 }}>
               {event && onDuplicate && (
-                <button type="button" onClick={() => { onDuplicate(event); onClose(); }} title="Duplicate" style={iconBtnStyle}>
+                <button type="button" onClick={() => { onDuplicate(event); handleClose(); }} title="Duplicate" style={iconBtnStyle}>
                   <Copy style={{ width: 16, height: 16 }} />
                 </button>
               )}
-              <button type="button" onClick={onClose} style={iconBtnStyle}>
+              <button type="button" onClick={handleClose} style={iconBtnStyle}>
                 <X style={{ width: 18, height: 18 }} />
               </button>
             </div>
@@ -202,7 +226,7 @@ export default function EventModal({ event, selectedDate, prefillTimes, onSave, 
               </button>
             ) : <div />}
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={onClose}
+              <button type="button" onClick={handleClose}
                 style={{
                   padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 500,
                   background: "transparent", border: "1px solid rgba(255,255,255,0.1)",

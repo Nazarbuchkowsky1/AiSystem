@@ -96,6 +96,8 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [mode, setMode] = useState("instant");
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyPanelClosing, setHistoryPanelClosing] = useState(false);
+  const [historyPanelOpening, setHistoryPanelOpening] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [deletingConvoIds, setDeletingConvoIds] = useState(new Set());
@@ -134,6 +136,23 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   useEffect(() => { loadHistory(); }, [agent]);
   useEffect(() => { lifetimeMessageCountRef.current = agent.message_count ?? 0; }, [agent.id, agent.message_count]);
+
+  // History panel: animate in from right when opening (start at 100%, then transition to 0)
+  useEffect(() => {
+    if (!showHistory || !historyPanelOpening) return;
+    const id = setTimeout(() => setHistoryPanelOpening(false), 30);
+    return () => clearTimeout(id);
+  }, [showHistory, historyPanelOpening]);
+
+  // History panel: wait for close animation then unmount
+  useEffect(() => {
+    if (!historyPanelClosing) return;
+    const id = setTimeout(() => {
+      setShowHistory(false);
+      setHistoryPanelClosing(false);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [historyPanelClosing]);
 
   useEffect(() => () => { if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current); }, []);
 
@@ -386,6 +405,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const deleteConversation = (e, convo) => {
     e.stopPropagation();
     setDeletingConvoIds((prev) => new Set(prev).add(convo.id));
+    const collapseMs = 380;
     setTimeout(async () => {
       try {
         await base44.entities.Conversation.delete(convo.id);
@@ -400,7 +420,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         next.delete(convo.id);
         return next;
       });
-    }, 320);
+    }, collapseMs);
   };
 
   const loadConversation = async (convo) => {
@@ -754,16 +774,36 @@ export default function AgentWorkspace({ agent, onBack }) {
           <span style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5" }}>{agent.name}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => setShowHistory(!showHistory)}
+          <button onMouseDown={e => e.preventDefault()} onClick={() => {
+            if (showHistory && !historyPanelClosing) {
+              setHistoryPanelClosing(true);
+            } else if (!showHistory) {
+              setHistoryPanelClosing(false);
+              setShowHistory(true);
+              setHistoryPanelOpening(true);
+            }
+          }}
             style={{ padding: 7, borderRadius: 10, background: showHistory ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showHistory ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}>
             <Clock style={{ width: 15, height: 15 }} />
           </button>
-          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", position: "relative" }}>
+            {/* Sliding pill background */}
+            <div style={{
+              position: "absolute",
+              left: mode === "instant" ? 0 : "50%",
+              top: 0,
+              bottom: 0,
+              width: "50%",
+              background: "rgba(249,115,22,0.15)",
+              borderRadius: 9,
+              transition: "left 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+              zIndex: 0,
+            }} />
             {[["instant", Zap, "Instant"], ["thinking", Brain, "Thinking"]].map(([val, Icon, label]) => (
               <button key={val} onMouseDown={e => e.preventDefault()} onClick={() => setMode(val)}
                 style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
-                  background: mode === val ? "rgba(249,115,22,0.15)" : "transparent",
-                  color: mode === val ? "#f97316" : "#555", border: "none", cursor: "pointer", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+                  background: "transparent",
+                  color: mode === val ? "#f97316" : "#555", border: "none", cursor: "pointer", transition: "color 0.3s cubic-bezier(0.4, 0, 0.2, 1)", position: "relative", zIndex: 1, flex: 1 }}>
                 <Icon style={{ width: 11, height: 11 }} />{label}
               </button>
             ))}
@@ -772,11 +812,17 @@ export default function AgentWorkspace({ agent, onBack }) {
       </div>
 
       {/* History Panel */}
-      {showHistory && (
-        <div style={{ position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20, background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto", overflowX: "hidden" }}>
+      {(showHistory || historyPanelClosing) && (
+        <div style={{
+          position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20,
+          background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto", overflowX: "hidden",
+          transform: historyPanelClosing ? "translateX(100%)" : (historyPanelOpening ? "translateX(100%)" : "translateX(0)"),
+          opacity: historyPanelClosing ? 0 : 1,
+          transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease-out",
+        }}>
           <div style={{ padding: 16 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: "#f97316", marginBottom: 12 }}>Chat History</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {conversations.map((c) => {
                 const isDeleting = deletingConvoIds.has(c.id);
                 return (
@@ -785,9 +831,10 @@ export default function AgentWorkspace({ agent, onBack }) {
                     style={{
                       overflow: "hidden",
                       borderRadius: 12,
-                      transition: "transform 0.32s ease-out, opacity 0.32s ease-out",
-                      transform: isDeleting ? "translateX(100%)" : "translateX(0)",
+                      maxHeight: isDeleting ? 0 : 120,
                       opacity: isDeleting ? 0 : 1,
+                      marginBottom: isDeleting ? 0 : 4,
+                      transition: "max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-out, margin 0.35s ease-out",
                     }}
                   >
                     <div
@@ -840,10 +887,10 @@ export default function AgentWorkspace({ agent, onBack }) {
       )}
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
         {!hasMessages ? (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
-            <div style={{ textAlign: "center", width: "100%", maxWidth: INPUT_BAR_EMPTY_MAX_WIDTH, margin: "0 auto" }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", minHeight: 0 }}>
+            <div style={{ textAlign: "center", width: "100%", maxWidth: INPUT_BAR_EMPTY_MAX_WIDTH, margin: "0 auto", flexShrink: 0 }}>
               <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                 <Bot style={{ width: 28, height: 28, color: "#f97316" }} />
               </div>
