@@ -762,6 +762,23 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   return (
     <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
+      {/* Click-outside overlay: close history when clicking on main content */}
+      {(showHistory || historyPanelClosing) && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 64,
+            right: 0,
+            bottom: 0,
+            zIndex: 15,
+          }}
+          onClick={() => {
+            if (showHistory && !historyPanelClosing) setHistoryPanelClosing(true);
+          }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 64, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -773,21 +790,9 @@ export default function AgentWorkspace({ agent, onBack }) {
           </button>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5" }}>{agent.name}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => {
-            if (showHistory && !historyPanelClosing) {
-              setHistoryPanelClosing(true);
-            } else if (!showHistory) {
-              setHistoryPanelClosing(false);
-              setShowHistory(true);
-              setHistoryPanelOpening(true);
-            }
-          }}
-            style={{ padding: 7, borderRadius: 10, background: showHistory ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showHistory ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}>
-            <Clock style={{ width: 15, height: 15 }} />
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {/* 1) Instant | Thinking (first) */}
           <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", position: "relative" }}>
-            {/* Sliding pill background */}
             <div style={{
               position: "absolute",
               left: mode === "instant" ? 0 : "50%",
@@ -808,19 +813,47 @@ export default function AgentWorkspace({ agent, onBack }) {
               </button>
             ))}
           </div>
+          {/* 2) Clock (second) */}
+          <button onMouseDown={e => e.preventDefault()} onClick={() => {
+            if (showHistory && !historyPanelClosing) {
+              setHistoryPanelClosing(true);
+            } else if (!showHistory) {
+              setHistoryPanelClosing(false);
+              setShowHistory(true);
+              setHistoryPanelOpening(true);
+            }
+          }}
+            style={{ padding: 7, borderRadius: 10, background: showHistory ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showHistory ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}>
+            <Clock style={{ width: 15, height: 15 }} />
+          </button>
+          {/* 3) Spacer: shrinks in parallel with panel close so buttons slide back together */}
+          <div style={{
+            width: (showHistory && !historyPanelClosing) ? 300 : 0,
+            flexShrink: 0,
+            overflow: "hidden",
+            transition: "width 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+          }} />
         </div>
       </div>
 
-      {/* History Panel */}
+      {/* History Panel — aligned with header (top: 0), part of header row visually */}
       {(showHistory || historyPanelClosing) && (
         <div style={{
-          position: "absolute", right: 0, top: 56, width: 300, height: "calc(100% - 56px)", zIndex: 20,
-          background: "#111", borderLeft: "1px solid rgba(255,255,255,0.06)", overflowY: "auto", overflowX: "hidden",
+          position: "absolute",
+          right: 0,
+          top: 0,
+          width: 300,
+          height: "100%",
+          zIndex: 20,
+          background: "#111",
+          borderLeft: "1px solid rgba(255,255,255,0.06)",
+          overflowY: "auto",
+          overflowX: "hidden",
           transform: historyPanelClosing ? "translateX(100%)" : (historyPanelOpening ? "translateX(100%)" : "translateX(0)"),
           opacity: historyPanelClosing ? 0 : 1,
           transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease-out",
         }}>
-          <div style={{ padding: 16 }}>
+          <div style={{ padding: 16, paddingTop: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: "#f97316", marginBottom: 12 }}>Chat History</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {conversations.map((c) => {
