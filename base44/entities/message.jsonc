@@ -20,6 +20,11 @@
       "items": {
         "type": "string"
       }
+    },
+    "cost": {
+      "type": "number",
+      "default": 0,
+      "description": "API cost in USD for generating this response"
     }
   },
   "required": [

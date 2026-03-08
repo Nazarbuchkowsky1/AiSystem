@@ -1,14 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import React from "react";
 import TOOLS_LIST from "../components/shared/toolsList";
 
 export default function Tools() {
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 150);
-    return () => clearTimeout(t);
-  }, []);
-
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "10px 16px", gap: 12, overflow: "hidden", background: "#0a0a0a" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
@@ -21,26 +14,6 @@ export default function Tools() {
       </div>
 
       <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "auto" }}>
-        {loading && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(10,10,10,0.75)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              zIndex: 10,
-            }}
-          >
-            <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Loader2 style={{ width: 32, height: 32, color: "#f97316", animation: "tools-page-spin 1s linear infinite" }} />
-            </div>
-          </div>
-        )}
-        {!loading && (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
         {TOOLS_LIST.map((tool) => {
           const Icon = tool.icon;
@@ -67,9 +40,7 @@ export default function Tools() {
           );
         })}
       </div>
-        )}
       </div>
-      <style>{`@keyframes tools-page-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

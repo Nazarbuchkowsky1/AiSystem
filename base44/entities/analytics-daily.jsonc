@@ -1,0 +1,19 @@
+{
+  "name": "AnalyticsDaily",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD (UTC)"
+    },
+    "prompts_count": {
+      "type": "number",
+      "default": 0
+    },
+    "spend_dollars": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": ["date"]
+}

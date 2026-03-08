@@ -55,11 +55,14 @@ function extractSectionText(doc: any, selectedNodeIds: string[]): string {
   return sorted.map(i => paragraphs[i]).join("\n\n");
 }
 
+const GEMINI_INPUT_COST_PER_1M = 0.075;
+const GEMINI_OUTPUT_COST_PER_1M = 0.30;
+
 async function callGemini(
   systemText: string,
   contents: any[],
   opts: { temperature?: number; maxOutputTokens?: number; jsonMode?: boolean } = {}
-): Promise<string> {
+): Promise<{ text: string; usage?: { promptTokens: number; outputTokens: number } }> {
   const body: any = {
     system_instruction: { parts: [{ text: systemText }] },
     contents,
@@ -86,7 +89,20 @@ async function callGemini(
   }
 
   const data = await resp.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const um = data?.usageMetadata ?? data?.usage_metadata;
+  let promptTokens = 0;
+  let outputTokens = 0;
+  if (um && typeof um === "object") {
+    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? um.inputTokenCount ?? 0;
+    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? um.outputTokenCount ?? um.output_token_count ?? 0;
+  }
+  if (promptTokens === 0 && outputTokens === 0 && text.length > 0) {
+    outputTokens = Math.max(50, Math.ceil(text.length / 4));
+    promptTokens = 100;
+  }
+  const usage = promptTokens > 0 || outputTokens > 0 ? { promptTokens, outputTokens } : undefined;
+  return { text, usage };
 }
 
 function hasStructure(text: string): boolean {
@@ -189,7 +205,7 @@ Rules:
       let routingSucceeded = false;
 
       try {
-        const routingRaw = await callGemini(routingSystem, routingContents, {
+        const { text: routingRaw } = await callGemini(routingSystem, routingContents, {
           temperature: 0.1,
           maxOutputTokens: 2048,
           jsonMode: true,
@@ -297,20 +313,34 @@ ${retrievedContext}`);
       parts: [{ text: m.content }],
     }));
 
-    let responseText = await callGemini(systemInstruction, geminiContents, {
+    const res = await callGemini(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
       maxOutputTokens: mode === "thinking" ? 8192 : 4096,
     });
+    let responseText = res.text;
+
+    let totalPromptTokens = res.usage?.promptTokens ?? 0;
+    let totalOutputTokens = res.usage?.outputTokens ?? 0;
 
     if (responseText && !hasStructure(responseText)) {
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
-      responseText = await callGemini(retrySystem, geminiContents, {
+      const retryRes = await callGemini(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
         maxOutputTokens: mode === "thinking" ? 8192 : 4096,
       });
+      responseText = retryRes.text;
+      totalPromptTokens += retryRes.usage?.promptTokens ?? 0;
+      totalOutputTokens += retryRes.usage?.outputTokens ?? 0;
     }
 
-    return Response.json({ response: responseText || "I couldn't generate a response. Please try again." });
+    const cost =
+      (totalPromptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M +
+      (totalOutputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M;
+
+    return Response.json({
+      response: responseText || "I couldn't generate a response. Please try again.",
+      cost: Math.round(cost * 1e8) / 1e8,
+    });
   } catch (error: any) {
     console.error("agentChat error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });

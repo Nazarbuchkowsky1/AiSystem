@@ -1,29 +1,29 @@
 import React from "react";
-import { useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { pagesConfig } from "@/pages.config";
 
-const mainPageKey = pagesConfig.mainPage ?? Object.keys(pagesConfig.Pages || {})[0];
-
+// Single initial load: fetch analytics, agents, and KB once so Analytics/Agents/Tools open without a second loader
 export default function AgentsPreloadGuard({ children }) {
-  const { pathname } = useLocation();
-  const isAgentsRoute = pathname === "/Agents" || (pathname === "/" && mainPageKey === "Agents");
+  const { isLoading: analyticsLoading } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => base44.functions.invoke("getAnalytics", {}).then((r) => r?.data ?? {}),
+    staleTime: 60 * 1000,
+  });
 
   const { isLoading: agentsLoading } = useQuery({
     queryKey: ["agents"],
     queryFn: () => base44.entities.Agent.list("-created_date"),
-    enabled: isAgentsRoute,
+    staleTime: 60 * 1000,
   });
 
   const { isLoading: kbLoading } = useQuery({
     queryKey: ["knowledgeBases"],
     queryFn: () => base44.entities.KnowledgeBase.list("-created_date"),
-    enabled: isAgentsRoute,
+    staleTime: 60 * 1000,
   });
 
-  const preloading = isAgentsRoute && (agentsLoading || kbLoading);
+  const preloading = analyticsLoading || agentsLoading || kbLoading;
 
   if (preloading) {
     return (

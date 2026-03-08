@@ -29,13 +29,13 @@ export default function Layout({ children, currentPageName }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileOverlayClosing, setMobileOverlayClosing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
 
   // Close mobile menu on page change
   useEffect(() => { setMobileOpen(false); setMobileOverlayClosing(false); }, [currentPageName]);

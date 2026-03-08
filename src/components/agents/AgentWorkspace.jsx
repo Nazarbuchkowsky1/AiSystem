@@ -497,6 +497,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       mode,
     });
     const response = res.data?.response || "Error generating response.";
+    const responseCost = Number(res.data?.cost) || 0;
     setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
     setIsLoading(false);
     abortControllerRef.current = null;
@@ -509,23 +510,25 @@ export default function AgentWorkspace({ agent, onBack }) {
       });
       const cid = String(convo.id);
       await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
-      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response });
+      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response, cost: responseCost });
       setCurrentConversationId(convo.id);
       const newCount = lifetimeMessageCountRef.current + 1;
       lifetimeMessageCountRef.current = newCount;
       await base44.entities.Agent.update(agent.id, { message_count: newCount });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       loadHistory();
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     } else if (currentConversationId) {
       const cid = String(currentConversationId);
       await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
-      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response });
+      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response, cost: responseCost });
       await base44.entities.Conversation.update(currentConversationId, {
         last_message_preview: response.substring(0, 100),
       });
       const newCount = lifetimeMessageCountRef.current + 1;
       lifetimeMessageCountRef.current = newCount;
       await base44.entities.Agent.update(agent.id, { message_count: newCount });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       loadHistory();
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     }

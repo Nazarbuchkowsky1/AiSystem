@@ -4,9 +4,12 @@ import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 const GEMINI_MODEL = "gemini-2.0-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_INPUT_COST_PER_1M = 0.075;
+const GEMINI_OUTPUT_COST_PER_1M = 0.30;
 
-const MAX_PARAGRAPHS_PER_CHUNK = 150;
-const MAX_CHARS_PER_CHUNK = 60000;
+const MAX_PARAGRAPHS_PER_CHUNK = 120;
+const MAX_CHARS_PER_CHUNK = 50000;
+const MAX_PARAGRAPH_LENGTH = 4000;
 
 const INDEXABLE_TYPES = [
   "txt", "md", "csv", "json", "pdf",
@@ -14,6 +17,20 @@ const INDEXABLE_TYPES = [
   "java", "php", "swift", "kt", "html", "css", "scss",
   "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
 ];
+
+async function recordIndexingCost(base44: any, kbName: string, dollars: number): Promise<void> {
+  if (dollars <= 0) return;
+  try {
+    await base44.asServiceRole.entities.Message.create({
+      conversation_id: "__kb_indexing__",
+      role: "assistant",
+      content: `Knowledge Base indexing: ${kbName}`,
+      cost: Math.round(dollars * 1e8) / 1e8,
+    });
+  } catch (e) {
+    console.error("KB cost record error:", e);
+  }
+}
 
 type PageIndexNode = {
   title: string;
@@ -73,6 +90,44 @@ Rules:
 - Extract titles from the document's actual headings where possible. If a section has no clear heading, create a descriptive title.
 - Create as many levels of nesting as the document naturally has — don't flatten a deep structure, don't artificially nest a flat one.`;
 
+function smartSplitText(raw: string): string[] {
+  const normalized = raw.replace(/\r\n/g, "\n");
+
+  let paragraphs = normalized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+
+  if (paragraphs.length <= 3 || paragraphs.some((p) => p.length > MAX_PARAGRAPH_LENGTH * 2)) {
+    paragraphs = normalized.split(/\n/).filter((p) => p.trim().length > 0);
+  }
+
+  const result: string[] = [];
+  for (const p of paragraphs) {
+    if (p.length <= MAX_PARAGRAPH_LENGTH) {
+      result.push(p);
+    } else {
+      const sentences = p.split(/(?<=[.!?])\s+/);
+      let buf = "";
+      for (const s of sentences) {
+        if (buf.length + s.length + 1 > MAX_PARAGRAPH_LENGTH && buf.length > 0) {
+          result.push(buf);
+          buf = s;
+        } else {
+          buf = buf ? buf + " " + s : s;
+        }
+      }
+      if (buf.length > 0) {
+        if (buf.length > MAX_PARAGRAPH_LENGTH) {
+          for (let i = 0; i < buf.length; i += MAX_PARAGRAPH_LENGTH) {
+            result.push(buf.slice(i, i + MAX_PARAGRAPH_LENGTH));
+          }
+        } else {
+          result.push(buf);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function splitParagraphsIntoChunks(paragraphs: string[]): { start: number; end: number }[] {
   const chunks: { start: number; end: number }[] = [];
   let start = 0;
@@ -103,20 +158,19 @@ function addParagraphOffsetToNode(node: PageIndexNode, offset: number): void {
 async function buildPageIndexForText(
   text: string,
   fileName: string
-): Promise<PageIndexDocument | null> {
+): Promise<{ doc: PageIndexDocument | null; cost: number }> {
   if (!GEMINI_API_KEY) {
     console.error("No Gemini API key configured");
-    return null;
+    return { doc: null, cost: 0 };
   }
 
   if (!text || text.trim().length === 0) {
-    return null;
+    return { doc: null, cost: 0 };
   }
 
-  const normalized = text.replace(/\r\n/g, "\n");
-  const paragraphs = normalized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  const paragraphs = smartSplitText(text);
 
-  if (paragraphs.length === 0) return null;
+  if (paragraphs.length === 0) return { doc: null, cost: 0 };
 
   const taggedText = paragraphs
     .map((p, i) => `<paragraph_${i}>\n${p}\n</paragraph_${i}>`)
@@ -143,15 +197,31 @@ async function buildPageIndexForText(
   if (!resp.ok) {
     const errText = await resp.text();
     console.error(`Gemini API ${resp.status}: ${errText}`);
-    return null;
+    return { doc: null, cost: 0 };
   }
 
   const data = await resp.json();
+
+  const um = data?.usageMetadata ?? data?.usage_metadata;
+  let promptTokens = 0;
+  let outputTokens = 0;
+  if (um && typeof um === "object") {
+    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? um.inputTokenCount ?? 0;
+    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? um.outputTokenCount ?? um.output_token_count ?? 0;
+  }
+
   const finishReason = data?.candidates?.[0]?.finishReason;
   let textOut: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (promptTokens === 0 && outputTokens === 0) {
+    promptTokens = Math.max(100, Math.ceil(userPrompt.length / 4));
+    outputTokens = textOut ? Math.max(50, Math.ceil(textOut.length / 4)) : 50;
+  }
+  const cost = (promptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M + (outputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M;
+
   if (!textOut) {
     console.error(`Gemini returned empty response (finishReason: ${finishReason || "unknown"})`);
-    return null;
+    return { doc: null, cost };
   }
 
   textOut = textOut.trim();
@@ -181,12 +251,12 @@ async function buildPageIndexForText(
 
     if (!structure || structure.length === 0) {
       console.error("Gemini returned valid JSON but no recognizable tree structure");
-      return null;
+      return { doc: null, cost };
     }
 
     renumberNodes(structure);
 
-    return {
+    const doc: PageIndexDocument = {
       doc_title: docTitle,
       doc_description: docDescription,
       paragraphs,
@@ -199,9 +269,10 @@ async function buildPageIndexForText(
         nodes: structure,
       },
     };
+    return { doc, cost };
   } catch (e) {
     console.error("Failed to parse Gemini JSON:", e instanceof Error ? e.message : String(e));
-    return null;
+    return { doc: null, cost };
   }
 }
 
@@ -209,10 +280,9 @@ async function buildPageIndexForText(
 async function buildPageIndexWithChunking(
   text: string,
   fileName: string
-): Promise<PageIndexDocument | null> {
-  const normalized = (text || "").replace(/\r\n/g, "\n");
-  const paragraphs = normalized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
-  if (paragraphs.length === 0) return null;
+): Promise<{ doc: PageIndexDocument | null; cost: number }> {
+  const paragraphs = smartSplitText(text || "");
+  if (paragraphs.length === 0) return { doc: null, cost: 0 };
 
   const totalChars = paragraphs.join("").length;
   const useChunking = paragraphs.length > MAX_PARAGRAPHS_PER_CHUNK || totalChars > MAX_CHARS_PER_CHUNK;
@@ -225,11 +295,14 @@ async function buildPageIndexWithChunking(
   const mergedNodes: PageIndexNode[] = [];
   let docTitle = fileName;
   let docDescription = "";
+  let totalCost = 0;
 
   for (const { start, end } of chunks) {
     const chunkParagraphs = paragraphs.slice(start, end);
     const chunkText = chunkParagraphs.join("\n\n");
-    const chunkDoc = await buildPageIndexForText(chunkText, fileName);
+    const chunkResult = await buildPageIndexForText(chunkText, fileName);
+    totalCost += chunkResult.cost;
+    const chunkDoc = chunkResult.doc;
     if (!chunkDoc?.root?.nodes?.length) {
       const fallback = buildFallbackTree(chunkText, fileName);
       for (const node of fallback.root.nodes || []) {
@@ -249,7 +322,7 @@ async function buildPageIndexWithChunking(
 
   renumberNodes(mergedNodes);
 
-  return {
+  const doc: PageIndexDocument = {
     doc_title: docTitle,
     doc_description: docDescription || fileName,
     paragraphs,
@@ -262,6 +335,7 @@ async function buildPageIndexWithChunking(
       nodes: mergedNodes,
     },
   };
+  return { doc, cost: totalCost };
 }
 
 function renumberNodes(nodes: PageIndexNode[]) {
@@ -279,8 +353,7 @@ function renumberNodes(nodes: PageIndexNode[]) {
 }
 
 function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
-  const normalized = (text || "").replace(/\r\n/g, "\n");
-  const paragraphs = normalized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  const paragraphs = smartSplitText(text || "");
 
   if (paragraphs.length === 0) {
     return {
@@ -380,6 +453,7 @@ Deno.serve(async (req) => {
     let indexed = false;
     let completed = 0;
     const errors: string[] = [];
+    let totalKbCost = 0;
 
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
@@ -404,8 +478,9 @@ Deno.serve(async (req) => {
           text = await fileResp.text();
         }
 
-        const indexDoc = await buildPageIndexWithChunking(text, file.name);
-        const finalDoc = indexDoc || buildFallbackTree(text, file.name);
+        const indexResult = await buildPageIndexWithChunking(text, file.name);
+        const finalDoc = indexResult.doc || buildFallbackTree(text, file.name);
+        totalKbCost += indexResult.cost;
 
         updatedFiles[i] = {
           ...file,
@@ -440,7 +515,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    return Response.json({ ok: true, indexed });
+    if (totalKbCost > 0) {
+      await recordIndexingCost(base44, kb.name || "KB", totalKbCost);
+    }
+
+    return Response.json({ ok: true, indexed, cost: totalKbCost });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("indexKnowledgeBase fatal error:", msg);
