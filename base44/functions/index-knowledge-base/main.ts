@@ -1,18 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 
-// ─── Kimi K2.5 (Moonshot AI) configuration ────────────────────────────────────
+// ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
 const KIMI_API_KEY =
+  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_API_KEY") ||
   Deno.env.get("KIMI_K2_5") ||
   Deno.env.get("KIMI_K2.5") ||
   Deno.env.get("kimi-k2.5") ||
-  Deno.env.get("MOONSHOT_API_KEY") ||
   "";
-const KIMI_MODEL = "kimi-k2.5";
-const KIMI_URL = "https://api.moonshot.cn/v1/chat/completions";
-const KIMI_INPUT_COST_PER_1M = 0.60;
-const KIMI_OUTPUT_COST_PER_1M = 3.0;
+const KIMI_MODEL = "moonshotai/kimi-k2.5";
+const KIMI_URL = "https://openrouter.ai/api/v1/chat/completions";
+const KIMI_INPUT_COST_PER_1M = 0.45;
+const KIMI_OUTPUT_COST_PER_1M = 2.20;
 
 const MAX_PARAGRAPHS_PER_CHUNK = 120;
 const MAX_CHARS_PER_CHUNK = 50000;

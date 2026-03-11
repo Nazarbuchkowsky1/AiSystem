@@ -1,18 +1,23 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import TranscriptClient from 'npm:youtube-transcript-api';
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
 
-// ─── Kimi K2.5 (Moonshot AI) configuration ────────────────────────────────────
-// Prefer explicit Kimi env vars, but also fall back to the secret id the user
-// configured in Base44 ("kimi-k2.5") to make wiring robust.
+// ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
+// Prefer the standard OpenRouter key, but also fall back to the specific
+// Kimi-related secrets you configured in Base44 ("kimi-k2.5").
 const KIMI_API_KEY =
+  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_API_KEY") ||
   Deno.env.get("KIMI_K2_5") ||
   Deno.env.get("KIMI_K2.5") ||
   Deno.env.get("kimi-k2.5") ||
-  Deno.env.get("MOONSHOT_API_KEY") ||
   "";
-const KIMI_MODEL = "kimi-k2.5";
-const KIMI_URL = "https://api.moonshot.cn/v1/chat/completions";
+const KIMI_MODEL = "moonshotai/kimi-k2.5";
+const KIMI_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// Reuse a single YouTube transcript client instance (from
+// https://github.com/0x6a69616e/youtube-transcript-api) across requests.
+const ytTranscriptClient: any = new (TranscriptClient as any)();
 
 function formatTreeForRouting(doc: any, fileName: string): string {
   if (!doc || !doc.root) return "";
@@ -64,9 +69,9 @@ function extractSectionText(doc: any, selectedNodeIds: string[]): string {
   return sorted.map(i => paragraphs[i]).join("\n\n");
 }
 
-// Official Moonshot Kimi K2.5 pricing (USD per 1M tokens).
-const KIMI_INPUT_COST_PER_1M = 0.60;
-const KIMI_OUTPUT_COST_PER_1M = 3.0;
+// OpenRouter pricing for moonshotai/kimi-k2.5 (USD per 1M tokens).
+const KIMI_INPUT_COST_PER_1M = 0.45;
+const KIMI_OUTPUT_COST_PER_1M = 2.20;
 
 // ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
 
@@ -94,6 +99,94 @@ function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: st
 }
 
 async function fetchYouTubeTranscript(videoId: string) {
+  // 1) Try github.com/0x6a69616e/youtube-transcript-api (npm:youtube-transcript-api)
+  //    which talks to youtube-transcript.io under the hood and is quite robust.
+  try {
+    if (ytTranscriptClient?.ready) {
+      await ytTranscriptClient.ready;
+    }
+    const result = await ytTranscriptClient.getTranscript(videoId);
+    if (result && Array.isArray(result.tracks) && result.tracks.length > 0) {
+      const track = result.tracks[0];
+      const segments: any[] = Array.isArray(track.transcript) ? track.transcript : [];
+      const text = segments.map((s) => s.text).join(" ").trim();
+      if (text.length > 0) {
+        return {
+          title: result.title || "YouTube Video",
+          videoId,
+          language: track.language || "unknown",
+          transcript: text,
+          lineCount: segments.length,
+        };
+      }
+    }
+  } catch (e) {
+    console.error("youtube-transcript-api error, falling back to TubeText:", e);
+  }
+
+  // 2) Try free TubeText API (fast, JSON, no auth).
+  try {
+    const apiUrl = `https://tubetext.vercel.app/youtube/transcript?video_id=${videoId}`;
+    const apiRes = await fetch(apiUrl, {
+      headers: {
+        "User-Agent": "LumenAgents/1.0 (+https://openrouter.ai/)",
+      },
+    });
+    if (apiRes.ok) {
+      const json: any = await apiRes.json();
+      if (json?.success && json.data) {
+        const d = json.data;
+        const transcriptArray: string[] = Array.isArray(d.transcript) ? d.transcript : [];
+        const fullText: string =
+          typeof d.full_text === "string" && d.full_text.trim().length > 0
+            ? d.full_text
+            : transcriptArray.join(" ");
+        if (fullText && fullText.trim().length > 0) {
+          return {
+            title: d.details?.title || "YouTube Video",
+            videoId,
+            language: "unknown",
+            transcript: fullText.trim(),
+            lineCount: transcriptArray.length || fullText.split(/\s+/).length,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("TubeText API error, falling back to HTML scraper:", e);
+  }
+
+  // 3) Second fallback: public FastAPI service youtube-transcript-api-tau-one.vercel.app
+  try {
+    const tauUrl = "https://youtube-transcript-api-tau-one.vercel.app/transcript";
+    const tauRes = await fetch(tauUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "LumenAgents/1.0 (+https://openrouter.ai/)",
+      },
+      body: JSON.stringify({
+        video_url: `https://www.youtube.com/watch?v=${videoId}`,
+      }),
+    });
+    if (tauRes.ok) {
+      const json: any = await tauRes.json();
+      const t = (json?.transcript || "").toString().trim();
+      if (t.length > 0) {
+        return {
+          title: json?.title || "YouTube Video",
+          videoId,
+          language: json?.language || "unknown",
+          transcript: t,
+          lineCount: t.split(/\s+/).length,
+        };
+      }
+    }
+  } catch (e) {
+    console.error("Tau-one YouTube transcript API error, falling back to HTML scraper:", e);
+  }
+
+  // 4) Final fallback: direct HTML + captionTracks scraping from YouTube.
   const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const res = await fetch(pageUrl, {
     headers: {
@@ -119,7 +212,9 @@ async function fetchYouTubeTranscript(videoId: string) {
 
   let track =
     captionTracks.find((t: any) => t.languageCode === "en" && t.kind !== "asr") ||
+    captionTracks.find((t: any) => t.languageCode === "uk" && t.kind !== "asr") ||
     captionTracks.find((t: any) => t.languageCode === "en") ||
+    captionTracks.find((t: any) => t.languageCode === "uk") ||
     captionTracks.find((t: any) => t.kind !== "asr") ||
     captionTracks[0];
 
@@ -351,9 +446,9 @@ Rules:
       let routingSucceeded = false;
 
       try {
-        const { text: routingRaw } = await callGemini(routingSystem, routingContents, {
+        const { text: routingRaw } = await callKimi(routingSystem, routingContents, {
           temperature: 0.1,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024,
           jsonMode: true,
         });
 
@@ -504,7 +599,8 @@ ${retrievedContext}`);
             ? agent.knowledge_base_ids.map(String)
             : [];
 
-        // Try to detect specific KB name, e.g. "add to knowledge base Sales" or "створи нову базу знань Planning"
+        // Try to detect specific KB name, e.g. "add to knowledge base Sales"
+        // or "Створи нову базу знань Planning і завантаж..."
           let explicitKbName: string | null = null;
         const kbNameMatchAdd =
           lastText.match(/(?:to|into)\s+(?:knowledge base|KB)\s+["“]?([^"\n]+)["”]?/i) ||
@@ -512,10 +608,16 @@ ${retrievedContext}`);
         const kbNameMatchCreate =
           lastText.match(/create(?:\s+new)?\s+knowledge base\s+["“]?([^"\n]+)["”]?/i) ||
           lastText.match(/створ(?:и|іть)\s+нову?\s+баз[ау] знань\s+["“]?([^"\n]+)["”]?/i);
+
+        const cleanKbName = (raw: string) =>
+          raw
+            .split(/(?:\s+і\s+|\s+and\s+|,|\.|;|:|\n)/i)[0]
+            .trim();
+
         if (kbNameMatchAdd?.[1]) {
-          explicitKbName = kbNameMatchAdd[1].trim();
+          explicitKbName = cleanKbName(kbNameMatchAdd[1]);
         } else if (kbNameMatchCreate?.[1]) {
-          explicitKbName = kbNameMatchCreate[1].trim();
+          explicitKbName = cleanKbName(kbNameMatchCreate[1]);
         }
 
           let targetKbId: string | null = null;
@@ -686,18 +788,18 @@ ${retrievedContext}`);
 
     const res = await callKimi(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
-      maxOutputTokens: mode === "thinking" ? 8192 : 4096,
+      maxOutputTokens: mode === "thinking" ? 8192 : 2048,
     });
     let responseText = res.text;
 
     let totalPromptTokens = res.usage?.promptTokens ?? 0;
     let totalOutputTokens = res.usage?.outputTokens ?? 0;
 
-    if (responseText && !hasStructure(responseText)) {
+    if (mode === "thinking" && responseText && !hasStructure(responseText)) {
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
       const retryRes = await callKimi(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
-        maxOutputTokens: mode === "thinking" ? 8192 : 4096,
+        maxOutputTokens: mode === "thinking" ? 8192 : 2048,
       });
       responseText = retryRes.text;
       totalPromptTokens += retryRes.usage?.promptTokens ?? 0;

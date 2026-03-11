@@ -486,6 +486,44 @@ export default function AgentWorkspace({ agent, onBack }) {
 
     abortControllerRef.current = new AbortController();
 
+    // Ensure there is a Conversation + user Message persisted immediately so
+    // that chat history shows this thread even while the AI is still thinking.
+    let cid = currentConversationId ? String(currentConversationId) : null;
+    let createdNewConversation = false;
+
+    if (!cid) {
+      const convo = await base44.entities.Conversation.create({
+        agent_id: String(agent.id),
+        agent_name: agent.name,
+        title: (userMsg || "File upload").substring(0, 60),
+        mode,
+        message_count: 1,
+        last_message_preview: displayContent.substring(0, 100),
+      });
+      cid = String(convo.id);
+      createdNewConversation = true;
+      setCurrentConversationId(convo.id);
+      setConversations(prev => [convo, ...prev]);
+    } else {
+      try {
+        await base44.entities.Conversation.update(cid, {
+          last_message_preview: displayContent.substring(0, 100),
+        });
+      } catch (e) {
+        console.error("Conversation preview update error:", e);
+      }
+    }
+
+    try {
+      await base44.entities.Message.create({
+        conversation_id: cid,
+        role: "user",
+        content: displayContent,
+      });
+    } catch (e) {
+      console.error("Failed to persist user message:", e);
+    }
+
     // Upload any attached files so agent-chat can optionally expand a KB with them.
     const fileSources = [];
     if (filesToSend.length > 0) {
@@ -524,36 +562,33 @@ export default function AgentWorkspace({ agent, onBack }) {
     setIsLoading(false);
     abortControllerRef.current = null;
 
-    if (messages.length === 0 && !currentConversationId) {
-      const convo = await base44.entities.Conversation.create({
-        agent_id: String(agent.id), agent_name: agent.name,
-        title: (userMsg || "File upload").substring(0, 60), mode,
-        message_count: 2, last_message_preview: response.substring(0, 100),
-      });
-      const cid = String(convo.id);
-      await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
-      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response, cost: responseCost });
-      setCurrentConversationId(convo.id);
-      const newCount = lifetimeMessageCountRef.current + 1;
-      lifetimeMessageCountRef.current = newCount;
-      await base44.entities.Agent.update(agent.id, { message_count: newCount });
-      queryClient.invalidateQueries({ queryKey: ["analytics"] });
-      loadHistory();
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-    } else if (currentConversationId) {
-      const cid = String(currentConversationId);
-      await base44.entities.Message.create({ conversation_id: cid, role: "user", content: displayContent });
-      await base44.entities.Message.create({ conversation_id: cid, role: "assistant", content: response, cost: responseCost });
-      await base44.entities.Conversation.update(currentConversationId, {
-        last_message_preview: response.substring(0, 100),
-      });
-      const newCount = lifetimeMessageCountRef.current + 1;
-      lifetimeMessageCountRef.current = newCount;
-      await base44.entities.Agent.update(agent.id, { message_count: newCount });
-      queryClient.invalidateQueries({ queryKey: ["analytics"] });
-      loadHistory();
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    try {
+      if (cid) {
+        await base44.entities.Message.create({
+          conversation_id: cid,
+          role: "assistant",
+          content: response,
+          cost: responseCost,
+        });
+        await base44.entities.Conversation.update(cid, {
+          message_count: createdNewConversation ? 2 : undefined,
+          last_message_preview: response.substring(0, 100),
+        });
+      }
+    } catch (e) {
+      console.error("Failed to persist assistant message or update conversation:", e);
     }
+
+    const newCount = lifetimeMessageCountRef.current + 1;
+    lifetimeMessageCountRef.current = newCount;
+    try {
+      await base44.entities.Agent.update(agent.id, { message_count: newCount });
+    } catch (e) {
+      console.error("Agent message_count update error:", e);
+    }
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    loadHistory();
+    queryClient.invalidateQueries({ queryKey: ["agents"] });
   };
 
   const hasMessages = messages.length > 0;
