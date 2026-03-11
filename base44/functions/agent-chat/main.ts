@@ -1,9 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+// ─── Kimi K2.5 (Moonshot AI) configuration ────────────────────────────────────
+// Prefer explicit Kimi env vars, but also fall back to the secret id the user
+// configured in Base44 ("kimi-k2.5") to make wiring robust.
+const KIMI_API_KEY =
+  Deno.env.get("KIMI_API_KEY") ||
+  Deno.env.get("KIMI_K2_5") ||
+  Deno.env.get("KIMI_K2.5") ||
+  Deno.env.get("kimi-k2.5") ||
+  Deno.env.get("MOONSHOT_API_KEY") ||
+  "";
+const KIMI_MODEL = "kimi-k2.5";
+const KIMI_URL = "https://api.moonshot.cn/v1/chat/completions";
 
 function formatTreeForRouting(doc: any, fileName: string): string {
   if (!doc || !doc.root) return "";
@@ -55,47 +64,183 @@ function extractSectionText(doc: any, selectedNodeIds: string[]): string {
   return sorted.map(i => paragraphs[i]).join("\n\n");
 }
 
-const GEMINI_INPUT_COST_PER_1M = 0.075;
-const GEMINI_OUTPUT_COST_PER_1M = 0.30;
+// Official Moonshot Kimi K2.5 pricing (USD per 1M tokens).
+const KIMI_INPUT_COST_PER_1M = 0.60;
+const KIMI_OUTPUT_COST_PER_1M = 3.0;
 
-async function callGemini(
+// ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
+
+const YT_PATTERNS = [
+  /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]{11})/i,
+  /https?:\/\/(?:www\.)?youtu\.be\/([\w-]{11})/i,
+  /https?:\/\/(?:www\.)?youtube\.com\/embed\/([\w-]{11})/i,
+  /https?:\/\/(?:www\.)?youtube\.com\/shorts\/([\w-]{11})/i,
+];
+
+function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: string } | null {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = urlRegex.exec(text)) !== null) {
+    const url = m[1];
+    for (const p of YT_PATTERNS) {
+      const pm = url.match(p);
+      if (pm?.[1]) {
+        return { url, videoId: pm[1] };
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchYouTubeTranscript(videoId: string) {
+  const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const res = await fetch(pageUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+  const html = await res.text();
+
+  const titleMatch = html.match(/<title>(.*?)<\/title>/);
+  const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : "Unknown";
+
+  const captionMatch = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
+  if (!captionMatch) {
+    throw new Error("No captions found for this video. The video may not have subtitles enabled.");
+  }
+
+  const captionTracks = JSON.parse(captionMatch[1]);
+  if (!captionTracks || captionTracks.length === 0) {
+    throw new Error("No caption tracks available for this video.");
+  }
+
+  let track =
+    captionTracks.find((t: any) => t.languageCode === "en" && t.kind !== "asr") ||
+    captionTracks.find((t: any) => t.languageCode === "en") ||
+    captionTracks.find((t: any) => t.kind !== "asr") ||
+    captionTracks[0];
+
+  const captionUrl = track.baseUrl;
+  const captionRes = await fetch(captionUrl);
+  const captionXml = await captionRes.text();
+
+  const lines: string[] = [];
+  const regex = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>(.*?)<\/text>/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(captionXml)) !== null) {
+    const text = match[3]
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    if (text) lines.push(text);
+  }
+
+  return {
+    title,
+    videoId,
+    language: track.languageCode,
+    transcript: lines.join(" "),
+    lineCount: lines.length,
+  };
+}
+
+function extractAllYouTubeIds(text: string): { url: string; videoId: string }[] {
+  if (!text) return [];
+  const urls: { url: string; videoId: string }[] = [];
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = urlRegex.exec(text)) !== null) {
+    const url = m[1];
+    for (const p of YT_PATTERNS) {
+      const pm = url.match(p);
+      if (pm?.[1]) {
+        urls.push({ url, videoId: pm[1] });
+        break;
+      }
+    }
+  }
+  return urls;
+}
+
+async function callKimi(
   systemText: string,
   contents: any[],
   opts: { temperature?: number; maxOutputTokens?: number; jsonMode?: boolean } = {}
 ): Promise<{ text: string; usage?: { promptTokens: number; outputTokens: number } }> {
+  if (!KIMI_API_KEY) {
+    console.error("Missing Kimi API key (KIMI_API_KEY / kimi-k2.5 secret)");
+    throw new Error("Kimi API key is not configured");
+  }
+
+  // Convert previous Gemini "contents" format into OpenAI-style messages that
+  // Kimi's chat-completions endpoint accepts.
+  const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
+    { role: "system", content: systemText },
+    ...contents.map((c: any) => ({
+      role: c.role === "model" ? "assistant" : "user",
+      content: c?.parts?.[0]?.text ?? "",
+    })),
+  ];
+
   const body: any = {
-    system_instruction: { parts: [{ text: systemText }] },
-    contents,
-    generationConfig: {
-      temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: opts.maxOutputTokens ?? 4096,
-    },
+    model: KIMI_MODEL,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxOutputTokens ?? 4096,
   };
 
   if (opts.jsonMode) {
-    body.generationConfig.responseMimeType = "application/json";
+    body.response_format = { type: "json_object" };
   }
 
-  const resp = await fetch(GEMINI_URL, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000); // 60s safety timeout
+
+  const resp = await fetch(KIMI_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${KIMI_API_KEY}`,
+    },
     body: JSON.stringify(body),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error("Gemini API error:", errText);
-    throw new Error(`Gemini API error: ${resp.status}`);
+    console.error("Kimi API error:", errText);
+    throw new Error(`Kimi API error: ${resp.status}`);
   }
 
   const data = await resp.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const um = data?.usageMetadata ?? data?.usage_metadata;
+  const text =
+    data?.choices?.[0]?.message?.content ??
+    (typeof data === "string" ? data : "");
+
+  const um = data?.usage;
   let promptTokens = 0;
   let outputTokens = 0;
   if (um && typeof um === "object") {
-    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? um.inputTokenCount ?? 0;
-    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? um.outputTokenCount ?? um.output_token_count ?? 0;
+    promptTokens =
+      um.prompt_tokens ??
+      um.promptTokenCount ??
+      um.prompt_token_count ??
+      um.inputTokenCount ??
+      0;
+    outputTokens =
+      um.completion_tokens ??
+      um.candidatesTokenCount ??
+      um.candidates_token_count ??
+      um.outputTokenCount ??
+      um.output_token_count ??
+      0;
   }
   if (promptTokens === 0 && outputTokens === 0 && text.length > 0) {
     outputTokens = Math.max(50, Math.ceil(text.length / 4));
@@ -120,7 +265,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { messages, agent, mode } = await req.json();
+    const body = await req.json();
+    const { messages, agent, mode, fileSources = [] } = body;
 
     const systemParts: string[] = [];
     const agentName = agent.name || "AI Assistant";
@@ -280,6 +426,7 @@ ${retrievedContext}`);
     }
 
     const enabledTools = (agent.tools || []).filter((t: any) => t.enabled);
+    let toolContext = "";
     if (enabledTools.length > 0) {
       const toolDescriptions: Record<string, string> = {
         script_runner: "Execute custom scripts and automations.",
@@ -288,17 +435,241 @@ ${retrievedContext}`);
         code_generator: "Generate code snippets and templates.",
         local_ai_bridge: "Connect to local AI models and services.",
         system_utility: "System maintenance and monitoring tools.",
+        youtube_scraper: "youtube_scraper(url) returns the video transcript and metadata for a given YouTube URL.",
+        kb_expander:
+          "kb_expander({ kbId, text }) can be used to add new text to a knowledge base, then re-index it for future queries.",
       };
 
-      const toolsText = enabledTools.map((t: any) => {
-        const desc = toolDescriptions[t.name] || `Tool: ${t.name}`;
-        return `- **${t.name}**: ${desc}`;
-      }).join("\n");
+      const toolsText = enabledTools
+        .map((t: any) => {
+          const desc = toolDescriptions[t.name] || `Tool: ${t.name}`;
+          return `- **${t.name}**: ${desc}`;
+        })
+        .join("\n");
 
       systemParts.push(`\n## Your Tools\n${toolsText}`);
+
+      // Inline YouTube Scraper execution when user message contains a YouTube URL.
+      const hasYouTubeTool = enabledTools.some((t: any) => t.name === "youtube_scraper");
+      const lastUserMessage =
+        messages && messages.length
+          ? [...messages].reverse().find((m: any) => m.role === "user")?.content || ""
+          : "";
+      if (hasYouTubeTool && lastUserMessage) {
+        const urls = extractAllYouTubeIds(lastUserMessage);
+        if (urls.length > 0) {
+          const limited = urls.slice(0, 3); // hard limit per turn for cost
+          for (const yt of limited) {
+            try {
+              const ytResult = await fetchYouTubeTranscript(yt.videoId);
+              const transcriptSnippet =
+                ytResult.transcript.length > 4000
+                  ? ytResult.transcript.slice(0, 4000) + "\n[transcript truncated]"
+                  : ytResult.transcript;
+              toolContext += `\n\n### YouTube Scraper result\nURL: ${yt.url}\nTitle: ${ytResult.title}\nLanguage: ${ytResult.language}\nLines: ${ytResult.lineCount}\n\nTranscript:\n${transcriptSnippet}`;
+            } catch (e) {
+              console.error("YouTube scraper error:", e instanceof Error ? e.message : String(e));
+              toolContext += `\n\n### YouTube Scraper error\nTried to fetch transcript for a YouTube link (${yt.url}) in the user's question but got an error: ${
+                e instanceof Error ? e.message : String(e)
+              }.\nYou should explain this limitation to the user.`;
+            }
+          }
+        }
+      }
+
+      // ─── KB Expander: create/append KB from chat ─────────────────────
+      const hasKbExpander = enabledTools.some((t: any) => t.name === "kb_expander");
+      if (hasKbExpander && messages && messages.length > 0) {
+        const lastUser = [...messages].reverse().find((m: any) => m.role === "user");
+        const lastText: string = lastUser?.content || "";
+
+        const wantsKb =
+          /knowledge base|kb\b|база знань|базу знань|додай до бз|додай до бази/i.test(lastText);
+        const wantsCreate = /create.*knowledge base|new knowledge base|створ(и|іть).*баз[ау] знань/i.test(
+          lastText
+        );
+
+        const ytSources = extractAllYouTubeIds(lastText);
+        const plainTextSource =
+          !ytSources.length && lastText && lastText.length > 200 ? lastText : "";
+
+        const uploadedFiles: { name: string; url: string; type: string }[] = Array.isArray(
+          fileSources
+        )
+          ? fileSources
+          : [];
+
+        if (wantsKb && (ytSources.length > 0 || plainTextSource || uploadedFiles.length > 0)) {
+          const kbIds: string[] = Array.isArray(agent.knowledge_base_ids)
+            ? agent.knowledge_base_ids.map(String)
+            : [];
+
+        // Try to detect specific KB name, e.g. "add to knowledge base Sales" or "створи нову базу знань Planning"
+          let explicitKbName: string | null = null;
+        const kbNameMatchAdd =
+          lastText.match(/(?:to|into)\s+(?:knowledge base|KB)\s+["“]?([^"\n]+)["”]?/i) ||
+          lastText.match(/баз[аи] знань\s+["“]?([^"\n]+)["”]?/i);
+        const kbNameMatchCreate =
+          lastText.match(/create(?:\s+new)?\s+knowledge base\s+["“]?([^"\n]+)["”]?/i) ||
+          lastText.match(/створ(?:и|іть)\s+нову?\s+баз[ау] знань\s+["“]?([^"\n]+)["”]?/i);
+        if (kbNameMatchAdd?.[1]) {
+          explicitKbName = kbNameMatchAdd[1].trim();
+        } else if (kbNameMatchCreate?.[1]) {
+          explicitKbName = kbNameMatchCreate[1].trim();
+        }
+
+          let targetKbId: string | null = null;
+          let createdKbName = "";
+
+          if (!kbIds.length || wantsCreate) {
+            const kb = await base44.asServiceRole.entities.KnowledgeBase.create({
+              name:
+                explicitKbName ||
+                `${agent.name || "Agent"} KB ${new Date().toISOString().slice(0, 10)}`,
+              files: [],
+              processing: false,
+              index_status: "pending",
+              index_progress: 0,
+              last_error: "",
+            });
+            targetKbId = String(kb.id);
+            createdKbName = kb.name || "Knowledge Base";
+
+            if (agent.id) {
+              const nextKbIds = [...kbIds, targetKbId];
+              await base44.asServiceRole.entities.Agent.update(agent.id, {
+                knowledge_base_ids: nextKbIds,
+              });
+            }
+          } else {
+            if (explicitKbName) {
+              const allKbs = await base44.asServiceRole.entities.KnowledgeBase.filter({});
+              const match = allKbs?.find(
+                (k: any) =>
+                  String(k.name || "")
+                    .toLowerCase()
+                    .includes(explicitKbName!.toLowerCase()) && kbIds.includes(String(k.id))
+              );
+              if (match) {
+                targetKbId = String(match.id);
+              }
+            }
+            if (!targetKbId) {
+              targetKbId = kbIds[0];
+            }
+          }
+
+          if (targetKbId) {
+            const kbList = await base44.asServiceRole.entities.KnowledgeBase.filter({
+              id: targetKbId,
+            });
+            if (kbList?.length) {
+              const kb = kbList[0];
+              const files = kb.files || [];
+              const newFiles: any[] = [];
+
+              const limitedYt = ytSources.slice(0, 10);
+              for (const { url, videoId } of limitedYt) {
+                try {
+                  const ytData = await fetchYouTubeTranscript(videoId);
+                  const text =
+                    ytData.transcript.length > 20000
+                      ? ytData.transcript.slice(0, 20000)
+                      : ytData.transcript;
+                  newFiles.push({
+                    name: ytData.title || `YouTube transcript ${videoId}`,
+                    type: "txt",
+                    url: "",
+                    inline_text: `Source: ${url}\n\n${text}`,
+                    processed: false,
+                  });
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  console.error("KB expander youtube error:", msg);
+                  // Все одно кладемо файл, щоб видно було джерело й помилку
+                  newFiles.push({
+                    name: `YouTube transcript error ${videoId}`,
+                    type: "txt",
+                    url: "",
+                    inline_text: `Source: ${url}\n\n[Error fetching transcript: ${msg}]`,
+                    processed: false,
+                  });
+                }
+              }
+
+              if (plainTextSource) {
+                const truncated =
+                  plainTextSource.length > 20000
+                    ? plainTextSource.slice(0, 20000)
+                    : plainTextSource;
+                newFiles.push({
+                  name: "Chat text snippet",
+                  type: "txt",
+                  url: "",
+                  inline_text: truncated,
+                  processed: false,
+                });
+              }
+
+              if (uploadedFiles.length > 0) {
+                for (const f of uploadedFiles) {
+                  newFiles.push({
+                    name: f.name,
+                    type: (f.type || "txt").toLowerCase(),
+                    url: f.url,
+                    inline_text: "",
+                    processed: false,
+                  });
+                }
+              }
+
+              if (newFiles.length > 0) {
+                await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
+                  files: [...files, ...newFiles],
+                  processing: true,
+                  index_status: "indexing",
+                  index_progress: kb.index_progress || 0,
+                  last_error: "",
+                });
+
+                try {
+                  // Fire-and-forget indexing so chat response is not blocked
+                  base44.functions
+                    .invoke("indexKnowledgeBase", { kbId: String(kb.id) })
+                    .catch((e: any) => {
+                      console.error("indexKnowledgeBase from agent-chat failed:", e);
+                    });
+                } catch (e) {
+                  console.error("indexKnowledgeBase from agent-chat failed:", e);
+                }
+
+                toolContext += `\n\n### KB Expander\nAdded ${
+                  newFiles.length
+                } document(s) into knowledge base **${
+                  createdKbName || kb.name || targetKbId
+                }** based on your last message${
+                  ytSources.length
+                    ? ` and the following YouTube links: ${ytSources.map((s) => s.url).join(", ")}`
+                    : ""
+                }${
+                  uploadedFiles.length
+                    ? ` and ${uploadedFiles.length} uploaded file(s).`
+                    : "."
+                }\nNew content will be used automatically in future answers once indexing finishes.`;
+              }
+            }
+          }
+        }
+      }
     }
 
-    systemParts.push(`\n## Web Access\nYou have access to the internet. ${retrievedContext ? "Prioritize knowledge base content first." : ""}`);
+    if (toolContext) {
+      systemParts.push(`\n## Tool Outputs\nThe following tool calls were executed **before** answering. Use these results as authoritative context.\n${toolContext}`);
+    }
+
+    systemParts.push(`\n## Web Access\nYou have access to the internet. ${
+      retrievedContext ? "Prioritize knowledge base content and tool outputs first." : ""
+    }`);
 
     if (mode === "thinking") {
       systemParts.push("\n## Response Mode: Deep Thinking\nProvide thorough, detailed, well-structured responses. Think step by step.");
@@ -313,7 +684,7 @@ ${retrievedContext}`);
       parts: [{ text: m.content }],
     }));
 
-    const res = await callGemini(systemInstruction, geminiContents, {
+    const res = await callKimi(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
       maxOutputTokens: mode === "thinking" ? 8192 : 4096,
     });
@@ -324,7 +695,7 @@ ${retrievedContext}`);
 
     if (responseText && !hasStructure(responseText)) {
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
-      const retryRes = await callGemini(retrySystem, geminiContents, {
+      const retryRes = await callKimi(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
         maxOutputTokens: mode === "thinking" ? 8192 : 4096,
       });
@@ -334,8 +705,8 @@ ${retrievedContext}`);
     }
 
     const cost =
-      (totalPromptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M +
-      (totalOutputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M;
+      (totalPromptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
+      (totalOutputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
 
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",

@@ -1,11 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_INPUT_COST_PER_1M = 0.075;
-const GEMINI_OUTPUT_COST_PER_1M = 0.30;
+// ─── Kimi K2.5 (Moonshot AI) configuration ────────────────────────────────────
+const KIMI_API_KEY =
+  Deno.env.get("KIMI_API_KEY") ||
+  Deno.env.get("KIMI_K2_5") ||
+  Deno.env.get("KIMI_K2.5") ||
+  Deno.env.get("kimi-k2.5") ||
+  Deno.env.get("MOONSHOT_API_KEY") ||
+  "";
+const KIMI_MODEL = "kimi-k2.5";
+const KIMI_URL = "https://api.moonshot.cn/v1/chat/completions";
+const KIMI_INPUT_COST_PER_1M = 0.60;
+const KIMI_OUTPUT_COST_PER_1M = 3.0;
 
 const MAX_PARAGRAPHS_PER_CHUNK = 120;
 const MAX_CHARS_PER_CHUNK = 50000;
@@ -159,8 +166,8 @@ async function buildPageIndexForText(
   text: string,
   fileName: string
 ): Promise<{ doc: PageIndexDocument | null; cost: number }> {
-  if (!GEMINI_API_KEY) {
-    console.error("No Gemini API key configured");
+  if (!KIMI_API_KEY) {
+    console.error("No Kimi API key configured");
     return { doc: null, cost: 0 };
   }
 
@@ -179,48 +186,65 @@ async function buildPageIndexForText(
   const userPrompt = `Document name: ${fileName}\nTotal paragraphs: ${paragraphs.length}\n\n${taggedText}`;
 
   const body = {
-    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 16384,
-      responseMimeType: "application/json",
-    },
+    model: KIMI_MODEL,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.1,
+    max_tokens: 16384,
+    response_format: { type: "json_object" },
   };
 
-  const resp = await fetch(GEMINI_URL, {
+  const resp = await fetch(KIMI_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${KIMI_API_KEY}`,
+    },
     body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error(`Gemini API ${resp.status}: ${errText}`);
+    console.error(`Kimi API ${resp.status}: ${errText}`);
     return { doc: null, cost: 0 };
   }
 
   const data = await resp.json();
 
-  const um = data?.usageMetadata ?? data?.usage_metadata;
+  const um = data?.usage;
   let promptTokens = 0;
   let outputTokens = 0;
   if (um && typeof um === "object") {
-    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? um.inputTokenCount ?? 0;
-    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? um.outputTokenCount ?? um.output_token_count ?? 0;
+    promptTokens =
+      um.prompt_tokens ??
+      um.promptTokenCount ??
+      um.prompt_token_count ??
+      um.inputTokenCount ??
+      0;
+    outputTokens =
+      um.completion_tokens ??
+      um.candidatesTokenCount ??
+      um.candidates_token_count ??
+      um.outputTokenCount ??
+      um.output_token_count ??
+      0;
   }
 
-  const finishReason = data?.candidates?.[0]?.finishReason;
-  let textOut: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const finishReason = data?.choices?.[0]?.finish_reason;
+  let textOut: string | undefined = data?.choices?.[0]?.message?.content;
 
   if (promptTokens === 0 && outputTokens === 0) {
     promptTokens = Math.max(100, Math.ceil(userPrompt.length / 4));
     outputTokens = textOut ? Math.max(50, Math.ceil(textOut.length / 4)) : 50;
   }
-  const cost = (promptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M + (outputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M;
+  const cost =
+    (promptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
+    (outputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
 
   if (!textOut) {
-    console.error(`Gemini returned empty response (finishReason: ${finishReason || "unknown"})`);
+    console.error(`Kimi returned empty response (finishReason: ${finishReason || "unknown"})`);
     return { doc: null, cost };
   }
 
@@ -250,7 +274,7 @@ async function buildPageIndexForText(
     }
 
     if (!structure || structure.length === 0) {
-      console.error("Gemini returned valid JSON but no recognizable tree structure");
+      console.error("Kimi returned valid JSON but no recognizable tree structure");
       return { doc: null, cost };
     }
 
@@ -271,7 +295,7 @@ async function buildPageIndexForText(
     };
     return { doc, cost };
   } catch (e) {
-    console.error("Failed to parse Gemini JSON:", e instanceof Error ? e.message : String(e));
+    console.error("Failed to parse Kimi JSON:", e instanceof Error ? e.message : String(e));
     return { doc: null, cost };
   }
 }
@@ -430,7 +454,9 @@ Deno.serve(async (req) => {
 
     const kb = kbList[0];
     const files = kb.files || [];
-    const indexableFiles = files.filter((f: any) => f.url && INDEXABLE_TYPES.includes(f.type));
+    const indexableFiles = files.filter((f: any) =>
+      (f.url || typeof f.inline_text === "string") && INDEXABLE_TYPES.includes(f.type)
+    );
 
     if (indexableFiles.length === 0) {
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -457,25 +483,29 @@ Deno.serve(async (req) => {
 
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
-      if (!file.url || !INDEXABLE_TYPES.includes(file.type)) continue;
+      if ((!file.url && typeof file.inline_text !== "string") || !INDEXABLE_TYPES.includes(file.type)) continue;
       if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
         completed += 1;
         continue;
       }
 
       try {
-        const fileResp = await fetch(file.url);
-        if (!fileResp.ok) {
-          throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
-        }
-
         let text: string;
-        if (file.type === "pdf") {
-          const arrayBuf = await fileResp.arrayBuffer();
-          const pdfData = await pdf(Buffer.from(arrayBuf));
-          text = pdfData.text || "";
+        if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
+          text = file.inline_text;
         } else {
-          text = await fileResp.text();
+          const fileResp = await fetch(file.url);
+          if (!fileResp.ok) {
+            throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
+          }
+
+          if (file.type === "pdf") {
+            const arrayBuf = await fileResp.arrayBuffer();
+            const pdfData = await pdf(Buffer.from(arrayBuf));
+            text = pdfData.text || "";
+          } else {
+            text = await fileResp.text();
+          }
         }
 
         const indexResult = await buildPageIndexWithChunking(text, file.name);

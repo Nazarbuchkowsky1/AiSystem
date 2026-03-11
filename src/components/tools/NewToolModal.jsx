@@ -3,14 +3,18 @@ import {
   X,
   Upload,
   Code,
-  Bot,
+  Wrench,
+  Terminal,
+  Globe,
+  Database,
+  FileCode,
+  Cpu,
   Zap,
   Brain,
-  Sparkles,
-  Cpu,
-  Settings,
-  Palette,
-  Rocket,
+  Search,
+  FileText,
+  Youtube,
+  BookOpen,
 } from "lucide-react";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
@@ -21,20 +25,25 @@ import "prismjs/components/prism-tsx";
 import "prismjs/themes/prism-tomorrow.css";
 
 const ICON_OPTIONS = [
-  { name: "Bot", Icon: Bot },
+  { name: "Wrench", Icon: Wrench },
+  { name: "Terminal", Icon: Terminal },
+  { name: "Globe", Icon: Globe },
+  { name: "Database", Icon: Database },
+  { name: "FileCode", Icon: FileCode },
+  { name: "Cpu", Icon: Cpu },
+  { name: "Code", Icon: Code },
   { name: "Zap", Icon: Zap },
   { name: "Brain", Icon: Brain },
-  { name: "Sparkles", Icon: Sparkles },
-  { name: "Cpu", Icon: Cpu },
-  { name: "Settings", Icon: Settings },
-  { name: "Palette", Icon: Palette },
-  { name: "Rocket", Icon: Rocket },
+  { name: "Search", Icon: Search },
+  { name: "FileText", Icon: FileText },
+  { name: "Youtube", Icon: Youtube },
+  { name: "BookOpen", Icon: BookOpen },
 ];
 
 export default function NewToolModal({ onClose, onSave }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [iconName, setIconName] = useState("Bot");
+  const [iconName, setIconName] = useState("Wrench");
   const [code, setCode] = useState("");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);

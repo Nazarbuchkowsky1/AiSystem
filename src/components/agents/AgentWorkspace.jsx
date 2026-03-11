@@ -485,6 +485,27 @@ export default function AgentWorkspace({ agent, onBack }) {
     setIsLoading(true);
 
     abortControllerRef.current = new AbortController();
+
+    // Upload any attached files so agent-chat can optionally expand a KB with them.
+    const fileSources = [];
+    if (filesToSend.length > 0) {
+      for (const af of filesToSend) {
+        try {
+          const uploadRes = await base44.integrations.Core.UploadFile({ file: af.file });
+          if (uploadRes?.file_url) {
+            const ext = af.file.name.split(".").pop()?.toLowerCase() || "";
+            fileSources.push({
+              name: af.file.name,
+              url: uploadRes.file_url,
+              type: ext,
+            });
+          }
+        } catch (e) {
+          console.error("File upload error:", e);
+        }
+      }
+    }
+
     const res = await base44.functions.invoke("agentChat", {
       messages: newMessages,
       agent: {
@@ -495,6 +516,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         tools: agent.tools || [],
       },
       mode,
+      fileSources,
     });
     const response = res.data?.response || "Error generating response.";
     const responseCost = Number(res.data?.cost) || 0;

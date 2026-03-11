@@ -1,6 +1,20 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { X, Upload, Loader2, Bot, Zap, Brain, Sparkles, Cpu, Settings, Palette, Rocket, Trash2 } from "lucide-react";
+import {
+  X,
+  Upload,
+  Loader2,
+  Bot,
+  Zap,
+  Brain,
+  Sparkles,
+  Cpu,
+  Settings,
+  Palette,
+  Rocket,
+  Trash2,
+  BookOpen,
+} from "lucide-react";
 import TOOLS_LIST from "../shared/toolsList";
 
 const AVAILABLE_TOOLS = TOOLS_LIST.map(t => ({ name: t.name, label: t.label }));
@@ -326,7 +340,31 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Knowledge Bases (Optional)</p>
             {knowledgeBases.length === 0 ? (
-              <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base first to connect it</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    background: "rgba(249,115,22,0.1)",
+                    border: "1px solid rgba(249,115,22,0.25)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <BookOpen style={{ width: 16, height: 16, color: "#f97316" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#f5f5f5", marginBottom: 2 }}>
+                    No knowledge bases yet
+                  </div>
+                  <div style={{ fontSize: 11, color: "#555" }}>
+                    Create a knowledge base first to connect it.
+                  </div>
+                </div>
+              </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                 {knowledgeBases.map(kb => {

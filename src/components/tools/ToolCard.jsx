@@ -77,8 +77,20 @@ export default function ToolCard({ tool, onClick }) {
         </div>
       </div>
 
-      <p style={{ fontSize: 14, fontWeight: 700, color: "#f5f5f5", marginBottom: 4, letterSpacing: "-0.01em" }}>{tool.name}</p>
-      <p style={{ fontSize: 11, color: "#555", lineHeight: 1.5, flex: 1 }}>{tool.description}</p>
+      <p
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#f5f5f5",
+          marginBottom: 4,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {tool.name}
+      </p>
+      <p style={{ fontSize: 11, color: "#555", lineHeight: 1.5, marginBottom: 0 }}>
+        {tool.description}
+      </p>
 
       <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: 10, color: "#333" }}>{tool.execution_count || 0} executions</span>
