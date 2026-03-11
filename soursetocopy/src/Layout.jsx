@@ -1,0 +1,306 @@
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import {
+  BarChart3,
+  Bot,
+  Wrench,
+  Sparkles,
+  Calendar,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  BookOpen,
+  Menu,
+  X,
+  Plus
+} from "lucide-react";
+
+const NAV_ITEMS = [
+  { name: "Analytics", icon: BarChart3, page: "Analytics" },
+  { name: "Agents", icon: Bot, page: "Agents" },
+  { name: "Tools", icon: Wrench, page: "Tools" },
+  { name: "Lumen", icon: Sparkles, page: "Lumen" },
+  { name: "Calendar", icon: Calendar, page: "Calendar" },
+  { name: "Settings", icon: Settings, page: "Settings" },
+];
+
+export default function Layout({ children, currentPageName }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Close mobile menu on page change
+  useEffect(() => { setMobileOpen(false); }, [currentPageName]);
+
+  const [agentsTab, setAgentsTab] = useState("agents");
+  const [modalOpen, setModalOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e) => setAgentsTab(e.detail);
+    window.addEventListener("agents-tab-change", handler);
+    return () => window.removeEventListener("agents-tab-change", handler);
+  }, []);
+  useEffect(() => {
+    const handler = (e) => setModalOpen(e.detail);
+    window.addEventListener("modal-open", handler);
+    return () => window.removeEventListener("modal-open", handler);
+  }, []);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        height: "100vh",
+        overflow: "hidden",
+        background: "#0a0a0a",
+        color: "#f5f5f5",
+      }}
+    >
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(-12px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(-12px); opacity: 0; }
+        }
+      `}</style>
+      {/* Mobile overlay */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, backdropFilter: "blur(4px)" }}
+        />
+      )}
+
+      {/* Mobile header bar */}
+      {isMobile && !modalOpen && (
+        <div style={{
+          height: 52, flexShrink: 0, position: "relative", zIndex: 55,
+          background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
+        }}>
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "0 8px", height: "100%", WebkitTapHighlightColor: "transparent" }}
+          >
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(249,115,22,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Flame style={{ width: 14, height: 14, color: "#f97316" }} />
+            </div>
+            <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>NEXUS AI</span>
+          </button>
+          {currentPageName === "Agents" && agentsTab === "agents" && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-agent"))}
+              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New Agent
+            </button>
+          )}
+          {currentPageName === "Agents" && agentsTab === "knowledge" && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-kb"))}
+              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New KB
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Sidebar */}
+      <aside
+        style={{
+          position: isMobile ? "fixed" : "relative",
+          top: isMobile ? 52 : 0,
+          height: isMobile ? "calc(100vh - 52px)" : undefined,
+          left: 0,
+          bottom: 0,
+          display: "flex",
+          flexDirection: "column",
+          width: isMobile ? 240 : collapsed ? 72 : 240,
+          minWidth: isMobile ? 240 : collapsed ? 72 : 240,
+          flexShrink: 0,
+          background: "linear-gradient(180deg, #0f0f0f 0%, #0a0a0a 100%)",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+          transition: isMobile ? "transform 0.3s ease" : "width 0.3s ease, min-width 0.3s ease",
+          zIndex: isMobile ? 50 : 10,
+          transform: isMobile ? (mobileOpen ? "translateX(0)" : "translateX(-100%)") : "none",
+        }}
+      >
+        {/* Logo */}
+        <div
+          style={{
+            display: isMobile ? "none" : "flex",
+            alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            gap: 12,
+            padding: collapsed ? "0" : "0 16px",
+            height: 64,
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            flexShrink: 0,
+          }}
+        >
+          {collapsed ? (
+            <button
+              onClick={() => setCollapsed(false)}
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: "rgba(249,115,22,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid rgba(249,115,22,0.25)",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)"; }}
+              title="Expand sidebar"
+            >
+              <Flame style={{ width: 20, height: 20, color: "#f97316" }} />
+            </button>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    background: "rgba(249,115,22,0.15)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Flame style={{ width: 16, height: 16, color: "#f97316" }} />
+                </div>
+                <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                  NEXUS AI
+                </span>
+              </div>
+              <button
+                onClick={() => setCollapsed(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#555",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0,
+                  padding: 6,
+                  flexShrink: 0,
+                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
+                onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
+                title="Collapse"
+              >
+                <ChevronLeft style={{ width: 16, height: 16 }} />
+                <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px" }} />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+          {NAV_ITEMS.map((item) => {
+            const isActive = currentPageName === item.page;
+            return (
+              <Link
+                    key={item.page}
+                    to={createPageUrl(item.page)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      textDecoration: "none",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: isActive ? "#f97316" : "#888",
+                      background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
+                      border: `1px solid ${isActive ? "rgba(249,115,22,0.3)" : "transparent"}`,
+                      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = "rgba(249,115,22,0.07)";
+                        e.currentTarget.style.color = "#f97316";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.color = "#888";
+                      }
+                    }}
+                  >
+                <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
+                {(isMobile || !collapsed) && <span>{item.name}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Bottom Status */}
+        <div style={{ padding: 16, flexShrink: 0 }}>
+          {(isMobile || !collapsed) && (
+            <div
+              style={{
+                borderRadius: 12,
+                padding: 16,
+                background: "linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.03))",
+                border: "1px solid rgba(249,115,22,0.15)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#f97316", marginBottom: 4 }}>System Status</p>
+              <p style={{ fontSize: 11, color: "#555" }}>All systems operational</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%", background: "#22c55e",
+                  boxShadow: "0 0 8px rgba(34,197,94,0.6)"
+                }} />
+                <span style={{ fontSize: 10, color: "#22c55e", fontWeight: 600 }}>Online</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main
+        style={{
+          flex: 1,
+          overflow: "auto",
+          background: "#0a0a0a",
+          minWidth: 0,
+        }}
+      >
+        {children}
+      </main>
+    </div>
+  );
+}
