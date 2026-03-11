@@ -18,6 +18,7 @@ const SINGLE_LINE_TEXTAREA_HEIGHT = 44;
 const MAX_VISIBLE_TEXTAREA_HEIGHT = 188;
 const INPUT_BAR_EMPTY_MAX_WIDTH = 680;   // empty state + input bar before first message
 const CHAT_CONTENT_MAX_WIDTH = 1020;    // when dialogue started: messages + input bar (~1.5× empty width)
+const AGENT_LOADING_CID_KEY = "lumen_agent_loading_cid";
 
 function getFileType(file) {
   if (SUPPORTED_IMAGES.includes(file.type)) return "image";
@@ -99,6 +100,8 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [historyPanelClosing, setHistoryPanelClosing] = useState(false);
   const [historyPanelOpening, setHistoryPanelOpening] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const [generatingPlaceholderForConvoId, setGeneratingPlaceholderForConvoId] = useState(null);
+  const pollingRef = useRef(null);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [deletingConvoIds, setDeletingConvoIds] = useState(new Set());
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -155,6 +158,9 @@ export default function AgentWorkspace({ agent, onBack }) {
   }, [historyPanelClosing]);
 
   useEffect(() => () => { if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current); }, []);
+  useEffect(() => () => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+  }, []);
 
   useEffect(() => {
     if (filesScrollRef.current) {
@@ -424,12 +430,37 @@ export default function AgentWorkspace({ agent, onBack }) {
   };
 
   const loadConversation = async (convo) => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
     const msgs = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 3000);
     const list = Array.isArray(msgs) ? msgs : [];
     const chronological = list.map((m) => ({ role: m.role || "user", content: m.content || "", createdAt: m.created_date || m.created_at }));
     setMessages(chronological);
     setCurrentConversationId(convo.id);
     setShowHistory(false);
+    const loadingCid = typeof sessionStorage !== "undefined" ? sessionStorage.getItem(AGENT_LOADING_CID_KEY) : null;
+    if (loadingCid === String(convo.id)) {
+      setGeneratingPlaceholderForConvoId(convo.id);
+      pollingRef.current = setInterval(async () => {
+        try {
+          const next = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 3000);
+          const nextList = Array.isArray(next) ? next : [];
+          const nextChron = nextList.map((m) => ({ role: m.role || "user", content: m.content || "", createdAt: m.created_date || m.created_at }));
+          const last = nextChron[nextChron.length - 1];
+          if (last?.role === "assistant") {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            pollingRef.current = null;
+            sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
+            setGeneratingPlaceholderForConvoId(null);
+            setMessages(nextChron);
+          }
+        } catch (_) {}
+      }, 3000);
+    } else {
+      setGeneratingPlaceholderForConvoId(null);
+    }
   };
 
   const addFilesFromList = (files) => {
@@ -463,11 +494,17 @@ export default function AgentWorkspace({ agent, onBack }) {
   const stopGeneration = () => {
     if (abortControllerRef.current) { abortControllerRef.current.abort(); abortControllerRef.current = null; }
     setIsLoading(false);
+    try {
+      sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
+    } catch (_) {}
+    setGeneratingPlaceholderForConvoId(null);
   };
 
   const handleSend = async () => {
     const hasContent = input.trim() || attachedFiles.length > 0;
     if (!hasContent || isLoading) return;
+    const isVoiceMessage = Boolean(pendingTranscript);
+    if (pendingTranscript) setPendingTranscript(null);
     const userMsg = input.trim();
     const filesToSend = [...attachedFiles];
     setInput("");
@@ -524,6 +561,10 @@ export default function AgentWorkspace({ agent, onBack }) {
       console.error("Failed to persist user message:", e);
     }
 
+    try {
+      sessionStorage.setItem(AGENT_LOADING_CID_KEY, cid);
+    } catch (_) {}
+
     // Upload any attached files so agent-chat can optionally expand a KB with them.
     const fileSources = [];
     if (filesToSend.length > 0) {
@@ -544,51 +585,69 @@ export default function AgentWorkspace({ agent, onBack }) {
       }
     }
 
-    const res = await base44.functions.invoke("agentChat", {
-      messages: newMessages,
-      agent: {
-        name: agent.name,
-        description: agent.description || "",
-        system_instructions: agent.system_instructions || agent.system_prompt || "",
-        knowledge_base_ids: agent.knowledge_base_ids || [],
-        tools: agent.tools || [],
-      },
-      mode,
-      fileSources,
-    });
-    const response = res.data?.response || "Error generating response.";
-    const responseCost = Number(res.data?.cost) || 0;
-    setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
-    setIsLoading(false);
-    abortControllerRef.current = null;
-
+    let res;
     try {
-      if (cid) {
-        await base44.entities.Message.create({
-          conversation_id: cid,
-          role: "assistant",
-          content: response,
-          cost: responseCost,
+      try {
+        res = await base44.functions.invoke("agentChat", {
+          messages: newMessages,
+          agent: {
+            name: agent.name,
+            description: agent.description || "",
+            system_instructions: agent.system_instructions || agent.system_prompt || "",
+            knowledge_base_ids: agent.knowledge_base_ids || [],
+            tools: agent.tools || [],
+            model: agent.model === "gemini" ? "gemini" : "kimi",
+          },
+          mode,
+          fileSources,
+          isVoiceMessage,
         });
-        await base44.entities.Conversation.update(cid, {
-          message_count: createdNewConversation ? 2 : undefined,
-          last_message_preview: response.substring(0, 100),
-        });
+      } finally {
+        try {
+          sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
+        } catch (_) {}
       }
-    } catch (e) {
-      console.error("Failed to persist assistant message or update conversation:", e);
-    }
+      const response = res?.data?.response || "Error generating response.";
+      const responseCost = Number(res?.data?.cost) || 0;
+      setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
+      setIsLoading(false);
+      setGeneratingPlaceholderForConvoId(null);
+      abortControllerRef.current = null;
 
-    const newCount = lifetimeMessageCountRef.current + 1;
-    lifetimeMessageCountRef.current = newCount;
-    try {
-      await base44.entities.Agent.update(agent.id, { message_count: newCount });
+      try {
+        if (cid) {
+          await base44.entities.Message.create({
+            conversation_id: cid,
+            role: "assistant",
+            content: response,
+            cost: responseCost,
+          });
+          await base44.entities.Conversation.update(cid, {
+            message_count: createdNewConversation ? 2 : undefined,
+            last_message_preview: response.substring(0, 100),
+          });
+        }
+      } catch (e) {
+        console.error("Failed to persist assistant message or update conversation:", e);
+      }
+
+      const newCount = lifetimeMessageCountRef.current + 1;
+      lifetimeMessageCountRef.current = newCount;
+      try {
+        await base44.entities.Agent.update(agent.id, { message_count: newCount });
+      } catch (e) {
+        console.error("Agent message_count update error:", e);
+      }
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      loadHistory();
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     } catch (e) {
-      console.error("Agent message_count update error:", e);
+      console.error("Agent chat error:", e);
+      setIsLoading(false);
+      setGeneratingPlaceholderForConvoId(null);
+      abortControllerRef.current = null;
+      setMessages(prev => [...prev, { role: "assistant", content: "Error generating response. Please try again.", createdAt: new Date().toISOString() }]);
     }
-    queryClient.invalidateQueries({ queryKey: ["analytics"] });
-    loadHistory();
-    queryClient.invalidateQueries({ queryKey: ["agents"] });
   };
 
   const hasMessages = messages.length > 0;
@@ -959,16 +1018,22 @@ export default function AgentWorkspace({ agent, onBack }) {
                         <p style={{ fontSize: 12, fontWeight: 500, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</p>
                         <p style={{ fontSize: 10, color: "#444", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.last_message_preview}</p>
                       </button>
-                      <button
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={(e) => deleteConversation(e, c)}
-                        disabled={isDeleting}
-                        style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: "none", border: "none", cursor: isDeleting ? "not-allowed" : "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
-                        onMouseEnter={(e) => { if (!isDeleting) e.currentTarget.style.color = "#ef4444"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = "#555"; }}
-                      >
-                        <Trash2 style={{ width: 14, height: 14 }} />
-                      </button>
+                      {(currentConversationId === c.id && isLoading) || c.id === generatingPlaceholderForConvoId || (typeof sessionStorage !== "undefined" && sessionStorage.getItem(AGENT_LOADING_CID_KEY) === String(c.id)) ? (
+                        <div style={{ flexShrink: 0, padding: 6, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }} title="Generating...">
+                          <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
+                        </div>
+                      ) : (
+                        <button
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => deleteConversation(e, c)}
+                          disabled={isDeleting}
+                          style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: "none", border: "none", cursor: isDeleting ? "not-allowed" : "pointer", color: "#555", display: "flex", transition: "color 0.2s" }}
+                          onMouseEnter={(e) => { if (!isDeleting) e.currentTarget.style.color = "#ef4444"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "#555"; }}
+                        >
+                          <Trash2 style={{ width: 14, height: 14 }} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -985,7 +1050,7 @@ export default function AgentWorkspace({ agent, onBack }) {
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px", minHeight: 0 }}>
             <div style={{ textAlign: "center", width: "100%", maxWidth: INPUT_BAR_EMPTY_MAX_WIDTH, margin: "0 auto", flexShrink: 0 }}>
               <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-                <Bot style={{ width: 28, height: 28, color: "#f97316" }} />
+                <Brain style={{ width: 28, height: 28, color: "#f97316" }} />
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: "#f5f5f5", marginBottom: 8 }}>{agent.name}</h2>
               <p style={{ fontSize: 13, color: "#555", marginBottom: 28, lineHeight: 1.6, maxWidth: 440, margin: "0 auto 28px" }}>{agent.description}</p>
@@ -1035,7 +1100,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                   </div>
                   );
                 })}
-                {isLoading && (
+                {(isLoading || generatingPlaceholderForConvoId === currentConversationId) && (
                   <div style={{ display: "flex", justifyContent: "flex-start" }}>
                     <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
                       <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />

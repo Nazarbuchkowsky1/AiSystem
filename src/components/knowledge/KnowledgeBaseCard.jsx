@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Trash2, Plus, Loader2 } from "lucide-react";
+import { Trash2, Plus, Loader2, BookOpen } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -78,145 +78,226 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
   const derivedProgress = indexableFiles.length > 0 ? Math.round((processedCount / indexableFiles.length) * 100) : null;
   const progress = kbProgress !== null ? kbProgress : (derivedProgress !== null ? derivedProgress : 0);
 
+  const statusColor = hasFailedIndexing ? "#ef4444" : isProcessing ? "#f97316" : "#22c55e";
+  const statusLabel = hasFailedIndexing ? "Failed" : isProcessing ? "Indexing" : "Ready";
+
   return (
     <>
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(kb.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(kb.id);
+          }
+        }}
         style={{
-          background: "#181818",
-          border: "1px solid #2a2a2a",
-          borderRadius: 12,
-          padding: 16,
+          padding: 18,
+          textAlign: "left",
+          cursor: "pointer",
+          transition: "all 0.25s ease",
+          width: "100%",
+          background: "linear-gradient(145deg, #141414, #0f0f0f)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 18,
           display: "flex",
           flexDirection: "column",
-          gap: 12,
-          cursor: "pointer",
-          transition: "all 0.2s",
+          height: "100%",
           position: "relative",
+          overflow: "hidden",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
-          e.currentTarget.style.boxShadow = "0 0 20px rgba(249,115,22,0.15)";
+          e.currentTarget.style.borderColor = "rgba(249,115,22,0.2)";
+          e.currentTarget.style.boxShadow = "0 4px 24px rgba(249,115,22,0.08)";
+          e.currentTarget.style.transform = "translateY(-2px)";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "#2a2a2a";
+          e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
           e.currentTarget.style.boxShadow = "none";
+          e.currentTarget.style.transform = "none";
         }}
       >
-        {/* Header with title, description, and delete button */}
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5", marginBottom: 4 }}>
-              {kb.name}
-            </h3>
-            {kb.description && (
-              <p style={{ fontSize: 11, color: "#555", lineHeight: 1.4 }}>
-                {kb.description}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowDeleteConfirm(true);
-            }}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: "20%",
+            right: "20%",
+            height: 1,
+            background: "linear-gradient(90deg, transparent, rgba(249,115,22,0.2), transparent)",
+          }}
+        />
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <div
             style={{
-              background: "rgba(239,68,68,0.1)",
-              border: "none",
-              color: "#ef4444",
-              cursor: "pointer",
-              padding: 6,
-              borderRadius: 6,
               display: "flex",
-              transition: "all 0.2s",
-              flexShrink: 0,
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              marginBottom: 12,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.2)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.1)")}
           >
-            <Trash2 style={{ width: 16, height: 16 }} />
-          </button>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                background: "rgba(249,115,22,0.1)",
+                border: "1px solid rgba(249,115,22,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              <BookOpen style={{ width: 18, height: 18, color: "#f97316" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: statusColor,
+                  boxShadow: hasFailedIndexing
+                    ? "0 0 8px rgba(239,68,68,0.5)"
+                    : isProcessing
+                      ? "0 0 8px rgba(249,115,22,0.5)"
+                      : "0 0 8px rgba(34,197,94,0.5)",
+                }}
+              />
+              <span style={{ fontSize: 10, color: statusColor, fontWeight: 500 }}>
+                {statusLabel}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setShowDeleteConfirm(true);
+                }}
+                style={{
+                  background: "rgba(239,68,68,0.1)",
+                  border: "none",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  padding: 4,
+                  borderRadius: 6,
+                  display: "flex",
+                  transition: "all 0.2s",
+                  marginLeft: 4,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.2)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.1)")}
+              >
+                <Trash2 style={{ width: 12, height: 12 }} />
+              </button>
+            </div>
+          </div>
+
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#f5f5f5",
+              marginBottom: 4,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {kb.name}
+          </p>
+          <p
+            style={{
+              fontSize: 11,
+              color: "#555",
+              marginBottom: 8,
+              lineHeight: 1.5,
+              flex: 1,
+            }}
+          >
+            {kb.description || "No description"}
+          </p>
         </div>
 
-        {/* Files count and processing indicator */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            paddingTop: 12,
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            marginTop: "auto",
+            marginTop: 12,
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={{ fontSize: 11, color: "#888", fontWeight: 500 }}>
-              Files: {processedCount}/{totalCount}
-            </p>
-            {isProcessing && (
-              <p style={{ fontSize: 10, color: "#f97316", fontWeight: 500 }}>
-                Indexing{progress > 0 ? ` ${progress}%` : "..."}
-              </p>
-            )}
-            {hasFailedIndexing && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <p style={{ fontSize: 10, color: "#ef4444", fontWeight: 500 }}>
-                  Indexing failed
-                </p>
-                <button
-                  onClick={handleRetryIndexing}
-                  style={{
-                    fontSize: 10,
-                    color: "#f97316",
-                    fontWeight: 500,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    textDecoration: "underline",
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-          </div>
-          {isProcessing && (
+          <span style={{ fontSize: 10, color: "#333" }}>
+            Files: {processedCount}/{totalCount}
+            {isProcessing && progress > 0 ? ` · ${progress}%` : ""}
+          </span>
+          {isProcessing ? (
             <Loader2
               style={{
-                width: 16,
-                height: 16,
+                width: 12,
+                height: 12,
                 color: "#f97316",
                 animation: "spin 1s linear infinite",
               }}
             />
-          )}
-          {!isProcessing && (
+          ) : hasFailedIndexing ? (
             <button
+              type="button"
+              onClick={handleRetryIndexing}
+              style={{
+                background: "rgba(249,115,22,0.1)",
+                border: "1px solid rgba(249,115,22,0.2)",
+                color: "#f97316",
+                cursor: "pointer",
+                padding: "4px 8px",
+                borderRadius: 6,
+                fontSize: 10,
+                fontWeight: 500,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(249,115,22,0.2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "rgba(249,115,22,0.1)")
+              }
+            >
+              Retry
+            </button>
+          ) : (
+            <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowFileInput(!showFileInput);
               }}
               style={{
-                background: "rgba(34,197,94,0.1)",
-                border: "1px solid rgba(34,197,94,0.2)",
-                color: "#22c55e",
+                background: "rgba(249,115,22,0.1)",
+                border: "1px solid rgba(249,115,22,0.2)",
+                color: "#f97316",
                 cursor: "pointer",
-                padding: 4,
+                padding: 5,
                 borderRadius: 6,
                 display: "flex",
                 transition: "all 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(34,197,94,0.2)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(34,197,94,0.1)")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(249,115,22,0.2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "rgba(249,115,22,0.1)")
+              }
             >
-              <Plus style={{ width: 14, height: 14 }} />
+              <Plus style={{ width: 12, height: 12 }} />
             </button>
           )}
         </div>
 
         {rejectedFiles.length > 0 && (
-          <p style={{ fontSize: 10, color: "#ef4444", padding: "0 2px" }}>
+          <p style={{ fontSize: 10, color: "#ef4444", padding: "4px 0 0", margin: 0 }}>
             Unsupported: {rejectedFiles.join(", ")}
           </p>
         )}

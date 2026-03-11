@@ -25,6 +25,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
   const [description, setDescription] = useState(editAgent?.description || "");
   const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || editAgent?.system_prompt || "");
   const [selectedTools, setSelectedTools] = useState(editAgent?.tools?.map(t => t.name) || []);
+  const [selectedModel, setSelectedModel] = useState(editAgent?.model === "gemini" ? "gemini" : "kimi");
   const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState(editAgent?.knowledge_base_ids?.[0] || "");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
@@ -41,6 +42,20 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     const t = setTimeout(() => setMounted(true), 20);
     return () => clearTimeout(t);
   }, []);
+
+  // Sync form state when editAgent changes (e.g. opening edit again after save — list refetch must return model)
+  React.useEffect(() => {
+    if (!editAgent) return;
+    setName(editAgent.name || "");
+    setDescription(editAgent.description || "");
+    setSystemInstructions(editAgent.system_instructions || editAgent.system_prompt || "");
+    setSelectedTools(editAgent.tools?.map(t => t.name) || []);
+    const model = editAgent.model ?? editAgent.chat_model ?? "kimi";
+    setSelectedModel(model === "gemini" ? "gemini" : "kimi");
+    setSelectedKnowledgeBase(editAgent.knowledge_base_ids?.[0] || "");
+    setIconPreview(editAgent.icon_url || null);
+    setSelectedIcon(editAgent.icon_url ? null : (editAgent.icon_name || editAgent.icon || "Bot"));
+  }, [editAgent?.id, editAgent?.model, editAgent?.name, editAgent?.description, editAgent?.system_instructions, editAgent?.tools, editAgent?.knowledge_base_ids, editAgent?.icon_url, editAgent?.icon_name, editAgent?.icon]);
 
   React.useEffect(() => {
     if (!closing) return;
@@ -133,6 +148,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
         icon_name: selectedIcon,
         icon: selectedIcon,
         tools: selectedTools.map(t => ({ name: t, enabled: true })),
+        model: selectedModel,
         knowledge_base_ids: selectedKnowledgeBase ? [selectedKnowledgeBase] : [],
         status: isEditing ? editAgent.status : "active"
       };
@@ -153,6 +169,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     setDescription("");
     setSystemInstructions("");
     setSelectedTools([]);
+    setSelectedModel("kimi");
     setSelectedKnowledgeBase("");
     setIconFile(null);
     setIconPreview(null);
@@ -335,6 +352,36 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
                ))}
              </div>
            </div>
+
+          {/* Model: chat and tools use selected model; voice and KB indexing always use Kimi */}
+          <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Model</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                { id: "kimi", label: "Kimi (K2.5)" },
+                { id: "gemini", label: "Gemini (3.1 Flash-Lite)" },
+              ].map(opt => {
+                const isSelected = selectedModel === opt.id;
+                return (
+                  <button key={opt.id} type="button" onClick={() => setSelectedModel(opt.id)} style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20,
+                    background: isSelected ? "#f97316" : "#0f0f0f",
+                    border: `1px solid ${isSelected ? "#f97316" : "#2a2a2a"}`,
+                    cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                    color: isSelected ? "#fff" : "#f5f5f5",
+                    whiteSpace: "nowrap"
+                  }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: isSelected ? "#fff" : "#f97316",
+                      flexShrink: 0
+                    }} />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Knowledge Base */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>

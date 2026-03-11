@@ -1,10 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 
-// ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
+// ─── KB indexing: always Kimi K2.5 (OpenRouter). No Gemini used here. ─────────
 const KIMI_API_KEY =
-  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_API_KEY") ||
+  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_K2_5") ||
   Deno.env.get("KIMI_K2.5") ||
   Deno.env.get("kimi-k2.5") ||
@@ -24,6 +24,13 @@ const INDEXABLE_TYPES = [
   "java", "php", "swift", "kt", "html", "css", "scss",
   "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
 ];
+
+function getFileType(f: { type?: string; name?: string }): string {
+  const t = (f.type || "").toLowerCase().trim();
+  if (t && INDEXABLE_TYPES.includes(t)) return t;
+  const ext = (f.name || "").split(".").pop()?.toLowerCase() || "";
+  return INDEXABLE_TYPES.includes(ext) ? ext : "";
+}
 
 async function recordIndexingCost(base44: any, kbName: string, dollars: number): Promise<void> {
   if (dollars <= 0) return;
@@ -441,6 +448,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!KIMI_API_KEY || KIMI_API_KEY.trim() === "") {
+      console.error("indexKnowledgeBase: KIMI_API_KEY (or OPENROUTER_API_KEY) secret is missing or empty");
+      return Response.json(
+        { error: "Indexing requires KIMI_API_KEY or OPENROUTER_API_KEY secret" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     kbId = body.kbId;
     if (!kbId || typeof kbId !== "string") {
@@ -454,9 +469,10 @@ Deno.serve(async (req) => {
 
     const kb = kbList[0];
     const files = kb.files || [];
-    const indexableFiles = files.filter((f: any) =>
-      (f.url || typeof f.inline_text === "string") && INDEXABLE_TYPES.includes(f.type)
-    );
+    const indexableFiles = files.filter((f: any) => {
+      const type = getFileType(f);
+      return (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
+    });
 
     if (indexableFiles.length === 0) {
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -483,7 +499,8 @@ Deno.serve(async (req) => {
 
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
-      if ((!file.url && typeof file.inline_text !== "string") || !INDEXABLE_TYPES.includes(file.type)) continue;
+      const fileType = getFileType(file);
+      if ((!file.url && typeof file.inline_text !== "string") || !fileType || !INDEXABLE_TYPES.includes(fileType)) continue;
       if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
         completed += 1;
         continue;
@@ -499,7 +516,7 @@ Deno.serve(async (req) => {
             throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
           }
 
-          if (file.type === "pdf") {
+          if (fileType === "pdf") {
             const arrayBuf = await fileResp.arrayBuffer();
             const pdfData = await pdf(Buffer.from(arrayBuf));
             text = pdfData.text || "";

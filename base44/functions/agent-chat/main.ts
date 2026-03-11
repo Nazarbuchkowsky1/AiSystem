@@ -3,11 +3,10 @@ import TranscriptClient from 'npm:youtube-transcript-api';
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
 
 // ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
-// Prefer the standard OpenRouter key, but also fall back to the specific
-// Kimi-related secrets you configured in Base44 ("kimi-k2.5").
+// Secrets in Base44: KIMI_API_KEY (OpenRouter key for Kimi), GEMINI_API_KEY for Gemini.
 const KIMI_API_KEY =
-  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_API_KEY") ||
+  Deno.env.get("OPENROUTER_API_KEY") ||
   Deno.env.get("KIMI_K2_5") ||
   Deno.env.get("KIMI_K2.5") ||
   Deno.env.get("kimi-k2.5") ||
@@ -72,6 +71,14 @@ function extractSectionText(doc: any, selectedNodeIds: string[]): string {
 // OpenRouter pricing for moonshotai/kimi-k2.5 (USD per 1M tokens).
 const KIMI_INPUT_COST_PER_1M = 0.45;
 const KIMI_OUTPUT_COST_PER_1M = 2.20;
+
+// ─── Gemini (Google) configuration ───────────────────────────────────────────
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY") || "";
+const GEMINI_MODEL = "gemini-3.1-flash-lite-preview";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+// Gemini 3.1 Flash-Lite Preview: input $0.25/1M (text), output $1.50/1M — https://ai.google.dev/gemini-api/docs/pricing
+const GEMINI_INPUT_COST_PER_1M = 0.25;
+const GEMINI_OUTPUT_COST_PER_1M = 1.50;
 
 // ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
 
@@ -345,6 +352,53 @@ async function callKimi(
   return { text, usage };
 }
 
+async function callGemini(
+  systemText: string,
+  contents: any[],
+  opts: { temperature?: number; maxOutputTokens?: number; jsonMode?: boolean } = {}
+): Promise<{ text: string; usage?: { promptTokens: number; outputTokens: number } }> {
+  if (!GEMINI_API_KEY) {
+    console.error("Missing Gemini API key (GEMINI_API_KEY)");
+    throw new Error("Gemini API key is not configured");
+  }
+  const body: any = {
+    system_instruction: { parts: [{ text: systemText }] },
+    contents,
+    generationConfig: {
+      temperature: opts.temperature ?? 0.7,
+      maxOutputTokens: opts.maxOutputTokens ?? 4096,
+    },
+  };
+  if (opts.jsonMode) {
+    body.generationConfig.responseMimeType = "application/json";
+  }
+  const resp = await fetch(GEMINI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Gemini API error:", errText);
+    throw new Error(`Gemini API error: ${resp.status}`);
+  }
+  const data = await resp.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const um = data?.usageMetadata ?? data?.usage_metadata;
+  let promptTokens = 0;
+  let outputTokens = 0;
+  if (um && typeof um === "object") {
+    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? 0;
+    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? 0;
+  }
+  if (promptTokens === 0 && outputTokens === 0 && text.length > 0) {
+    outputTokens = Math.max(50, Math.ceil(text.length / 4));
+    promptTokens = 100;
+  }
+  const usage = promptTokens > 0 || outputTokens > 0 ? { promptTokens, outputTokens } : undefined;
+  return { text, usage };
+}
+
 function hasStructure(text: string): boolean {
   if (!text || text.length < 80) return true;
   const hasHeading = /^#{2,3}\s/m.test(text) || text.includes("\n## ") || text.includes("\n### ");
@@ -361,7 +415,14 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { messages, agent, mode, fileSources = [] } = body;
+    const { messages, agent, mode, fileSources = [], isVoiceMessage = false } = body;
+
+    // Use agent's chosen model for the reply (voice or text). Only "gemini" → Gemini; anything else → Kimi.
+    const requestedModel = agent?.model != null ? String(agent.model).toLowerCase() : "kimi";
+    const effectiveModel: "kimi" | "gemini" =
+      requestedModel === "gemini" ? "gemini" : "kimi";
+    const callLLM =
+      effectiveModel === "gemini" ? callGemini : callKimi;
 
     const systemParts: string[] = [];
     const agentName = agent.name || "AI Assistant";
@@ -446,7 +507,7 @@ Rules:
       let routingSucceeded = false;
 
       try {
-        const { text: routingRaw } = await callKimi(routingSystem, routingContents, {
+        const { text: routingRaw } = await callLLM(routingSystem, routingContents, {
           temperature: 0.1,
           maxOutputTokens: 1024,
           jsonMode: true,
@@ -786,7 +847,7 @@ ${retrievedContext}`);
       parts: [{ text: m.content }],
     }));
 
-    const res = await callKimi(systemInstruction, geminiContents, {
+    const res = await callLLM(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
       maxOutputTokens: mode === "thinking" ? 8192 : 2048,
     });
@@ -797,7 +858,7 @@ ${retrievedContext}`);
 
     if (mode === "thinking" && responseText && !hasStructure(responseText)) {
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
-      const retryRes = await callKimi(retrySystem, geminiContents, {
+      const retryRes = await callLLM(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
         maxOutputTokens: mode === "thinking" ? 8192 : 2048,
       });
@@ -807,8 +868,11 @@ ${retrievedContext}`);
     }
 
     const cost =
-      (totalPromptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
-      (totalOutputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
+      effectiveModel === "gemini"
+        ? (totalPromptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M +
+          (totalOutputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M
+        : (totalPromptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
+          (totalOutputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
 
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",

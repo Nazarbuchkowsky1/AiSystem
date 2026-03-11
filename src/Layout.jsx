@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   BarChart3,
-  Bot,
+  Brain,
   Wrench,
   Calendar,
   Settings,
@@ -18,7 +18,7 @@ import {
 
 const NAV_ITEMS = [
   { name: "Analytics", icon: BarChart3, page: "Analytics" },
-  { name: "Agents", icon: Bot, page: "Agents" },
+  { name: "Agents", icon: Brain, page: "Agents" },
   { name: "Tools", icon: Wrench, page: "Tools" },
   { name: "Calendar", icon: Calendar, page: "Calendar" },
   { name: "Settings", icon: Settings, page: "Settings" },

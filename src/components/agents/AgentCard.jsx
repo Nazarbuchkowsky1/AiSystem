@@ -13,7 +13,7 @@ const ICON_MAP = {
 };
 
 export default function AgentCard({ agent, onClick, onEdit }) {
-  const Icon = ICON_MAP[agent.icon_name] || ICON_MAP[agent.icon] || Bot;
+  const Icon = ICON_MAP[agent.icon_name] || ICON_MAP[agent.icon] || Brain;
   const isActive = agent.status === "active";
 
   return (

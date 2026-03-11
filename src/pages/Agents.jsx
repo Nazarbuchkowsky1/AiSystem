@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Bot, BookOpen, Loader2 } from "lucide-react";
+import { Plus, Brain, BookOpen, Loader2 } from "lucide-react";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
@@ -19,25 +19,11 @@ export default function Agents() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const queryClient = useQueryClient();
 
-  const tabContainerRef = useRef(null);
-  const tabRefs = useRef({});
-  const [pillStyle, setPillStyle] = useState({ left: 0, width: 0 });
-
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
-
-  useLayoutEffect(() => {
-    const btn = tabRefs.current[currentTab];
-    const container = tabContainerRef.current;
-    if (btn && container) {
-      const cRect = container.getBoundingClientRect();
-      const bRect = btn.getBoundingClientRect();
-      setPillStyle({ left: bRect.left - cRect.left, width: bRect.width });
-    }
-  }, [currentTab]);
 
   useEffect(() => {
     const handler = () => setShowNewModal(true);
@@ -72,19 +58,36 @@ export default function Agents() {
 
   const contentLoading = currentTab === "agents" ? agentsLoading : kbLoading;
 
-  const totalAgentsCount = Array.isArray(agents) ? agents.length : 0;
-
   const createAgentMutation = useMutation({
     mutationFn: (agentData) => base44.entities.Agent.create(agentData),
-    onSuccess: () => {
+    onSuccess: (created, agentData) => {
+      if (created?.id != null) {
+        const withModel = { ...created, model: created.model ?? agentData?.model ?? "kimi" };
+        queryClient.setQueryData(["agents"], (old) => {
+          if (!Array.isArray(old)) return old;
+          const exists = old.some((a) => String(a.id) === String(created.id));
+          if (exists) return old.map((a) => (String(a.id) === String(created.id) ? { ...a, ...withModel } : a));
+          return [withModel, ...old];
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 
   const updateAgentMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Agent.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      const { id, data } = variables;
+      // Update cache immediately so the next click on the agent card gets fresh data (e.g. model).
+      queryClient.setQueryData(["agents"], (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((a) => (String(a.id) === String(id) ? { ...a, ...data } : a));
+      });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // If user had this agent open in workspace, keep selectedAgent in sync (e.g. after editing from elsewhere).
+      setSelectedAgent((prev) =>
+        prev && String(prev.id) === String(id) ? { ...prev, ...data } : prev
+      );
     },
   });
 
@@ -114,191 +117,130 @@ export default function Agents() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "#0a0a0a" }}>
       {/* Header, styled similar to Tools */}
-      <div
-        style={{
-          padding: "14px 24px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "linear-gradient(90deg, rgba(249,115,22,0.03), transparent)",
-          boxSizing: "border-box",
-        }}
-      >
-        <div
-          style={{
+      <div style={{
+        padding: "14px 24px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "linear-gradient(90deg, rgba(249,115,22,0.03), transparent)",
+        boxSizing: "border-box",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+          <div style={{
+            width: 38,
+            height: 38,
+            borderRadius: 12,
+            background: "linear-gradient(135deg, rgba(249,115,22,0.2), rgba(251,146,60,0.08))",
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
-              background: "linear-gradient(135deg, rgba(249,115,22,0.2), rgba(251,146,60,0.08))",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "1px solid rgba(249,115,22,0.2)",
-              boxShadow: "0 2px 12px rgba(249,115,22,0.15)",
-              flexShrink: 0,
-            }}
-          >
-            <Bot style={{ width: 18, height: 18, color: "#f97316" }} />
+            justifyContent: "center",
+            border: "1px solid rgba(249,115,22,0.2)",
+            boxShadow: "0 2px 12px rgba(249,115,22,0.15)",
+            flexShrink: 0,
+          }}>
+            <Brain style={{ width: 18, height: 18, color: "#f97316" }} />
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              gap: 4,
-              minWidth: 0,
-            }}
-          >
-            <h1
-              style={{
-                fontSize: 20,
-                fontWeight: 800,
-                color: "#f5f5f5",
-                margin: 0,
-                lineHeight: 1.2,
-                letterSpacing: "-0.02em",
-                whiteSpace: "nowrap",
-              }}
-            >
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f5f5f5", margin: 0, lineHeight: 1.2, letterSpacing: "-0.02em" }}>
               Agents
             </h1>
-            <p
-              style={{
-                fontSize: 11,
-                color: "#555",
-                margin: 0,
-                fontWeight: 500,
-              }}
-            >
-              {totalAgentsCount} agent{totalAgentsCount === 1 ? "" : "s"} available
-            </p>
           </div>
         </div>
         {!isMobile && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexShrink: 0,
-            }}
-          >
-            <div
-              ref={tabContainerRef}
-              style={{
-                display: "flex",
-                borderRadius: 999,
-                overflow: "hidden",
-                border: "1px solid #2a2a2a",
-                flexShrink: 0,
-                position: "relative",
-                width: "fit-content",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: pillStyle.left,
-                  width: pillStyle.width,
-                  background: "rgba(249,115,22,0.15)",
-                  borderRadius: 999,
-                  transition:
-                    "left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-                  zIndex: 0,
-                }}
-              />
-              {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(
-                ([tab, Icon, label]) => (
-                  <button
-                    key={tab}
-                    ref={el => {
-                      tabRefs.current[tab] = el;
-                    }}
-                    onClick={() => setCurrentTab(tab)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "6px 14px",
-                      fontSize: 11,
-                      fontWeight: 500,
-                      background: "transparent",
-                      color: currentTab === tab ? "#f97316" : "#555",
-                      border: "none",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                      position: "relative",
-                      zIndex: 1,
-                      transition: "color 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-                    }}
-                  >
-                    <Icon style={{ width: 12, height: 12, flexShrink: 0 }} />
-                    {label}
-                  </button>
-                )
-              )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", position: "relative" }}>
+              <div style={{
+                position: "absolute",
+                left: currentTab === "agents" ? 0 : "50%",
+                top: 0,
+                bottom: 0,
+                width: "50%",
+                background: "rgba(249,115,22,0.15)",
+                borderRadius: 9,
+                transition: "left 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+                zIndex: 0,
+              }} />
+              {[
+                ["agents", "Agents", Brain],
+                ["knowledge", "Knowledge Base", BookOpen],
+              ].map(([tab, label, Icon]) => (
+                <button
+                  key={tab}
+                  onClick={() => setCurrentTab(tab)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 5,
+                    padding: "5px 12px",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    background: "transparent",
+                    color: currentTab === tab ? "#f97316" : "#555",
+                    border: "none",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "color 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    position: "relative",
+                    zIndex: 1,
+                    flex: 1,
+                  }}
+                >
+                  <Icon style={{ width: 11, height: 11 }} />
+                  {label}
+                </button>
+              ))}
             </div>
             {currentTab === "agents" ? (
-              <button
-                onClick={() => setShowNewModal(true)}
-                style={{
-                  background: "rgba(249,115,22,0.15)",
-                  color: "#f97316",
-                  border: "1px solid rgba(249,115,22,0.3)",
-                  padding: "8px 16px",
-                  borderRadius: 12,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
-              >
-                <Plus style={{ width: 12, height: 12 }} /> New Agent
-              </button>
+            <button
+              onClick={() => setShowNewModal(true)}
+              style={{
+                background: "rgba(249,115,22,0.15)",
+                color: "#f97316",
+                border: "1px solid rgba(249,115,22,0.3)",
+                padding: "8px 16px",
+                borderRadius: 12,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New Agent
+            </button>
             ) : (
-              <button
-                onClick={() => setShowNewKBModal(true)}
-                style={{
-                  background: "rgba(249,115,22,0.15)",
-                  color: "#f97316",
-                  border: "1px solid rgba(249,115,22,0.3)",
-                  padding: "8px 16px",
-                  borderRadius: 12,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
-              >
-                <Plus style={{ width: 12, height: 12 }} /> New KB
-              </button>
+            <button
+              onClick={() => setShowNewKBModal(true)}
+              style={{
+                background: "rgba(249,115,22,0.15)",
+                color: "#f97316",
+                border: "1px solid rgba(249,115,22,0.3)",
+                padding: "8px 16px",
+                borderRadius: 12,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
+            >
+              <Plus style={{ width: 12, height: 12 }} /> New KB
+            </button>
             )}
           </div>
         )}
@@ -358,7 +300,7 @@ export default function Agents() {
           agents.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
-                <Bot style={{ width: 24, height: 24, color: "#f97316" }} />
+                <Brain style={{ width: 24, height: 24, color: "#f97316" }} />
               </div>
               <p style={{ fontSize: 13, color: "#f5f5f5" }}>No agents yet</p>
               <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
@@ -385,7 +327,7 @@ export default function Agents() {
               <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, alignItems: "stretch" }}>
               {knowledgeBases.map((kb) => (
                 <KnowledgeBaseCard
                   key={kb.id}

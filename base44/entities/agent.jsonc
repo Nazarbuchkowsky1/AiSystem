@@ -52,6 +52,12 @@
       },
       "description": "Tools available to the agent"
     },
+    "model": {
+      "type": "string",
+      "enum": ["kimi", "gemini"],
+      "default": "kimi",
+      "description": "Chat model: kimi (K2.5) or gemini (3.1 Flash-Lite)"
+    },
     "message_count": {
       "type": "number",
       "default": 0
