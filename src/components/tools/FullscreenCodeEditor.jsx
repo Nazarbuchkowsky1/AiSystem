@@ -1,9 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Copy, Check, Save } from "lucide-react";
+import Editor from "react-simple-code-editor";
+import Prism from "prismjs";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
+import "prismjs/themes/prism-tomorrow.css";
 
 export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }) {
   const [value, setValue] = useState(code || "");
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeHover, setCloseHover] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleClose = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onClose(), 180);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -11,11 +32,24 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const show = mounted && !closing;
+
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "#0a0a0a", display: "flex", flexDirection: "column"
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 240, // align with sidebar width so code is fully visible
+        zIndex: 200,
+        background: "rgba(0,0,0,0.96)",
+        display: "flex",
+        flexDirection: "column",
+        opacity: show ? 1 : 0,
+        transition: "opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
+    >
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -36,7 +70,7 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
             {copied ? "Copied" : "Copy"}
           </button>
           {!readOnly && onSave && (
-            <button onClick={() => { onSave(value); onClose(); }} style={{
+            <button onClick={() => { onSave(value); handleClose(); }} style={{
               display: "flex", alignItems: "center", gap: 5,
               background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.3)",
               color: "#f97316", borderRadius: 8, padding: "6px 12px", fontSize: 11,
@@ -45,32 +79,56 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
               <Save style={{ width: 12, height: 12 }} /> Save
             </button>
           )}
-          <button onClick={onClose} style={{
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-            color: "#888", borderRadius: 8, padding: 6, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center"
-          }}>
+          <button
+            onClick={handleClose}
+            onMouseEnter={() => setCloseHover(true)}
+            onMouseLeave={() => setCloseHover(false)}
+            style={{
+              background: closeHover ? "rgba(248,113,113,0.16)" : "rgba(255,255,255,0.05)",
+              border: closeHover ? "1px solid rgba(248,113,113,0.4)" : "1px solid rgba(255,255,255,0.08)",
+              color: closeHover ? "#fecaca" : "#888",
+              borderRadius: 8,
+              padding: 6,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.18s ease-out",
+            }}
+          >
             <X style={{ width: 16, height: 16 }} />
           </button>
         </div>
       </div>
 
       {/* Editor */}
-      <textarea
-        value={value}
-        onChange={e => !readOnly && setValue(e.target.value)}
-        readOnly={readOnly}
-        spellCheck={false}
-        style={{
-          flex: 1, width: "100%", background: "#0a0a0a",
-          border: "none", padding: "20px 24px",
-          color: "#22c55e", fontSize: 13,
-          fontFamily: "'SF Mono', 'Fira Code', monospace",
-          lineHeight: 1.7, outline: "none", resize: "none",
-          boxSizing: "border-box",
-          caretColor: "#f97316"
-        }}
-      />
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <Editor
+          value={value}
+          onValueChange={code => {
+            if (!readOnly) setValue(code);
+          }}
+          highlight={code => Prism.highlight(code, Prism.languages.tsx, "tsx")}
+          padding={20}
+          textareaId="fullscreen-code-editor"
+          textareaStyle={{
+            outline: "none",
+          }}
+          readOnly={readOnly}
+          tabSize={2}
+          insertSpaces
+          style={{
+            fontFamily: "'SF Mono', 'Fira Code', monospace",
+            fontSize: 13,
+            lineHeight: 1.6,
+            background: "#0a0a0a",
+            color: "#e5e7eb",
+            height: "100%",
+            overflow: "auto",
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
     </div>
   );
 }

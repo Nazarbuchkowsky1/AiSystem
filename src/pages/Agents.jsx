@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Bot, BookOpen, Loader2 } from "lucide-react";
@@ -19,11 +19,25 @@ export default function Agents() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const queryClient = useQueryClient();
 
+  const tabContainerRef = useRef(null);
+  const tabRefs = useRef({});
+  const [pillStyle, setPillStyle] = useState({ left: 0, width: 0 });
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  useLayoutEffect(() => {
+    const btn = tabRefs.current[currentTab];
+    const container = tabContainerRef.current;
+    if (btn && container) {
+      const cRect = container.getBoundingClientRect();
+      const bRect = btn.getBoundingClientRect();
+      setPillStyle({ left: bRect.left - cRect.left, width: bRect.width });
+    }
+  }, [currentTab]);
 
   useEffect(() => {
     const handler = () => setShowNewModal(true);
@@ -57,6 +71,8 @@ export default function Agents() {
   });
 
   const contentLoading = currentTab === "agents" ? agentsLoading : kbLoading;
+
+  const totalAgentsCount = Array.isArray(agents) ? agents.length : 0;
 
   const createAgentMutation = useMutation({
     mutationFn: (agentData) => base44.entities.Agent.create(agentData),
@@ -98,19 +114,29 @@ export default function Agents() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "#0a0a0a" }}>
       {/* Header, styled similar to Tools */}
-      <div style={{
-        padding: "14px 24px",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        background: "linear-gradient(90deg, rgba(249,115,22,0.03), transparent)",
-        boxSizing: "border-box",
-      }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
+      <div
+        style={{
+          padding: "14px 24px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "linear-gradient(90deg, rgba(249,115,22,0.03), transparent)",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
               width: 38,
               height: 38,
               borderRadius: 12,
@@ -121,110 +147,160 @@ export default function Agents() {
               border: "1px solid rgba(249,115,22,0.2)",
               boxShadow: "0 2px 12px rgba(249,115,22,0.15)",
               flexShrink: 0,
-            }}>
-              <Bot style={{ width: 18, height: 18, color: "#f97316" }} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <h1
-                style={{
-                  fontSize: 20,
-                  fontWeight: 800,
-                  color: "#f5f5f5",
-                  margin: 0,
-                  lineHeight: 1.2,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                Agents
-              </h1>
-            </div>
+            }}
+          >
+            <Bot style={{ width: 18, height: 18, color: "#f97316" }} />
           </div>
           <div
             style={{
               display: "flex",
-              gap: 8,
-              flexShrink: 0,
-              marginTop: 6,
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 4,
+              minWidth: 0,
             }}
           >
-            {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(([tab, Icon, label]) => (
-              <button
-                key={tab}
-                onClick={() => setCurrentTab(tab)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 14px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  background: currentTab === tab ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.03)",
-                  color: currentTab === tab ? "#f97316" : "#777",
-                  border: currentTab === tab ? "1px solid rgba(249,115,22,0.3)" : "1px solid rgba(255,255,255,0.08)",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  borderRadius: 999,
-                  transition: "all 0.2s ease",
-                }}
-              >
-                <Icon style={{ width: 11, height: 11, flexShrink: 0 }} />
-                {label}
-              </button>
-            ))}
+            <h1
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                color: "#f5f5f5",
+                margin: 0,
+                lineHeight: 1.2,
+                letterSpacing: "-0.02em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Agents
+            </h1>
+            <p
+              style={{
+                fontSize: 11,
+                color: "#555",
+                margin: 0,
+                fontWeight: 500,
+              }}
+            >
+              {totalAgentsCount} agent{totalAgentsCount === 1 ? "" : "s"} available
+            </p>
           </div>
         </div>
         {!isMobile && (
-          currentTab === "agents" ? (
-            <button
-              onClick={() => setShowNewModal(true)}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexShrink: 0,
+            }}
+          >
+            <div
+              ref={tabContainerRef}
               style={{
-                background: "rgba(249,115,22,0.15)",
-                color: "#f97316",
-                border: "1px solid rgba(249,115,22,0.3)",
-                padding: "8px 16px",
-                borderRadius: 12,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
                 display: "flex",
-                alignItems: "center",
-                gap: 6,
-                whiteSpace: "nowrap",
+                borderRadius: 999,
+                overflow: "hidden",
+                border: "1px solid #2a2a2a",
                 flexShrink: 0,
-                transition: "all 0.2s",
+                position: "relative",
+                width: "fit-content",
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
             >
-              <Plus style={{ width: 12, height: 12 }} /> New Agent
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowNewKBModal(true)}
-              style={{
-                background: "rgba(249,115,22,0.15)",
-                color: "#f97316",
-                border: "1px solid rgba(249,115,22,0.3)",
-                padding: "8px 16px",
-                borderRadius: 12,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
-            >
-              <Plus style={{ width: 12, height: 12 }} /> New KB
-            </button>
-          )
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: pillStyle.left,
+                  width: pillStyle.width,
+                  background: "rgba(249,115,22,0.15)",
+                  borderRadius: 999,
+                  transition:
+                    "left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+                  zIndex: 0,
+                }}
+              />
+              {[["agents", Bot, "Agents"], ["knowledge", BookOpen, "Knowledge Base"]].map(
+                ([tab, Icon, label]) => (
+                  <button
+                    key={tab}
+                    ref={el => {
+                      tabRefs.current[tab] = el;
+                    }}
+                    onClick={() => setCurrentTab(tab)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "6px 14px",
+                      fontSize: 11,
+                      fontWeight: 500,
+                      background: "transparent",
+                      color: currentTab === tab ? "#f97316" : "#555",
+                      border: "none",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      position: "relative",
+                      zIndex: 1,
+                      transition: "color 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+                    }}
+                  >
+                    <Icon style={{ width: 12, height: 12, flexShrink: 0 }} />
+                    {label}
+                  </button>
+                )
+              )}
+            </div>
+            {currentTab === "agents" ? (
+              <button
+                onClick={() => setShowNewModal(true)}
+                style={{
+                  background: "rgba(249,115,22,0.15)",
+                  color: "#f97316",
+                  border: "1px solid rgba(249,115,22,0.3)",
+                  padding: "8px 16px",
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
+              >
+                <Plus style={{ width: 12, height: 12 }} /> New Agent
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowNewKBModal(true)}
+                style={{
+                  background: "rgba(249,115,22,0.15)",
+                  color: "#f97316",
+                  border: "1px solid rgba(249,115,22,0.3)",
+                  padding: "8px 16px",
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
+              >
+                <Plus style={{ width: 12, height: 12 }} /> New KB
+              </button>
+            )}
+          </div>
         )}
       </div>
 

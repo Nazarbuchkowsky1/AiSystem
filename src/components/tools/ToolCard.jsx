@@ -1,12 +1,14 @@
 import React from "react";
 import {
   Youtube, BookOpen, Wrench, Terminal, Globe, Database,
-  FileCode, Cpu, Cog, Code, Zap, Brain, Search, FileText
+  FileCode, Cpu, Cog, Code, Zap, Brain, Search, FileText,
+  Bot, Sparkles, Settings, Palette, Rocket
 } from "lucide-react";
 
 const ICON_MAP = {
   Youtube, BookOpen, Wrench, Terminal, Globe, Database,
-  FileCode, Cpu, Cog, Code, Zap, Brain, Search, FileText
+  FileCode, Cpu, Cog, Code, Zap, Brain, Search, FileText,
+  Bot, Sparkles, Settings, Palette, Rocket
 };
 
 export default function ToolCard({ tool, onClick }) {
@@ -41,13 +43,28 @@ export default function ToolCard({ tool, onClick }) {
       <div style={{ position: "absolute", top: 0, left: "20%", right: "20%", height: 1, background: "linear-gradient(90deg, transparent, rgba(249,115,22,0.2), transparent)" }} />
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 12,
-          background: "rgba(249,115,22,0.1)",
-          border: "1px solid rgba(249,115,22,0.15)",
-          display: "flex", alignItems: "center", justifyContent: "center"
-        }}>
-          <Icon style={{ width: 18, height: 18, color: "#f97316" }} />
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            background: "rgba(249,115,22,0.1)",
+            border: "1px solid rgba(249,115,22,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {tool.icon_url ? (
+            <img
+              src={tool.icon_url}
+              alt={tool.name}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            <Icon style={{ width: 18, height: 18, color: "#f97316" }} />
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {isBuiltin && (

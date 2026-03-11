@@ -1,15 +1,63 @@
-import React, { useState, useRef } from "react";
-import { X, Upload, Code } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  X,
+  Upload,
+  Code,
+  Bot,
+  Zap,
+  Brain,
+  Sparkles,
+  Cpu,
+  Settings,
+  Palette,
+  Rocket,
+} from "lucide-react";
+import Editor from "react-simple-code-editor";
+import Prism from "prismjs";
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
+import "prismjs/themes/prism-tomorrow.css";
+
+const ICON_OPTIONS = [
+  { name: "Bot", Icon: Bot },
+  { name: "Zap", Icon: Zap },
+  { name: "Brain", Icon: Brain },
+  { name: "Sparkles", Icon: Sparkles },
+  { name: "Cpu", Icon: Cpu },
+  { name: "Settings", Icon: Settings },
+  { name: "Palette", Icon: Palette },
+  { name: "Rocket", Icon: Rocket },
+];
 
 export default function NewToolModal({ onClose, onSave }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [iconName, setIconName] = useState("Wrench");
+  const [iconName, setIconName] = useState("Bot");
   const [code, setCode] = useState("");
+  const [iconFile, setIconFile] = useState(null);
+  const [iconPreview, setIconPreview] = useState(null);
   const [activeTab, setActiveTab] = useState("details"); // details | code
   const fileRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
 
-  const ICONS = ["Wrench", "Terminal", "Globe", "Database", "FileCode", "Cpu", "Code", "Zap", "Brain", "Search", "FileText", "Youtube", "BookOpen"];
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => onClose(), 220);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
+  const handleClose = () => {
+    if (closing) return;
+    setClosing(true);
+  };
 
   const handleSave = () => {
     if (!name.trim()) return;
@@ -17,6 +65,7 @@ export default function NewToolModal({ onClose, onSave }) {
       name: name.trim(),
       description: description.trim(),
       icon_name: iconName,
+      icon_url: iconPreview || undefined,
       tool_type: "custom",
       code: code.trim(),
       status: "active",
@@ -44,16 +93,38 @@ export default function NewToolModal({ onClose, onSave }) {
     reader.readAsText(file);
   };
 
+  const show = mounted && !closing;
+
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }} />
-      <div style={{
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(4px)",
+        opacity: show ? 1 : 0,
+        transition: "opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
+      onClick={handleClose}
+    >
+      <div
+        style={{
         position: "relative", width: "90%", maxWidth: 560,
         background: "linear-gradient(145deg, #141414, #0c0c0c)",
         border: "1px solid rgba(255,255,255,0.08)",
         borderRadius: 20, overflow: "hidden",
-        maxHeight: "90vh", display: "flex", flexDirection: "column"
-      }}>
+        maxHeight: "90vh", display: "flex", flexDirection: "column",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
+        transform: show ? "scale(1)" : "scale(0.96)",
+        opacity: show ? 1 : 0,
+        transition: "opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
+      onClick={e => e.stopPropagation()}
+      >
         <div style={{ position: "absolute", top: 0, left: "20%", right: "20%", height: 1, background: "linear-gradient(90deg, transparent, rgba(249,115,22,0.4), transparent)" }} />
 
         <div style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -67,7 +138,21 @@ export default function NewToolModal({ onClose, onSave }) {
             }}>
               <Upload style={{ width: 12, height: 12 }} /> Import
             </button>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#555" }}>
+            <button
+              onClick={handleClose}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#555",
+                display: "flex",
+                padding: 4,
+                borderRadius: 6,
+                transition: "all 0.18s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.12)"; e.currentTarget.style.color = "#f97316"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#555"; }}
+            >
               <X style={{ width: 18, height: 18 }} />
             </button>
           </div>
@@ -101,16 +186,77 @@ export default function NewToolModal({ onClose, onSave }) {
               </div>
               <div>
                 <label style={{ fontSize: 11, color: "#666", fontWeight: 600, marginBottom: 6, display: "block" }}>Icon</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {ICONS.map(ic => (
-                    <button key={ic} onClick={() => setIconName(ic)} style={{
-                      padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 500,
-                      background: iconName === ic ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.03)",
-                      border: iconName === ic ? "1px solid rgba(249,115,22,0.3)" : "1px solid rgba(255,255,255,0.06)",
-                      color: iconName === ic ? "#f97316" : "#888", cursor: "pointer"
-                    }}>{ic}</button>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {ICON_OPTIONS.map(({ name: icName, Icon }) => (
+                    <button
+                      key={icName}
+                      onClick={() => { setIconName(icName); setIconPreview(null); setIconFile(null); }}
+                      style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 10,
+                        background:
+                          iconName === icName ? "rgba(249,115,22,0.15)" : "#0f0f0f",
+                        border:
+                          iconName === icName
+                            ? "1px solid rgba(249,115,22,0.4)"
+                            : "1px solid #2a2a2a",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: iconName === icName ? "#f97316" : "#555",
+                        transition: "all 0.2s",
+                      }}
+                      title={icName}
+                    >
+                      <Icon style={{ width: 20, height: 20 }} />
+                    </button>
                   ))}
                 </div>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 10,
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    background: iconPreview ? "rgba(249,115,22,0.12)" : "rgba(0,0,0,0.3)",
+                    border: `1px dashed ${iconPreview ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.16)"}`,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {iconPreview ? (
+                    <>
+                      <img
+                        src={iconPreview}
+                        alt="Custom icon"
+                        style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }}
+                      />
+                      <span style={{ fontSize: 11, color: "#f5f5f5" }}>Custom icon selected</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload style={{ width: 14, height: 14, color: "#666" }} />
+                      <span style={{ fontSize: 11, color: "#666" }}>Or upload custom icon</span>
+                    </>
+                  )}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setIconFile(file);
+                      const url = URL.createObjectURL(file);
+                      setIconPreview(url);
+                    }}
+                  />
+                </label>
               </div>
             </div>
           )}
@@ -121,21 +267,62 @@ export default function NewToolModal({ onClose, onSave }) {
                 <Code style={{ width: 14, height: 14, color: "#f97316" }} />
                 <span style={{ fontSize: 12, color: "#888" }}>Webhook / API / Custom code</span>
               </div>
-              <textarea value={code} onChange={e => setCode(e.target.value)}
-                placeholder={"// Your custom integration code here\n// This can be a webhook URL, API call, or any custom logic\n\n// Example:\n// POST https://your-api.com/webhook\n// { \"action\": \"process\", \"data\": \"...\" }"}
-                rows={16}
+              <div
                 style={{
-                  width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 12, padding: "14px 16px", color: "#22c55e", fontSize: 12,
-                  fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", lineHeight: 1.6,
-                  outline: "none", resize: "vertical", boxSizing: "border-box"
-                }} />
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(0,0,0,0.3)",
+                  overflow: "hidden",
+                }}
+              >
+                <Editor
+                  value={code}
+                  onValueChange={setCode}
+                  highlight={value => Prism.highlight(value, Prism.languages.tsx, "tsx")}
+                  padding={14}
+                  textareaId="new-tool-code"
+                  textareaStyle={{ outline: "none" }}
+                  placeholder={
+                    "// Your custom integration code here\n" +
+                    "// This can be a webhook URL, API call, or any custom logic\n\n" +
+                    "// Example:\n" +
+                    "// POST https://your-api.com/webhook\n" +
+                    '// { \"action\": \"process\", \"data\": \"...\" }'
+                  }
+                  style={{
+                    fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                    minHeight: 260,
+                    background: "transparent",
+                    color: "#e5e7eb",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
 
         <div style={{ padding: "14px 22px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ padding: "8px 18px", borderRadius: 10, fontSize: 12, fontWeight: 500, background: "transparent", border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer" }}>Cancel</button>
+          <button
+            onClick={handleClose}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 500,
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#888",
+              cursor: "pointer",
+              transition: "all 0.18s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          >
+            Cancel
+          </button>
           <button onClick={handleSave} disabled={!name.trim()} style={{
             padding: "8px 24px", borderRadius: 10, fontSize: 12, fontWeight: 600,
             background: name.trim() ? "#f97316" : "#333", color: "#fff",

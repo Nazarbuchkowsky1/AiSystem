@@ -13,106 +13,101 @@ const BUILTIN_TOOLS = [
     icon_name: "Youtube",
     tool_type: "builtin",
     status: "active",
-    code: `// YouTube Scraper - serverless function + webhook client
-// This tool expects an input object: { url: "https://youtube.com/..." }
-// and returns: { title, transcript, videoId, language, lineCount }
-//
-// Example webhook client (frontend/agent runtime):
-//   const res = await fetch("https://YOUR_APP_URL/functions/youtubeTranscript", {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ url: input.url }),
-//   });
-//   const data = await res.json();
-//   return data;
-//
-// Example Deno function (deployed on Base44):
-//
-// import { createClientFromRequest } from "npm:@base44/sdk@0.8.20";
-//
-// function extractVideoId(url) {
-//   const patterns = [
-//     /(?:youtube\\.com\\/watch\\?v=)([a-zA-Z0-9_-]{11})/,
-//     /(?:youtu\\.be\\/)([a-zA-Z0-9_-]{11})/,
-//     /(?:youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/,
-//     /(?:youtube\\.com\\/shorts\\/)([a-zA-Z0-9_-]{11})/,
-//   ];
-//   for (const pattern of patterns) {
-//     const match = url.match(pattern);
-//     if (match) return match[1];
-//   }
-//   return null;
-// }
-//
-// async function fetchTranscript(videoId) {
-//   const pageUrl = \`https://www.youtube.com/watch?v=\${videoId}\`;
-//   const res = await fetch(pageUrl, {
-//     headers: {
-//       "User-Agent": "Mozilla/5.0",
-//       "Accept-Language": "en-US,en;q=0.9",
-//     },
-//   });
-//   const html = await res.text();
-//
-//   const titleMatch = html.match(/<title>(.*?)<\\/title>/);
-//   const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : "Unknown";
-//
-//   const captionMatch = html.match(/"captionTracks":\\s*(\\[.*?\\])/);
-//   if (!captionMatch) throw new Error("No captions found for this video.");
-//
-//   const captionTracks = JSON.parse(captionMatch[1]);
-//   let track =
-//     captionTracks.find(t => t.languageCode === "en" && t.kind !== "asr") ||
-//     captionTracks.find(t => t.languageCode === "en") ||
-//     captionTracks.find(t => t.kind !== "asr") ||
-//     captionTracks[0];
-//
-//   const captionUrl = track.baseUrl;
-//   const captionRes = await fetch(captionUrl);
-//   const captionXml = await captionRes.text();
-//
-//   const lines = [];
-//   const regex = /<text start="([\\d.]+)" dur="([\\d.]+)"[^>]*>(.*?)<\\/text>/g;
-//   let m;
-//   while ((m = regex.exec(captionXml)) !== null) {
-//     const text = m[3]
-//       .replace(/&amp;/g, "&")
-//       .replace(/&lt;/g, "<")
-//       .replace(/&gt;/g, ">")
-//       .replace(/&quot;/g, '"')
-//       .replace(/&#39;/g, "'")
-//       .replace(/<[^>]+>/g, "")
-//       .trim();
-//     if (text) lines.push(text);
-//   }
-//
-//   return {
-//     title,
-//     videoId,
-//     language: track.languageCode,
-//     transcript: lines.join(" "),
-//     lineCount: lines.length,
-//   };
-// }
-//
-// Deno.serve(async (req) => {
-//   try {
-//     const base44 = createClientFromRequest(req);
-//     const user = await base44.auth.me();
-//     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
-//
-//     const { url } = await req.json();
-//     if (!url) return Response.json({ error: "Missing YouTube URL" }, { status: 400 });
-//
-//     const videoId = extractVideoId(url);
-//     if (!videoId) return Response.json({ error: "Invalid YouTube URL" }, { status: 400 });
-//
-//     const result = await fetchTranscript(videoId);
-//     return Response.json(result);
-//   } catch (error) {
-//     return Response.json({ error: error.message }, { status: 500 });
-//   }
-// });`
+    code: `// YouTube Scraper – Deno function
+// Input:  { url: "https://youtube.com/..." }
+// Output: { title, transcript, videoId, language, lineCount }
+
+import { createClientFromRequest } from "npm:@base44/sdk@0.8.20";
+
+function extractVideoId(url) {
+  const patterns = [
+    /(?:youtube\\.com\\/watch\\?v=)([a-zA-Z0-9_-]{11})/,
+    /(?:youtu\\.be\\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\\.com\\/shorts\\/)([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+async function fetchTranscript(videoId) {
+  const pageUrl = \`https://www.youtube.com/watch?v=\${videoId}\`;
+  const res = await fetch(pageUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+  const html = await res.text();
+
+  const titleMatch = html.match(/<title>(.*?)<\\/title>/);
+  const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : "Unknown";
+
+  const captionMatch = html.match(/"captionTracks":\\s*(\\[.*?\\])/);
+  if (!captionMatch) throw new Error("No captions found for this video.");
+
+  const captionTracks = JSON.parse(captionMatch[1]);
+  const track =
+    captionTracks.find(t => t.languageCode === "en" && t.kind !== "asr") ||
+    captionTracks.find(t => t.languageCode === "en") ||
+    captionTracks.find(t => t.kind !== "asr") ||
+    captionTracks[0];
+
+  const captionUrl = track.baseUrl;
+  const captionRes = await fetch(captionUrl);
+  const captionXml = await captionRes.text();
+
+  const lines = [];
+  const regex = /<text start="([\\d.]+)" dur="([\\d.]+)"[^>]*>(.*?)<\\/text>/g;
+  let m;
+  while ((m = regex.exec(captionXml)) !== null) {
+    const text = m[3]
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    if (text) lines.push(text);
+  }
+
+  return {
+    title,
+    videoId,
+    language: track.languageCode,
+    transcript: lines.join(" "),
+    lineCount: lines.length,
+  };
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { url } = await req.json();
+    if (!url) {
+      return Response.json({ error: "Missing YouTube URL" }, { status: 400 });
+    }
+
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      return Response.json({ error: "Invalid YouTube URL" }, { status: 400 });
+    }
+
+    const result = await fetchTranscript(videoId);
+    return Response.json(result);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});`
   },
   {
     name: "KB Expander",
@@ -122,45 +117,43 @@ const BUILTIN_TOOLS = [
     status: "active",
     code: `// Knowledge Base Expander
 // High-level flow:
-// 1) Input: { kbId, youtubeUrl? string, rawText? string }
-// 2) If youtubeUrl is provided → call YouTube Scraper tool/webhook to get transcript text
-// 3) Upload transcript or rawText as a new KB file
-// 4) Trigger KB indexing function so future queries can use the new knowledge
-//
-// Pseudo-code client (agent runtime):
-//
-// async function kbExpander(input) {
-//   const { kbId, youtubeUrl, rawText } = input;
-//   let text = rawText || "";
-//
-//   if (youtubeUrl) {
-//     const ytRes = await fetch("https://YOUR_APP_URL/functions/youtubeTranscript", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({ url: youtubeUrl }),
-//     });
-//     const ytData = await ytRes.json();
-//     if (ytData.error) throw new Error(ytData.error);
-//     text = ytData.transcript;
-//   }
-//
-//   if (!text) throw new Error("No text to add to Knowledge Base");
-//
-//   // 3) Create a text file in your storage and attach it to KB
-//   //    (this is pseudo-code, adapt to your storage / Base44 entities)
-//   const fileName = "yt-" + Date.now() + ".txt";
-//   // await uploadToStorage(fileName, text);
-//   // await base44.entities.KnowledgeBase.update(kbId, { files: [...kb.files, { name: fileName, url, type: "txt" }] });
-//
-//   // 4) Trigger KB indexing cloud function
-//   await fetch("https://YOUR_APP_URL/functions/index-knowledge-base", {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ kbId }),
-//   });
-//
-//   return { ok: true };
-// }`
+// 1) Input: { kbId, youtubeUrl?: string, rawText?: string }
+// 2) If youtubeUrl -> call YouTube Scraper to get transcript text
+// 3) Upload transcript/rawText as a new KB file
+// 4) Trigger KB indexing function so future queries can use it
+
+async function kbExpander({ kbId, youtubeUrl, rawText }) {
+  if (!kbId) throw new Error("kbId is required");
+
+  let text = rawText || "";
+
+  if (youtubeUrl) {
+    const ytRes = await fetch("https://YOUR_APP_URL/functions/youtubeTranscript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: youtubeUrl }),
+    });
+    const ytData = await ytRes.json();
+    if (ytData.error) throw new Error(ytData.error);
+    text = ytData.transcript;
+  }
+
+  if (!text) throw new Error("No text to add to Knowledge Base");
+
+  // Example: upload text somewhere and attach to KB entity.
+  // const fileUrl = await uploadToStorage("yt-" + Date.now() + ".txt", text);
+  // await base44.entities.KnowledgeBase.update(kbId, {
+  //   files: [...kb.files, { name: "YouTube transcript", url: fileUrl, type: "txt" }]
+  // });
+
+  await fetch("https://YOUR_APP_URL/functions/index-knowledge-base", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kbId }),
+  });
+
+  return { ok: true };
+}`
   }
 ];
 
