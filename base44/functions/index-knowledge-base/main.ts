@@ -1,21 +1,19 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
 
-// ─── KB indexing: always Kimi K2.5 (OpenRouter). No Gemini used here. ─────────
-const KIMI_API_KEY =
-  Deno.env.get("KIMI_API_KEY") ||
-  Deno.env.get("OPENROUTER_API_KEY") ||
-  Deno.env.get("KIMI_K2_5") ||
-  Deno.env.get("KIMI_K2.5") ||
-  Deno.env.get("kimi-k2.5") ||
-  "";
-const KIMI_MODEL = "moonshotai/kimi-k2.5";
-const KIMI_URL = "https://openrouter.ai/api/v1/chat/completions";
-const KIMI_INPUT_COST_PER_1M = 0.45;
-const KIMI_OUTPUT_COST_PER_1M = 2.20;
+// ─── KB indexing: Gemini 3.1 Flash-Lite configuration ─────────────────────────
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY") || "";
+const GEMINI_MODEL = "gemini-3.1-flash-lite-preview";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-const MAX_PARAGRAPHS_PER_CHUNK = 120;
-const MAX_CHARS_PER_CHUNK = 50000;
+// Gemini 3.1 Flash-Lite Preview pricing (USD per 1M tokens)
+const GEMINI_INPUT_COST_PER_1M = 0.25;
+const GEMINI_OUTPUT_COST_PER_1M = 1.50;
+
+
+const MAX_PARAGRAPHS_PER_CHUNK = 80;
+const MAX_CHARS_PER_CHUNK = 30000;
+
 const MAX_PARAGRAPH_LENGTH = 4000;
 
 const INDEXABLE_TYPES = [
@@ -173,8 +171,8 @@ async function buildPageIndexForText(
   text: string,
   fileName: string
 ): Promise<{ doc: PageIndexDocument | null; cost: number }> {
-  if (!KIMI_API_KEY) {
-    console.error("No Kimi API key configured");
+  if (!GEMINI_API_KEY) {
+    console.error("Missing Gemini API key (GEMINI_API_KEY)");
     return { doc: null, cost: 0 };
   }
 
@@ -193,65 +191,52 @@ async function buildPageIndexForText(
   const userPrompt = `Document name: ${fileName}\nTotal paragraphs: ${paragraphs.length}\n\n${taggedText}`;
 
   const body = {
-    model: KIMI_MODEL,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.1,
-    max_tokens: 16384,
-    response_format: { type: "json_object" },
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 8192,
+      responseMimeType: "application/json",
+    },
   };
 
-  const resp = await fetch(KIMI_URL, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout for stability
+
+  const resp = await fetch(GEMINI_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${KIMI_API_KEY}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error(`Kimi API ${resp.status}: ${errText}`);
+    console.error(`Gemini API ${resp.status}: ${errText}`);
     return { doc: null, cost: 0 };
   }
 
   const data = await resp.json();
-
-  const um = data?.usage;
+  const um = data?.usageMetadata || data?.usage_metadata;
   let promptTokens = 0;
   let outputTokens = 0;
   if (um && typeof um === "object") {
-    promptTokens =
-      um.prompt_tokens ??
-      um.promptTokenCount ??
-      um.prompt_token_count ??
-      um.inputTokenCount ??
-      0;
-    outputTokens =
-      um.completion_tokens ??
-      um.candidatesTokenCount ??
-      um.candidates_token_count ??
-      um.outputTokenCount ??
-      um.output_token_count ??
-      0;
+    promptTokens = um.promptTokenCount ?? um.prompt_token_count ?? 0;
+    outputTokens = um.candidatesTokenCount ?? um.candidates_token_count ?? 0;
   }
 
-  const finishReason = data?.choices?.[0]?.finish_reason;
-  let textOut: string | undefined = data?.choices?.[0]?.message?.content;
+  let textOut = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-  if (promptTokens === 0 && outputTokens === 0) {
+  if (promptTokens === 0 && outputTokens === 0 && textOut) {
     promptTokens = Math.max(100, Math.ceil(userPrompt.length / 4));
-    outputTokens = textOut ? Math.max(50, Math.ceil(textOut.length / 4)) : 50;
+    outputTokens = Math.max(50, Math.ceil(textOut.length / 4));
   }
   const cost =
-    (promptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
-    (outputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
+    (promptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M +
+    (outputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M;
 
   if (!textOut) {
-    console.error(`Kimi returned empty response (finishReason: ${finishReason || "unknown"})`);
+    console.error(`Gemini returned empty response`);
     return { doc: null, cost };
   }
 
@@ -262,7 +247,8 @@ async function buildPageIndexForText(
   }
 
   try {
-    const parsed = JSON.parse(textOut);
+    const parsed = typeof textOut === "string" ? JSON.parse(textOut) : textOut;
+
 
     let structure: PageIndexNode[] | null = null;
     let docTitle = fileName;
@@ -281,7 +267,7 @@ async function buildPageIndexForText(
     }
 
     if (!structure || structure.length === 0) {
-      console.error("Kimi returned valid JSON but no recognizable tree structure");
+      console.error("Gemini returned valid JSON but no recognizable tree structure");
       return { doc: null, cost };
     }
 
@@ -302,7 +288,7 @@ async function buildPageIndexForText(
     };
     return { doc, cost };
   } catch (e) {
-    console.error("Failed to parse Kimi JSON:", e instanceof Error ? e.message : String(e));
+    console.error("Failed to parse Gemini JSON:", e instanceof Error ? e.message : String(e));
     return { doc: null, cost };
   }
 }
@@ -334,13 +320,9 @@ async function buildPageIndexWithChunking(
     const chunkResult = await buildPageIndexForText(chunkText, fileName);
     totalCost += chunkResult.cost;
     const chunkDoc = chunkResult.doc;
+
     if (!chunkDoc?.root?.nodes?.length) {
-      const fallback = buildFallbackTree(chunkText, fileName);
-      for (const node of fallback.root.nodes || []) {
-        addParagraphOffsetToNode(node, start);
-        mergedNodes.push(node);
-      }
-      if (!docDescription && fallback.doc_description) docDescription = fallback.doc_description;
+      throw new Error(`Failed to generate indexing tree for chunk ${start}-${end}`);
     } else {
       docTitle = chunkDoc.doc_title;
       if (chunkDoc.doc_description) docDescription = chunkDoc.doc_description;
@@ -383,57 +365,8 @@ function renumberNodes(nodes: PageIndexNode[]) {
   walk(nodes);
 }
 
-function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
-  const paragraphs = smartSplitText(text || "");
+/** No fallback tree needed; we prefer to fail and show error so user can retry than have a broken index. */
 
-  if (paragraphs.length === 0) {
-    return {
-      doc_title: fileName,
-      doc_description: fileName,
-      paragraphs: [],
-      root: {
-        title: fileName,
-        node_id: "0000",
-        start_index: 0,
-        end_index: 0,
-        summary: fileName,
-        nodes: [],
-      },
-    };
-  }
-
-  const summary = paragraphs.slice(0, 10).join(" ").trim().slice(0, 500);
-  const sectionCount = Math.min(5, paragraphs.length);
-  const sectionSize = Math.max(1, Math.ceil(paragraphs.length / sectionCount));
-  const sections: PageIndexNode[] = [];
-
-  for (let i = 0; i < paragraphs.length; i += sectionSize) {
-    const end = Math.min(i + sectionSize - 1, paragraphs.length - 1);
-    const sectionSummary = paragraphs.slice(i, end + 1).join(" ").trim().slice(0, 300);
-    sections.push({
-      title: `Section ${sections.length + 1}`,
-      node_id: String(sections.length + 1).padStart(4, "0"),
-      start_index: i,
-      end_index: end,
-      summary: sectionSummary,
-      nodes: [],
-    });
-  }
-
-  return {
-    doc_title: fileName,
-    doc_description: summary,
-    paragraphs,
-    root: {
-      title: fileName,
-      node_id: "0000",
-      start_index: 0,
-      end_index: paragraphs.length - 1,
-      summary: summary || fileName,
-      nodes: sections,
-    },
-  };
-}
 
 // ─── Deno serve ───────────────────────────────────────────────────────────────
 
@@ -453,10 +386,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!KIMI_API_KEY || KIMI_API_KEY.trim() === "") {
-      console.error("indexKnowledgeBase: KIMI_API_KEY (or OPENROUTER_API_KEY) secret is missing or empty");
+    if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
+      console.error("indexKnowledgeBase: GEMINI_API_KEY secret is missing or empty");
       return Response.json(
-        { error: "Indexing requires KIMI_API_KEY or OPENROUTER_API_KEY secret" },
+        { error: "Indexing requires GEMINI_API_KEY or GOOGLE_AI_API_KEY secret" },
         { status: 500 }
       );
     }
@@ -502,6 +435,7 @@ Deno.serve(async (req) => {
     logDebug(`[KB_DEBUG] kbId=${kbId}, total files=${files.length}, indexableFiles=${indexableFiles.length}`);
 
     if (indexableFiles.length === 0) {
+      logDebug(`[KB] No indexable files to process now.`);
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         processing: false,
         index_status: "succeeded",
@@ -511,6 +445,7 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, indexed: false, debug: debugLogs });
     }
 
+    logDebug(`[KB] Starting processing loop for ${indexableFiles.length} files...`);
     await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
       processing: true,
       index_status: "indexing",
@@ -529,27 +464,24 @@ Deno.serve(async (req) => {
       const fileType = getFileType(file);
       
       if ((!file.url && typeof file.inline_text !== "string") || !fileType || !INDEXABLE_TYPES.includes(fileType)) {
-        logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it lacks url/inline_text or has invalid fileType=${fileType}`);
         continue;
       }
       if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
-        logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it is already processed.`);
+        logDebug(`[KB] Skipping already processed file: ${file.name}`);
         completed += 1;
         continue;
       }
 
       try {
-        logDebug(`[KB_DEBUG] Start processing file "${file.name}"...`);
+        logDebug(`[KB] Indexing file: "${file.name}" (Type: ${fileType})`);
         let text: string;
         if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
-          logDebug(`[KB_DEBUG] Using inline_text for "${file.name}" (${file.inline_text.length} chars)`);
           text = file.inline_text;
+          logDebug(`[KB] Using inline text (${text.length} chars)`);
         } else {
-          logDebug(`[KB_DEBUG] Fetching URL for "${file.name}": ${file.url}`);
+          logDebug(`[KB] Fetching URL: ${file.url}`);
           const fileResp = await fetch(file.url);
-          if (!fileResp.ok) {
-            throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
-          }
+          if (!fileResp.ok) throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
 
           if (fileType === "pdf") {
             const arrayBuf = await fileResp.arrayBuffer();
@@ -558,11 +490,15 @@ Deno.serve(async (req) => {
           } else {
             text = await fileResp.text();
           }
+          logDebug(`[KB] Fetched ${text.length} characters`);
         }
 
         const indexResult = await buildPageIndexWithChunking(text, file.name);
-        const finalDoc = indexResult.doc || buildFallbackTree(text, file.name);
+        const finalDoc = indexResult.doc;
+        if (!finalDoc) throw new Error("Indexing result is null");
+
         totalKbCost += indexResult.cost;
+        logDebug(`[KB] Indexing successful for "${file.name}". Cost: $${indexResult.cost.toFixed(6)}`);
 
         updatedFiles[i] = {
           ...file,
@@ -574,19 +510,21 @@ Deno.serve(async (req) => {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`File "${file.name}" indexing error: ${msg}`);
+        logDebug(`[KB] Error indexing "${file.name}": ${msg}`);
         errors.push(`${file.name}: ${msg}`);
 
         updatedFiles[i] = {
-          ...file,
-          processed: true,
-          index_tree: buildFallbackTree("", file.name),
-          doc_description: `Error during indexing: ${msg}`,
-        };
+            ...file,
+            processed: true,
+            index_tree: null,
+            doc_description: `Error during indexing: ${msg}`,
+          };
         indexed = true;
       }
 
       completed += 1;
       const progress = Math.round((completed / indexableFiles.length) * 100);
+      logDebug(`[KB] Progress: ${progress}% (${completed}/${indexableFiles.length})`);
 
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         files: updatedFiles,
@@ -598,10 +536,13 @@ Deno.serve(async (req) => {
     }
 
     if (totalKbCost > 0) {
+      logDebug(`[KB] Total indexing cost: $${totalKbCost.toFixed(6)}`);
       await recordIndexingCost(base44, kb.name || "KB", totalKbCost);
     }
 
-    return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.2" });
+    return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "2.0" });
+
+
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("indexKnowledgeBase fatal error:", msg);

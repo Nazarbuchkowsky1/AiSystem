@@ -408,89 +408,6 @@ function extractAllYouTubeIds(text: string): { url: string; videoId: string }[] 
   return urls;
 }
 
-// Build a very simple page index structure from inline transcript text so that
-// YouTube transcripts are immediately searchable even before/without the
-// heavier index-knowledge-base function.
-function buildInlineTranscriptIndex(text: string, fileName: string): any {
-  const cleaned = (text || "").replace(/\r\n/g, "\n").trim();
-  if (!cleaned) {
-    return {
-      doc_title: fileName,
-      doc_description: "Empty transcript",
-      root: {
-        title: fileName,
-        node_id: "0000",
-        start_index: 0,
-        end_index: 0,
-        summary: "Empty transcript",
-        nodes: [],
-      },
-      paragraphs: [""],
-    };
-  }
-
-  // Split on double newlines first; if paragraphs are still huge, chunk them.
-  const roughParts = cleaned.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-  const paragraphs: string[] = [];
-  const MAX_PARA = 600;
-  for (const part of roughParts) {
-    if (part.length <= MAX_PARA) {
-      const p = part.trim();
-      if (p) paragraphs.push(p);
-    } else {
-      let start = 0;
-      while (start < part.length) {
-        let slice = part.slice(start, start + MAX_PARA);
-        // Try to snap to the end of a sentence
-        const lastSentenceEnd = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
-        if (lastSentenceEnd > MAX_PARA / 2 && start + lastSentenceEnd < part.length) {
-          slice = part.slice(start, start + lastSentenceEnd + 1);
-        }
-        const p = slice.trim();
-        if (p) paragraphs.push(p);
-        start += slice.length;
-      }
-    }
-  }
-
-  // Group paragraphs into sections (e.g., 5 paragraphs per section) for the routing index
-  const nodes: any[] = [];
-  const PARA_PER_NODE = 5;
-  for (let i = 0; i < paragraphs.length; i += PARA_PER_NODE) {
-    const end = Math.min(i + PARA_PER_NODE - 1, paragraphs.length - 1);
-    const slice = paragraphs.slice(i, end + 1);
-    
-    // Create a very simple summary from the first 160 characters of the first paragraph
-    const sectionText = slice.join(" ");
-    let summary = sectionText.substring(0, 160);
-    if (sectionText.length > 160) summary += "...";
-
-    nodes.push({
-      title: `Section ${Math.floor(i / PARA_PER_NODE) + 1}`,
-      node_id: (Math.floor(i / PARA_PER_NODE) + 1).toString().padStart(4, "0"),
-      start_index: i,
-      end_index: end,
-      summary: summary,
-      nodes: [],
-    });
-  }
-
-  const rootNode = {
-    title: fileName || "Transcript",
-    node_id: "0000",
-    start_index: 0,
-    end_index: Math.max(paragraphs.length - 1, 0),
-    summary: `YouTube transcript (${paragraphs.length} paragraphs in ${nodes.length} sections)`,
-    nodes: nodes,
-  };
-
-  return {
-    doc_title: fileName || "YouTube Video",
-    doc_description: `Transcript (${paragraphs.length} chunks)`,
-    root: rootNode,
-    paragraphs,
-  };
-}
 
 function getLastHumanMessageText(messages: any[]): string {
   if (!Array.isArray(messages) || messages.length === 0) return "";
@@ -659,17 +576,23 @@ Deno.serve(async (req) => {
     const { messages, agent, mode, fileSources = [], isVoiceMessage = false } = body;
     const debugLog: string[] = [];
 
+    const agentName = agent.name || "AI Assistant";
+    const agentDesc = agent.description || "";
+    
     // Use agent's chosen model for the reply (voice or text). Only "gemini" → Gemini; anything else → Kimi.
     const requestedModel = agent?.model != null ? String(agent.model).toLowerCase() : "kimi";
     const effectiveModel: "kimi" | "gemini" =
       requestedModel === "gemini" ? "gemini" : "kimi";
+    
+    debugLog.push(`[System] Initializing chat | Model: ${effectiveModel} | Agent: ${agentName} | Mode: ${mode}`);
+    debugLog.push(`[System] File sources provided in request: ${fileSources.length}`);
+
     const callLLM =
       effectiveModel === "gemini" ? callGemini : callKimi;
 
     const systemParts: string[] = [];
-    const agentName = agent.name || "AI Assistant";
-    const agentDesc = agent.description || "";
     systemParts.push(`You are "${agentName}". ${agentDesc}`);
+
 
     if (agent.system_instructions) {
       systemParts.push(`\n## Your Instructions:\n${agent.system_instructions}`);
@@ -706,10 +629,14 @@ Deno.serve(async (req) => {
             }
           }
         }
+        debugLog.push(`[KB] Knowledge Base scan complete: ${indexedFiles.length} indexed files, ${unindexedFiles.length} unindexed files.`);
       } catch (e) {
-        console.error("KB fetch error:", e instanceof Error ? e.message : String(e));
+        const errorMsg = `[KB] KB fetch error: ${e instanceof Error ? e.message : String(e)}`;
+        console.error(errorMsg);
+        debugLog.push(errorMsg);
       }
     }
+
 
     // ─── PageIndex 2-step retrieval ───────────────────────────────────
     let retrievedContext = "";
@@ -746,7 +673,9 @@ Rules:
         { role: "user", parts: [{ text: `Question: ${lastUserMessage}\n\nDocument indexes:\n${treeOverview}` }] },
       ];
 
+      debugLog.push(`[PageIndex] Starting document routing for ${indexedFiles.length} files...`);
       let routingSucceeded = false;
+
 
       try {
         const { text: routingRaw } = await callGemini(routingSystem, routingContents, {
@@ -789,10 +718,13 @@ Rules:
 
           if (parts.length > 0) {
             retrievedContext = parts.join("\n");
+            debugLog.push(`[PageIndex] Successfully retrieved context from ${routingResult.selections.length} documents.`);
           }
         }
       } catch (e) {
-        console.error("Routing step error:", e instanceof Error ? e.message : String(e));
+        const errorMsg = `[PageIndex] Routing error: ${e instanceof Error ? e.message : String(e)}`;
+        console.error(errorMsg);
+        debugLog.push(errorMsg);
       }
 
       // Fallback: if routing failed or returned nothing, provide tree summaries as context
@@ -804,15 +736,23 @@ Rules:
     }
 
     // Unindexed files: fetch raw content as fallback
-    for (const file of unindexedFiles) {
-      try {
-        const resp = await fetch(file.url);
-        if (resp.ok) {
-          const text = await resp.text();
-          const trimmed = text.substring(0, 6000);
-          retrievedContext += `\n\n--- File (unindexed): ${file.name} ---\n${trimmed}${text.length > 6000 ? "\n[...truncated]" : ""}`;
+    if (unindexedFiles.length > 0) {
+      debugLog.push(`[KB] Fetching content for ${unindexedFiles.length} unindexed files...`);
+      for (const file of unindexedFiles) {
+        try {
+          const resp = await fetch(file.url);
+          if (resp.ok) {
+            const text = await resp.text();
+            const trimmed = text.substring(0, 6000);
+            retrievedContext += `\n\n--- File (unindexed): ${file.name} ---\n${trimmed}${text.length > 6000 ? "\n[...truncated]" : ""}`;
+            debugLog.push(`[KB] Extracted content from unindexed file: ${file.name} (${text.length} chars)`);
+          } else {
+            debugLog.push(`[KB] Failed to fetch unindexed file: ${file.name} (Status: ${resp.status})`);
+          }
+        } catch (e) { 
+           debugLog.push(`[KB] Error fetching unindexed file: ${file.name} - ${e instanceof Error ? e.message : String(e)}`);
         }
-      } catch { /* skip */ }
+      }
     }
 
     if (retrievedContext) {
@@ -822,6 +762,7 @@ The following content was retrieved from your knowledge bases using reasoning-ba
 ALWAYS use this retrieved content to answer. If the content doesn't fully answer the question, say what you found and what's missing.
 ${retrievedContext}`);
     }
+
 
     const enabledTools = (agent.tools || []).filter((t: any) => t.enabled);
     let toolContext = "";
@@ -845,7 +786,10 @@ ${retrievedContext}`);
         })
         .join("\n");
 
+      debugLog.push(`[Tools] Active tools: ${enabledTools.map((t: any) => t.name).join(", ")}`);
+
       systemParts.push(`\n## Your Tools\n${toolsText}`);
+
 
       // Inline YouTube Scraper execution when user message contains a YouTube URL.
       const hasYouTubeTool = enabledTools.some((t: any) => t.name === "youtube_scraper");
@@ -854,8 +798,10 @@ ${retrievedContext}`);
         console.log("[YT] YouTube scraper triggered from chat message");
         const urls = extractAllYouTubeIds(lastUserMessage);
         if (urls.length > 0) {
+          debugLog.push(`[YT] Found ${urls.length} YouTube links for inline scraping.`);
           const limited = urls.slice(0, 3); // hard limit per turn for cost
           for (const yt of limited) {
+            debugLog.push(`[YT] Scraping transcript for: ${yt.videoId}`);
             try {
               const ytResult = await fetchYouTubeTranscript(yt.videoId, debugLog);
               const transcriptSnippet =
@@ -972,41 +918,27 @@ ${retrievedContext}`);
               const kb = kbList[0];
               const files = kb.files || [];
               const newFiles: any[] = [];
-
-              // Allow up to 50 YouTube links per message for KB expansion.
               const limitedYt = ytSources.slice(0, 50);
               for (const { url, videoId } of limitedYt) {
+
                 try {
                   const ytData = await fetchYouTubeTranscript(videoId, debugLog);
-                  const text =
-                    ytData.transcript.length > 20000
-                      ? ytData.transcript.slice(0, 20000)
-                      : ytData.transcript;
-                  const indexTree = buildInlineTranscriptIndex(text, ytData.title || `YouTube transcript ${videoId}`);
                   newFiles.push({
                     name: ytData.title || `YouTube transcript ${videoId}`,
                     type: "txt",
-                    url: "",
-                    inline_text: `Source: ${url}\n\n${text}`,
-                    processed: true,
-                    index_tree: indexTree,
-                    doc_description: indexTree.doc_description || "",
+                    url: url,
+                    inline_text: `Source: ${url}\n\n${ytData.transcript}`,
+                    processed: false, // Delegate to Smart Indexing
                   });
                 } catch (e) {
                   const msg = e instanceof Error ? e.message : String(e);
                   console.error("KB expander youtube error:", msg);
-                  // Все одно кладемо файл, щоб видно було джерело й помилку
                   newFiles.push({
                     name: `YouTube transcript error ${videoId}`,
                     type: "txt",
-                    url: "",
+                    url: url,
                     inline_text: `Source: ${url}\n\n[Error fetching transcript: ${msg}]`,
-                    processed: true,
-                    index_tree: buildInlineTranscriptIndex(
-                      `Error fetching transcript: ${msg}`,
-                      `YouTube transcript error ${videoId}`,
-                    ),
-                    doc_description: `Error fetching transcript: ${msg}`,
+                    processed: false, // Still mark as unprocessed so we have a record and might retry
                   });
                 }
               }
@@ -1133,6 +1065,8 @@ ${retrievedContext}`);
     }
 
     const systemInstruction = systemParts.join("\n");
+    debugLog.push(`[System] Final system prompt length: ${systemInstruction.length} chars`);
+    debugLog.push(`[System] Calling LLM (${effectiveModel})...`);
 
     const geminiContents = messages.map((m: any) => ({
       role: m.role === "assistant" ? "model" : "user",
@@ -1149,6 +1083,7 @@ ${retrievedContext}`);
     let totalOutputTokens = res.usage?.outputTokens ?? 0;
 
     if (mode === "thinking" && responseText && !hasStructure(responseText)) {
+      debugLog.push(`[System] Thinking response lacked structure. Retrying with explicit instructions.`);
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
       const retryRes = await callLLM(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
@@ -1165,6 +1100,9 @@ ${retrievedContext}`);
           (totalOutputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M
         : (totalPromptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
           (totalOutputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
+
+    debugLog.push(`[System] LLM completed. Tokens: ${totalPromptTokens} in, ${totalOutputTokens} out. Cost: $${cost.toFixed(5)}`);
+
 
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",
