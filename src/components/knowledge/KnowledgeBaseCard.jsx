@@ -68,10 +68,11 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
   };
 
   const files = kb.files || [];
-  const indexableTypes = ["txt", "md", "csv", "json"];
-  const indexableFiles = files.filter(f => indexableTypes.includes(f.type));
-  const processedCount = files.filter(f => f.processed).length;
-  const totalCount = files.length;
+  // Only count files that the indexer actually attempts to process.
+  const indexableTypes = ["txt", "md", "csv", "json", "pdf"];
+  const indexableFiles = files.filter(f => indexableTypes.includes((f.type || "").toLowerCase()));
+  const processedCount = indexableFiles.filter(f => f.processed).length;
+  const totalCount = indexableFiles.length;
   const isProcessing = kb.processing || kb.index_status === "indexing";
   const hasFailedIndexing = kb.index_status === "failed";
   const kbProgress = typeof kb.index_progress === "number" ? kb.index_progress : null;

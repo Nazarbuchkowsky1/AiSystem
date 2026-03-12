@@ -97,6 +97,23 @@ function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: st
   return null;
 }
 
+/** Fetch the real YouTube video title via the free oEmbed endpoint (no API key needed). */
+async function fetchYouTubeTitle(videoId: string): Promise<string> {
+  try {
+    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    const res = await fetch(oembedUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.title && typeof data.title === "string" && data.title.trim()) {
+        return data.title.trim();
+      }
+    }
+  } catch (e) {
+    console.warn("[YT] oEmbed title fetch failed:", e instanceof Error ? e.message : String(e));
+  }
+  return "YouTube Video";
+}
+
 /** Normalize one transcript segment: API sometimes returns text: "[]" or empty. */
 function normalizeSegmentText(val: unknown): string {
   if (val == null) return "";
@@ -205,7 +222,7 @@ async function fetchYouTubeTranscript(videoId: string, debug?: string[]) {
           debug?.push(okLog);
           console.log(okLog);
           return {
-            title: json?.title || "YouTube Video",
+            title: json?.title || await fetchYouTubeTitle(videoId),
             videoId,
             language: lang,
             transcript: fullText,
@@ -386,6 +403,61 @@ function extractAllYouTubeIds(text: string): { url: string; videoId: string }[] 
     }
   }
   return urls;
+}
+
+// Build a very simple page index structure from inline transcript text so that
+// YouTube transcripts are immediately searchable even before/without the
+// heavier index-knowledge-base function.
+function buildInlineTranscriptIndex(text: string, fileName: string): any {
+  const cleaned = (text || "").replace(/\r\n/g, "\n").trim();
+  if (!cleaned) {
+    return {
+      doc_title: fileName,
+      doc_description: "Empty transcript",
+      root: {
+        title: fileName,
+        node_id: "0000",
+        start_index: 0,
+        end_index: 0,
+        summary: "Empty transcript",
+        nodes: [],
+      },
+      paragraphs: [""],
+    };
+  }
+
+  // Split on double newlines first; if paragraphs are still huge, chunk them.
+  const roughParts = cleaned.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  const paragraphs: string[] = [];
+  const MAX_PARA = 600;
+  for (const part of roughParts) {
+    if (part.length <= MAX_PARA) {
+      paragraphs.push(part);
+    } else {
+      let start = 0;
+      while (start < part.length) {
+        const slice = part.slice(start, start + MAX_PARA);
+        paragraphs.push(slice);
+        start += MAX_PARA;
+      }
+    }
+  }
+
+  const rootNode = {
+    title: fileName || "Transcript",
+    node_id: "0000",
+    start_index: 0,
+    end_index: Math.max(paragraphs.length - 1, 0),
+    summary: `Transcript (${paragraphs.length} chunks)`,
+    nodes: [] as any[],
+  };
+
+  return {
+    doc_title: fileName,
+    doc_description: `YouTube transcript (${paragraphs.length} chunks)`,
+    root: rootNode,
+    paragraphs,
+  };
 }
 
 function getLastHumanMessageText(messages: any[]): string {
@@ -876,12 +948,15 @@ ${retrievedContext}`);
                     ytData.transcript.length > 20000
                       ? ytData.transcript.slice(0, 20000)
                       : ytData.transcript;
+                  const indexTree = buildInlineTranscriptIndex(text, ytData.title || `YouTube transcript ${videoId}`);
                   newFiles.push({
                     name: ytData.title || `YouTube transcript ${videoId}`,
                     type: "txt",
                     url: "",
                     inline_text: `Source: ${url}\n\n${text}`,
-                    processed: false,
+                    processed: true,
+                    index_tree: indexTree,
+                    doc_description: indexTree.doc_description || "",
                   });
                 } catch (e) {
                   const msg = e instanceof Error ? e.message : String(e);
@@ -892,7 +967,12 @@ ${retrievedContext}`);
                     type: "txt",
                     url: "",
                     inline_text: `Source: ${url}\n\n[Error fetching transcript: ${msg}]`,
-                    processed: false,
+                    processed: true,
+                    index_tree: buildInlineTranscriptIndex(
+                      `Error fetching transcript: ${msg}`,
+                      `YouTube transcript error ${videoId}`,
+                    ),
+                    doc_description: `Error fetching transcript: ${msg}`,
                   });
                 }
               }
@@ -933,14 +1013,40 @@ ${retrievedContext}`);
                 });
 
                 try {
-                  // Fire-and-forget indexing so chat response is not blocked
-                  base44.functions
-                    .invoke("indexKnowledgeBase", { kbId: String(kb.id) })
-                    .catch((e: any) => {
-                      console.error("indexKnowledgeBase from agent-chat failed:", e);
-                    });
+                  const invokeMsg = `[KB] Starting indexKnowledgeBase for kbId=${kb.id}`;
+                  console.log(invokeMsg);
+                  debugLog.push(invokeMsg);
+                  
+                  const indexResult: any = await base44.functions
+                    .invoke("indexKnowledgeBase", { kbId: String(kb.id) });
+                    
+                  const doneMsg = `[KB] indexKnowledgeBase completed successfully!`;
+                  console.log(doneMsg);
+                  debugLog.push(doneMsg);
+                  
+                  // Forward debug traces from indexKnowledgeBase
+                  const resultKeys = Object.keys(indexResult || {});
+                  debugLog.push(`[KB_DEBUG] indexResult keys: ${resultKeys.join(", ")}`);
+                  if (indexResult?.data) {
+                    const data = indexResult.data;
+                    const dataKeys = Object.keys(data).join(", ");
+                    debugLog.push(`[KB_DEBUG] indexResult.data keys: ${dataKeys}`);
+                    if (data.v) {
+                      debugLog.push(`[KB_DEBUG] Function version: ${data.v}`);
+                    } else {
+                      debugLog.push(`[KB_DEBUG] WARNING: No version tag found! The function might be running OLD code.`);
+                    }
+                  }
+                  
+                  if (indexResult?.data?.debug && Array.isArray(indexResult.data.debug)) {
+                    indexResult.data.debug.forEach((msg: string) => debugLog.push(msg));
+                  } else if (indexResult?.debug && Array.isArray(indexResult.debug)) {
+                    indexResult.debug.forEach((msg: string) => debugLog.push(msg));
+                  }
                 } catch (e) {
-                  console.error("indexKnowledgeBase from agent-chat failed:", e);
+                  const errMsg = `[KB] indexKnowledgeBase failed: ${e instanceof Error ? e.message : String(e)}`;
+                  console.error(errMsg);
+                  debugLog.push(errMsg);
                 }
 
                 toolContext += `\n\n### KB Expander\nAdded ${

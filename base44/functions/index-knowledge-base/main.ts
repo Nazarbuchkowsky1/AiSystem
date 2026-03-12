@@ -440,6 +440,11 @@ function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
 Deno.serve(async (req) => {
   let kbId: string | null = null;
   let base44: any = null;
+  const debugLogs: string[] = [];
+  const logDebug = (msg: string) => {
+    console.log(msg);
+    debugLogs.push(msg);
+  };
 
   try {
     base44 = createClientFromRequest(req);
@@ -467,12 +472,34 @@ Deno.serve(async (req) => {
       return Response.json({ error: "Knowledge base not found" }, { status: 404 });
     }
 
-    const kb = kbList[0];
-    const files = kb.files || [];
-    const indexableFiles = files.filter((f: any) => {
+    let kb = kbList[0];
+    let files = kb.files || [];
+
+    let indexableFiles = files.filter((f: any) => {
       const type = getFileType(f);
-      return (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
+      const isIndexable = (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
+      logDebug(`[KB_DEBUG] File check: name="${f.name}", type="${f.type}", derivedType="${type}", hasUrl=${!!f.url}, typeof inline_text="${typeof f.inline_text}", processed=${f.processed}, isIndexable=${isIndexable}`);
+      return isIndexable;
     });
+
+    // Retry once if no indexable files found (might be DB lag)
+    if (indexableFiles.length === 0) {
+      logDebug(`[KB_DEBUG] No indexable files found initially. Waiting 1.5s for DB sync...`);
+      await new Promise(r => setTimeout(r, 1500));
+      const retryList = await base44.asServiceRole.entities.KnowledgeBase.filter({ id: kbId });
+      if (retryList?.length) {
+        kb = retryList[0];
+        files = kb.files || [];
+        indexableFiles = files.filter((f: any) => {
+          const type = getFileType(f);
+          const isIndexable = (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
+          logDebug(`[KB_DEBUG] Retry File check: name="${f.name}", type="${f.type}", derivedType="${type}", hasUrl=${!!f.url}, typeof inline_text="${typeof f.inline_text}", processed=${f.processed}, isIndexable=${isIndexable}`);
+          return isIndexable;
+        });
+      }
+    }
+
+    logDebug(`[KB_DEBUG] kbId=${kbId}, total files=${files.length}, indexableFiles=${indexableFiles.length}`);
 
     if (indexableFiles.length === 0) {
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -481,7 +508,7 @@ Deno.serve(async (req) => {
         index_progress: 100,
         last_error: "",
       });
-      return Response.json({ ok: true, indexed: false });
+      return Response.json({ ok: true, indexed: false, debug: debugLogs });
     }
 
     await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -500,17 +527,25 @@ Deno.serve(async (req) => {
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
       const fileType = getFileType(file);
-      if ((!file.url && typeof file.inline_text !== "string") || !fileType || !INDEXABLE_TYPES.includes(fileType)) continue;
+      
+      if ((!file.url && typeof file.inline_text !== "string") || !fileType || !INDEXABLE_TYPES.includes(fileType)) {
+        logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it lacks url/inline_text or has invalid fileType=${fileType}`);
+        continue;
+      }
       if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
+        logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it is already processed.`);
         completed += 1;
         continue;
       }
 
       try {
+        logDebug(`[KB_DEBUG] Start processing file "${file.name}"...`);
         let text: string;
         if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
+          logDebug(`[KB_DEBUG] Using inline_text for "${file.name}" (${file.inline_text.length} chars)`);
           text = file.inline_text;
         } else {
+          logDebug(`[KB_DEBUG] Fetching URL for "${file.name}": ${file.url}`);
           const fileResp = await fetch(file.url);
           if (!fileResp.ok) {
             throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
@@ -566,7 +601,7 @@ Deno.serve(async (req) => {
       await recordIndexingCost(base44, kb.name || "KB", totalKbCost);
     }
 
-    return Response.json({ ok: true, indexed, cost: totalKbCost });
+    return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.1" });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("indexKnowledgeBase fatal error:", msg);
@@ -584,6 +619,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    return Response.json({ error: msg }, { status: 500 });
+    return Response.json({ error: msg, debug: debugLogs }, { status: 500 });
   }
 });

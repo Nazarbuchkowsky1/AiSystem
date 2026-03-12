@@ -378,20 +378,50 @@ export default function Layout({ children, currentPageName }) {
                   Останні {debugLogs.length} записів. Клікніть поза вікном, щоб закрити.
                 </span>
               </div>
-              <button
-                onClick={() => setDebugOpen(false)}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "#9ca3af",
-                  cursor: "pointer",
-                  fontSize: 18,
-                  lineHeight: 1,
-                  padding: 4,
-                }}
-              >
-                ×
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button
+                  onClick={() => {
+                    const textToCopy = debugLogs.map(entry => `[${entry.time?.slice(11, 19) || "--:--:--"}] ${entry.level?.toUpperCase() || "LOG"} - ${entry.message}`).join("\n");
+                    navigator.clipboard.writeText(textToCopy);
+                    const btn = document.getElementById("copy-logs-btn");
+                    if (btn) {
+                      const oldText = btn.innerText;
+                      btn.innerText = "Скопійовано!";
+                      setTimeout(() => { btn.innerText = oldText; }, 2000);
+                    }
+                  }}
+                  id="copy-logs-btn"
+                  style={{
+                    background: "rgba(249,115,22,0.1)",
+                    border: "1px solid rgba(249,115,22,0.2)",
+                    color: "#f97316",
+                    cursor: "pointer",
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.2)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.1)")}
+                >
+                  Копіювати
+                </button>
+                <button
+                  onClick={() => setDebugOpen(false)}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#9ca3af",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    lineHeight: 1,
+                    padding: 4,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
             <div
               style={{
