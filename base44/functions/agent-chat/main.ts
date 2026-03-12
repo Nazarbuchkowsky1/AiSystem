@@ -57,7 +57,10 @@ function extractSectionText(doc: any, selectedNodeIds: string[]): string {
   }
 
   findNodes(doc.root);
-  if (collected.size === 0) return "";
+  // If router did not select any specific nodes, fall back to full document text.
+  if (collected.size === 0) {
+    return paragraphs.join("\n\n");
+  }
 
   const sorted = Array.from(collected).sort((a, b) => a - b);
   return sorted.map(i => paragraphs[i]).join("\n\n");
@@ -432,15 +435,44 @@ function buildInlineTranscriptIndex(text: string, fileName: string): any {
   const MAX_PARA = 600;
   for (const part of roughParts) {
     if (part.length <= MAX_PARA) {
-      paragraphs.push(part);
+      const p = part.trim();
+      if (p) paragraphs.push(p);
     } else {
       let start = 0;
       while (start < part.length) {
-        const slice = part.slice(start, start + MAX_PARA);
-        paragraphs.push(slice);
-        start += MAX_PARA;
+        let slice = part.slice(start, start + MAX_PARA);
+        // Try to snap to the end of a sentence
+        const lastSentenceEnd = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
+        if (lastSentenceEnd > MAX_PARA / 2 && start + lastSentenceEnd < part.length) {
+          slice = part.slice(start, start + lastSentenceEnd + 1);
+        }
+        const p = slice.trim();
+        if (p) paragraphs.push(p);
+        start += slice.length;
       }
     }
+  }
+
+  // Group paragraphs into sections (e.g., 5 paragraphs per section) for the routing index
+  const nodes: any[] = [];
+  const PARA_PER_NODE = 5;
+  for (let i = 0; i < paragraphs.length; i += PARA_PER_NODE) {
+    const end = Math.min(i + PARA_PER_NODE - 1, paragraphs.length - 1);
+    const slice = paragraphs.slice(i, end + 1);
+    
+    // Create a very simple summary from the first 160 characters of the first paragraph
+    const sectionText = slice.join(" ");
+    let summary = sectionText.substring(0, 160);
+    if (sectionText.length > 160) summary += "...";
+
+    nodes.push({
+      title: `Section ${Math.floor(i / PARA_PER_NODE) + 1}`,
+      node_id: (Math.floor(i / PARA_PER_NODE) + 1).toString().padStart(4, "0"),
+      start_index: i,
+      end_index: end,
+      summary: summary,
+      nodes: [],
+    });
   }
 
   const rootNode = {
@@ -448,13 +480,13 @@ function buildInlineTranscriptIndex(text: string, fileName: string): any {
     node_id: "0000",
     start_index: 0,
     end_index: Math.max(paragraphs.length - 1, 0),
-    summary: `Transcript (${paragraphs.length} chunks)`,
-    nodes: [] as any[],
+    summary: `YouTube transcript (${paragraphs.length} paragraphs in ${nodes.length} sections)`,
+    nodes: nodes,
   };
 
   return {
-    doc_title: fileName,
-    doc_description: `YouTube transcript (${paragraphs.length} chunks)`,
+    doc_title: fileName || "YouTube Video",
+    doc_description: `Transcript (${paragraphs.length} chunks)`,
     root: rootNode,
     paragraphs,
   };
@@ -704,7 +736,7 @@ Output a JSON object:
 
 Rules:
 - Select the MOST relevant sections (typically 2-6 node_ids total).
-- Prefer leaf nodes or specific subsections over broad parent sections.
+- Prefer leaf nodes or specific subsections over broad parent sections, UNLESS the parent or root section is the main or only relevant entry.
 - If the question is very broad, select more sections. If specific, select fewer.
 - If no section seems relevant, return empty selections: []
 - Output ONLY valid JSON.`;
@@ -940,7 +972,8 @@ ${retrievedContext}`);
               const files = kb.files || [];
               const newFiles: any[] = [];
 
-              const limitedYt = ytSources.slice(0, 10);
+              // Allow up to 50 YouTube links per message for KB expansion.
+              const limitedYt = ytSources.slice(0, 50);
               for (const { url, videoId } of limitedYt) {
                 try {
                   const ytData = await fetchYouTubeTranscript(videoId, debugLog);
@@ -1004,49 +1037,64 @@ ${retrievedContext}`);
               }
 
               if (newFiles.length > 0) {
+                const updatedFiles = [...files, ...newFiles];
                 await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
-                  files: [...files, ...newFiles],
+                  files: updatedFiles,
                   processing: true,
                   index_status: "indexing",
                   index_progress: kb.index_progress || 0,
                   last_error: "",
                 });
 
-                try {
-                  const invokeMsg = `[KB] Starting indexKnowledgeBase for kbId=${kb.id}`;
-                  console.log(invokeMsg);
-                  debugLog.push(invokeMsg);
-                  
-                  const indexResult: any = await base44.functions
-                    .invoke("indexKnowledgeBase", { kbId: String(kb.id) });
+                const needsHeavyIndexing = updatedFiles.some(f => !f.processed);
+                
+                if (needsHeavyIndexing) {
+                  try {
+                    const invokeMsg = `[KB] Starting indexKnowledgeBase for kbId=${kb.id}`;
+                    console.log(invokeMsg);
+                    debugLog.push(invokeMsg);
                     
-                  const doneMsg = `[KB] indexKnowledgeBase completed successfully!`;
-                  console.log(doneMsg);
-                  debugLog.push(doneMsg);
-                  
-                  // Forward debug traces from indexKnowledgeBase
-                  const resultKeys = Object.keys(indexResult || {});
-                  debugLog.push(`[KB_DEBUG] indexResult keys: ${resultKeys.join(", ")}`);
-                  if (indexResult?.data) {
-                    const data = indexResult.data;
-                    const dataKeys = Object.keys(data).join(", ");
-                    debugLog.push(`[KB_DEBUG] indexResult.data keys: ${dataKeys}`);
-                    if (data.v) {
-                      debugLog.push(`[KB_DEBUG] Function version: ${data.v}`);
-                    } else {
-                      debugLog.push(`[KB_DEBUG] WARNING: No version tag found! The function might be running OLD code.`);
+                    const indexResult: any = await base44.functions
+                      .invoke("indexKnowledgeBase", { kbId: String(kb.id) });
+                      
+                    const doneMsg = `[KB] indexKnowledgeBase completed successfully!`;
+                    console.log(doneMsg);
+                    debugLog.push(doneMsg);
+                    
+                    // Forward debug traces from indexKnowledgeBase
+                    const resultKeys = Object.keys(indexResult || {});
+                    debugLog.push(`[KB_DEBUG] indexResult keys: ${resultKeys.join(", ")}`);
+                    if (indexResult?.data) {
+                      const data = indexResult.data;
+                      const dataKeys = Object.keys(data).join(", ");
+                      debugLog.push(`[KB_DEBUG] indexResult.data keys: ${dataKeys}`);
+                      if (data.v) {
+                        debugLog.push(`[KB_DEBUG] Function version: ${data.v}`);
+                      } else {
+                        debugLog.push(`[KB_DEBUG] WARNING: No version tag found! The function might be running OLD code.`);
+                      }
                     }
+                    
+                    if (indexResult?.data?.debug && Array.isArray(indexResult.data.debug)) {
+                      indexResult.data.debug.forEach((msg: string) => debugLog.push(msg));
+                    } else if (indexResult?.debug && Array.isArray(indexResult.debug)) {
+                      indexResult.debug.forEach((msg: string) => debugLog.push(msg));
+                    }
+                  } catch (e) {
+                    const errMsg = `[KB] indexKnowledgeBase failed: ${e instanceof Error ? e.message : String(e)}`;
+                    console.error(errMsg);
+                    debugLog.push(errMsg);
                   }
-                  
-                  if (indexResult?.data?.debug && Array.isArray(indexResult.data.debug)) {
-                    indexResult.data.debug.forEach((msg: string) => debugLog.push(msg));
-                  } else if (indexResult?.debug && Array.isArray(indexResult.debug)) {
-                    indexResult.debug.forEach((msg: string) => debugLog.push(msg));
-                  }
-                } catch (e) {
-                  const errMsg = `[KB] indexKnowledgeBase failed: ${e instanceof Error ? e.message : String(e)}`;
-                  console.error(errMsg);
-                  debugLog.push(errMsg);
+                } else {
+                  const skipMsg = "[KB] Skipping indexKnowledgeBase invocation because all files are already processed inline.";
+                  console.log(skipMsg);
+                  debugLog.push(skipMsg);
+                  // Update KB status to succeeded since we skip indexing
+                  await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
+                    processing: false,
+                    index_status: "succeeded",
+                    index_progress: 100,
+                  });
                 }
 
                 toolContext += `\n\n### KB Expander\nAdded ${

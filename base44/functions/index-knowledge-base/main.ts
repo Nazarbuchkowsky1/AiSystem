@@ -601,7 +601,7 @@ Deno.serve(async (req) => {
       await recordIndexingCost(base44, kb.name || "KB", totalKbCost);
     }
 
-    return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.1" });
+    return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.2" });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("indexKnowledgeBase fatal error:", msg);

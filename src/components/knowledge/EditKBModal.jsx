@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Trash2, Upload, Loader2, FileText } from "lucide-react";
+import { X, Trash2, Upload, Loader2, FileText, Download } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
 const SUPPORTED_EXTENSIONS = [
@@ -50,6 +50,45 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   }, []);
 
   const originalFiles = kb.files || [];
+
+  const handleDownloadExisting = (file, index) => {
+    // Prefer remote URL when available (uploaded files)
+    if (file.url) {
+      try {
+        window.open(file.url, "_blank", "noopener,noreferrer");
+        return;
+      } catch {
+        // fall back to blob path below
+      }
+    }
+
+    // Fallbacks for inline KB content:
+    // 1) inline_text (for YouTube transcripts and text snippets)
+    // 2) index_tree.paragraphs (for already indexed docs without inline_text on client)
+    let textPayload = "";
+    if (typeof file.inline_text === "string" && file.inline_text.length > 0) {
+      textPayload = file.inline_text;
+    } else if (
+      file.index_tree &&
+      Array.isArray(file.index_tree.paragraphs) &&
+      file.index_tree.paragraphs.length > 0
+    ) {
+      textPayload = file.index_tree.paragraphs.join("\n\n");
+    }
+
+    if (textPayload) {
+      const blob = new Blob([textPayload], { type: "text/plain;charset=utf-8" });
+      const safeName =
+        (file.name || `kb-file-${index}.txt`).replace(/[^\w.\-]+/g, "_") || `kb-file-${index}.txt`;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = safeName.endsWith(".txt") ? safeName : `${safeName}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    }
+  };
 
   const handleRemoveExisting = (index) => {
     setRemovedFileIndexes(prev => {
@@ -217,6 +256,27 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
                       <p style={{ fontSize: 12, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
                       <p style={{ fontSize: 10, color: "#555" }}>{file.type?.toUpperCase()} {formatFileSize(file.size)}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadExisting(file, index)}
+                      style={{
+                        background: "rgba(148,163,184,0.12)",
+                        border: "none",
+                        color: "#e5e7eb",
+                        cursor: "pointer",
+                        padding: 5,
+                        borderRadius: 6,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.2s",
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(148,163,184,0.25)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "rgba(148,163,184,0.12)"}
+                    >
+                      <Download style={{ width: 13, height: 13 }} />
+                    </button>
                     <button onClick={() => handleRemoveExisting(index)} style={{
                       background: "rgba(239,68,68,0.1)", border: "none", color: "#ef4444",
                       cursor: "pointer", padding: 5, borderRadius: 6, display: "flex", transition: "all 0.2s", flexShrink: 0
