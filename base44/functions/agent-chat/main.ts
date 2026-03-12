@@ -526,7 +526,7 @@ async function callKimi(
   const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
     { role: "system", content: systemText },
     ...contents.map((c: any) => ({
-      role: c.role === "model" ? "assistant" : "user",
+      role: (c.role === "model" ? "assistant" : "user") as "assistant" | "user",
       content: c?.parts?.[0]?.text ?? "",
     })),
   ];
@@ -543,7 +543,8 @@ async function callKimi(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000); // 60s safety timeout
+  const timeout = setTimeout(() => controller.abort(), 120000); // 120s safety timeout
+
 
   const resp = await fetch(KIMI_URL, {
     method: "POST",
@@ -748,7 +749,7 @@ Rules:
       let routingSucceeded = false;
 
       try {
-        const { text: routingRaw } = await callLLM(routingSystem, routingContents, {
+        const { text: routingRaw } = await callGemini(routingSystem, routingContents, {
           temperature: 0.1,
           maxOutputTokens: 1024,
           jsonMode: true,
