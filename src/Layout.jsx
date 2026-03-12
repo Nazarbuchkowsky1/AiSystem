@@ -24,6 +24,8 @@ const NAV_ITEMS = [
   { name: "Settings", icon: Settings, page: "Settings" },
 ];
 
+import { installConsoleCapture, subscribeToLogs } from "@/lib/clientLogger";
+
 export default function Layout({ children, currentPageName }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,6 +60,15 @@ export default function Layout({ children, currentPageName }) {
     const handler = (e) => setModalOpen(e.detail);
     window.addEventListener("modal-open", handler);
     return () => window.removeEventListener("modal-open", handler);
+  }, []);
+
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugLogs, setDebugLogs] = useState([]);
+
+  useEffect(() => {
+    installConsoleCapture();
+    const unsubscribe = subscribeToLogs(setDebugLogs);
+    return () => unsubscribe();
   }, []);
 
   return (
@@ -113,7 +124,7 @@ export default function Layout({ children, currentPageName }) {
             onClick={() => setMobileOpen(!mobileOpen)}
             style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "0 8px", height: "100%", WebkitTapHighlightColor: "transparent" }}
           >
-            <img src="/logo.png" alt="Lumen" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+            <img src="/logo.png?v=2" alt="Lumen" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>Lumen</span>
           </button>
           {currentPageName === "Agents" && agentsTab === "agents" && (
@@ -188,12 +199,12 @@ export default function Layout({ children, currentPageName }) {
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)"; }}
               title="Expand sidebar"
             >
-              <img src="/logo.png" alt="Lumen" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover" }} />
+              <img src="/logo.png?v=2" alt="Lumen" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover" }} />
             </button>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                <img src="/logo.png" alt="Lumen" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                <img src="/logo.png?v=2" alt="Lumen" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
                 <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
                   Lumen
                 </span>
@@ -278,7 +289,9 @@ export default function Layout({ children, currentPageName }) {
                 border: "1px solid rgba(249,115,22,0.15)",
                 position: "relative",
                 overflow: "hidden",
+                cursor: "pointer",
               }}
+              onClick={() => setDebugOpen(true)}
             >
               <p style={{ fontSize: 12, fontWeight: 600, color: "#f97316", marginBottom: 4 }}>System Status</p>
               <p style={{ fontSize: 11, color: "#555" }}>All systems operational</p>
@@ -320,6 +333,109 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </div>
       </main>
+      {debugOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setDebugOpen(false)}
+        >
+          <div
+            style={{
+              width: "90%",
+              maxWidth: 900,
+              maxHeight: "80vh",
+              background: "#050505",
+              borderRadius: 12,
+              border: "1px solid #27272a",
+              boxShadow: "0 18px 45px rgba(0,0,0,0.7)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: "12px 16px",
+                borderBottom: "1px solid #27272a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#f97316" }}>
+                  Client Console Logs
+                </span>
+                <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                  Останні {debugLogs.length} записів. Клікніть поза вікном, щоб закрити.
+                </span>
+              </div>
+              <button
+                onClick={() => setDebugOpen(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                  fontSize: 18,
+                  lineHeight: 1,
+                  padding: 4,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div
+              style={{
+                flex: 1,
+                padding: 12,
+                fontFamily:
+                  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                fontSize: 11,
+                overflow: "auto",
+                background: "#020617",
+              }}
+            >
+              {debugLogs.length === 0 ? (
+                <div style={{ color: "#6b7280" }}>Логів поки немає.</div>
+              ) : (
+                debugLogs.map((entry, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      marginBottom: 4,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      color:
+                        entry.level === "error"
+                          ? "#fca5a5"
+                          : entry.level === "warn"
+                          ? "#facc15"
+                          : "#e5e7eb",
+                    }}
+                  >
+                    <span style={{ color: "#6b7280" }}>
+                      [{entry.time?.slice(11, 19) || "--:--:--"}]
+                    </span>{" "}
+                    <span style={{ textTransform: "uppercase" }}>
+                      {entry.level || "log"}
+                    </span>{" "}
+                    – {entry.message}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

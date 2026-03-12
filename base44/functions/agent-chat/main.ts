@@ -4,16 +4,11 @@ import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
 
 // ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
 // Secrets in Base44: KIMI_API_KEY (OpenRouter key for Kimi), GEMINI_API_KEY for Gemini.
-const KIMI_API_KEY =
-  Deno.env.get("KIMI_API_KEY") ||
-  Deno.env.get("OPENROUTER_API_KEY") ||
-  Deno.env.get("KIMI_K2_5") ||
-  Deno.env.get("KIMI_K2.5") ||
-  Deno.env.get("kimi-k2.5") ||
-  "";
+const KIMI_API_KEY = Deno.env.get("KIMI_API_KEY");
 const KIMI_MODEL = "moonshotai/kimi-k2.5";
 const KIMI_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+// ─── RapidAPI key (read from env in fetchYouTubeTranscript) ────────────────────
 // Reuse a single YouTube transcript client instance (from
 // https://github.com/0x6a69616e/youtube-transcript-api) across requests.
 const ytTranscriptClient: any = new (TranscriptClient as any)();
@@ -83,10 +78,7 @@ const GEMINI_OUTPUT_COST_PER_1M = 1.50;
 // ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
 
 const YT_PATTERNS = [
-  /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]{11})/i,
-  /https?:\/\/(?:www\.)?youtu\.be\/([\w-]{11})/i,
-  /https?:\/\/(?:www\.)?youtube\.com\/embed\/([\w-]{11})/i,
-  /https?:\/\/(?:www\.)?youtube\.com\/shorts\/([\w-]{11})/i,
+  /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
 ];
 
 function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: string } | null {
@@ -105,9 +97,134 @@ function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: st
   return null;
 }
 
-async function fetchYouTubeTranscript(videoId: string) {
-  // 1) Try github.com/0x6a69616e/youtube-transcript-api (npm:youtube-transcript-api)
-  //    which talks to youtube-transcript.io under the hood and is quite robust.
+/** Normalize one transcript segment: API sometimes returns text: "[]" or empty. */
+function normalizeSegmentText(val: unknown): string {
+  if (val == null) return "";
+  const s = typeof val === "string" ? val.trim() : String(val).trim();
+  if (!s || s === "[]" || s === "{}") return "";
+  return s;
+}
+
+/** Clean RapidAPI/array transcript response into a single full text. Supports items with .text or .snippet. */
+function transcriptArrayToFullText(transcriptData: unknown): string {
+  if (!transcriptData || !Array.isArray(transcriptData)) return "";
+  const parts = transcriptData
+    .map((item: any) => {
+      if (!item) return "";
+      return normalizeSegmentText(item.text) || normalizeSegmentText(item.snippet) || (typeof item === "string" ? normalizeSegmentText(item) : "");
+    })
+    .filter(Boolean);
+  return parts.join(" ").trim();
+}
+
+/** Extract transcript array from various RapidAPI response shapes. */
+function extractTranscriptArray(json: any): unknown[] | null {
+  if (!json) return null;
+
+  const candidates: any[] = [];
+  // Common top-level fields
+  candidates.push(json.content, json.transcript, json.data);
+  // Nested shapes like { content: { transcript: [...] } }
+  if (json.content && typeof json.content === "object") {
+    candidates.push(json.content.transcript, json.content.data);
+  }
+  if (json.data && typeof json.data === "object") {
+    candidates.push(json.data.transcript);
+  }
+  // Finally consider the whole object/array itself
+  candidates.push(json);
+
+  for (const c of candidates) {
+    if (!c) continue;
+    if (Array.isArray(c)) return c;
+    if (Array.isArray((c as any).transcript)) return (c as any).transcript;
+  }
+
+  if (typeof json === "string" && json.trim()) {
+    return [{ text: json.trim() }];
+  }
+  return null;
+}
+
+async function fetchYouTubeTranscript(videoId: string, debug?: string[]) {
+  debug?.push(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
+  console.log(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
+  // 1) RapidAPI YouTube Transcripts — primary path when RAPIDAPI_KEY is configured.
+  const rapidApiKey = "6138d0add7mshb46e8560e14eab0p196722jsn3eb2bf85ad2b";
+  const keySource = `[YT] Using RapidAPI key: ${rapidApiKey.slice(0, 10)}...`;
+  debug?.push(keySource);
+  console.log(keySource);
+  if (rapidApiKey) {
+    try {
+      const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      // Match RapidAPI HTTP example: GET /youtube/transcript?url=<videoUrl>&chunkSize=500&text=false&lang=en
+      const apiUrl =
+        `https://youtube-transcripts.p.rapidapi.com/youtube/transcript?url=${encodeURIComponent(videoUrl)}&chunkSize=500&text=false&lang=en`;
+      const reqLog = `[YT] RapidAPI HTTP-style request videoId=${videoId} apiUrl=${apiUrl}`;
+      debug?.push(reqLog);
+      console.log(reqLog);
+      const res = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
+          "x-rapidapi-key": rapidApiKey,
+          "Content-Type": "application/json",
+        },
+      });
+      const statusLog = `[YT] RapidAPI response status=${res.status}`;
+      debug?.push(statusLog);
+      console.log(statusLog);
+      if (!res.ok) {
+        const errBody = await res.text();
+        const errLog = `[YT] RapidAPI error status=${res.status} body=${errBody.slice(0, 300)}`;
+        debug?.push(errLog);
+        console.error(errLog);
+      } else {
+        const textBody = await res.text();
+        const bodyLog = `[YT] RapidAPI raw body prefix=${textBody.slice(0, 160)}`;
+        debug?.push(bodyLog);
+        console.log(bodyLog);
+        let json: any;
+        try {
+          json = JSON.parse(textBody);
+        } catch (e) {
+          const parseErr = `[YT] RapidAPI JSON parse error: ${e instanceof Error ? e.message : String(e)}`;
+          debug?.push(parseErr);
+          console.error(parseErr);
+        }
+        const segments = json ? extractTranscriptArray(json) : null;
+        if (!segments || !Array.isArray(segments) || segments.length === 0) {
+          const noSeg = "[YT] RapidAPI returned no transcript segments";
+          debug?.push(noSeg);
+          console.warn(noSeg);
+        }
+        const fullText = segments ? transcriptArrayToFullText(segments) : "";
+        if (fullText && fullText.length > 0) {
+          const lang = json?.lang || json?.language || "auto";
+          const okLog = `[YT] RapidAPI transcript ok videoId=${videoId} lang=${lang} chars=${fullText.length}`;
+          debug?.push(okLog);
+          console.log(okLog);
+          return {
+            title: json?.title || "YouTube Video",
+            videoId,
+            language: lang,
+            transcript: fullText,
+            lineCount: fullText.split(/\s+/).filter(Boolean).length,
+          };
+        }
+      }
+    } catch (e) {
+      const netErr = `[YT] RapidAPI transcript network/parse error: ${e instanceof Error ? e.message : String(e)}`;
+      debug?.push(netErr);
+      console.error(netErr);
+    }
+  } else {
+    const disabled = "[YT] RapidAPI disabled: RAPIDAPI_KEY / YOUTUBE_TRANSCRIPTS_RAPIDAPI_KEY not set in environment";
+    debug?.push(disabled);
+    console.warn(disabled);
+  }
+
+  // 2) Try github.com/0x6a69616e/youtube-transcript-api (npm:youtube-transcript-api)
   try {
     if (ytTranscriptClient?.ready) {
       await ytTranscriptClient.ready;
@@ -131,7 +248,7 @@ async function fetchYouTubeTranscript(videoId: string) {
     console.error("youtube-transcript-api error, falling back to TubeText:", e);
   }
 
-  // 2) Try free TubeText API (fast, JSON, no auth).
+  // 3) Try free TubeText API (fast, JSON, no auth).
   try {
     const apiUrl = `https://tubetext.vercel.app/youtube/transcript?video_id=${videoId}`;
     const apiRes = await fetch(apiUrl, {
@@ -163,7 +280,7 @@ async function fetchYouTubeTranscript(videoId: string) {
     console.error("TubeText API error, falling back to HTML scraper:", e);
   }
 
-  // 3) Second fallback: public FastAPI service youtube-transcript-api-tau-one.vercel.app
+  // 4) Second fallback: public FastAPI service youtube-transcript-api-tau-one.vercel.app
   try {
     const tauUrl = "https://youtube-transcript-api-tau-one.vercel.app/transcript";
     const tauRes = await fetch(tauUrl, {
@@ -193,7 +310,7 @@ async function fetchYouTubeTranscript(videoId: string) {
     console.error("Tau-one YouTube transcript API error, falling back to HTML scraper:", e);
   }
 
-  // 4) Final fallback: direct HTML + captionTracks scraping from YouTube.
+  // 5) Final fallback: direct HTML + captionTracks scraping from YouTube.
   const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const res = await fetch(pageUrl, {
     headers: {
@@ -269,6 +386,25 @@ function extractAllYouTubeIds(text: string): { url: string; videoId: string }[] 
     }
   }
   return urls;
+}
+
+function getLastHumanMessageText(messages: any[]): string {
+  if (!Array.isArray(messages) || messages.length === 0) return "";
+  const lastNonAssistant =
+    [...messages].reverse().find((m: any) => m && m.role && m.role !== "assistant") ||
+    null;
+  if (lastNonAssistant && typeof lastNonAssistant.content === "string") {
+    return lastNonAssistant.content;
+  }
+  const lastUserLike = [...messages]
+    .reverse()
+    .find(
+      (m: any) =>
+        m &&
+        typeof m.role === "string" &&
+        ["user", "human", "user_message"].includes(m.role.toLowerCase()),
+    );
+  return typeof lastUserLike?.content === "string" ? lastUserLike.content : "";
 }
 
 async function callKimi(
@@ -416,6 +552,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { messages, agent, mode, fileSources = [], isVoiceMessage = false } = body;
+    const debugLog: string[] = [];
 
     // Use agent's chosen model for the reply (voice or text). Only "gemini" → Gemini; anything else → Kimi.
     const requestedModel = agent?.model != null ? String(agent.model).toLowerCase() : "kimi";
@@ -473,7 +610,7 @@ Deno.serve(async (req) => {
     let retrievedContext = "";
 
     if (indexedFiles.length > 0) {
-      const lastUserMessage = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
+      const lastUserMessage = getLastHumanMessageText(messages);
 
       const treeOverview = indexedFiles
         .map((f, i) => `### File ${i}: ${f.name}\n${f.tree}`)
@@ -607,17 +744,15 @@ ${retrievedContext}`);
 
       // Inline YouTube Scraper execution when user message contains a YouTube URL.
       const hasYouTubeTool = enabledTools.some((t: any) => t.name === "youtube_scraper");
-      const lastUserMessage =
-        messages && messages.length
-          ? [...messages].reverse().find((m: any) => m.role === "user")?.content || ""
-          : "";
+      const lastUserMessage = getLastHumanMessageText(messages);
       if (hasYouTubeTool && lastUserMessage) {
+        console.log("[YT] YouTube scraper triggered from chat message");
         const urls = extractAllYouTubeIds(lastUserMessage);
         if (urls.length > 0) {
           const limited = urls.slice(0, 3); // hard limit per turn for cost
           for (const yt of limited) {
             try {
-              const ytResult = await fetchYouTubeTranscript(yt.videoId);
+              const ytResult = await fetchYouTubeTranscript(yt.videoId, debugLog);
               const transcriptSnippet =
                 ytResult.transcript.length > 4000
                   ? ytResult.transcript.slice(0, 4000) + "\n[transcript truncated]"
@@ -636,8 +771,7 @@ ${retrievedContext}`);
       // ─── KB Expander: create/append KB from chat ─────────────────────
       const hasKbExpander = enabledTools.some((t: any) => t.name === "kb_expander");
       if (hasKbExpander && messages && messages.length > 0) {
-        const lastUser = [...messages].reverse().find((m: any) => m.role === "user");
-        const lastText: string = lastUser?.content || "";
+        const lastText: string = getLastHumanMessageText(messages);
 
         const wantsKb =
           /knowledge base|kb\b|база знань|базу знань|додай до бз|додай до бази/i.test(lastText);
@@ -656,6 +790,9 @@ ${retrievedContext}`);
           : [];
 
         if (wantsKb && (ytSources.length > 0 || plainTextSource || uploadedFiles.length > 0)) {
+          console.log(
+            `[KB] KB Expander triggered wantsCreate=${wantsCreate} ytLinks=${ytSources.length} uploadedFiles=${uploadedFiles.length} plainText=${plainTextSource ? "yes" : "no"}`,
+          );
           const kbIds: string[] = Array.isArray(agent.knowledge_base_ids)
             ? agent.knowledge_base_ids.map(String)
             : [];
@@ -734,7 +871,7 @@ ${retrievedContext}`);
               const limitedYt = ytSources.slice(0, 10);
               for (const { url, videoId } of limitedYt) {
                 try {
-                  const ytData = await fetchYouTubeTranscript(videoId);
+                  const ytData = await fetchYouTubeTranscript(videoId, debugLog);
                   const text =
                     ytData.transcript.length > 20000
                       ? ytData.transcript.slice(0, 20000)
@@ -877,6 +1014,7 @@ ${retrievedContext}`);
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",
       cost: Math.round(cost * 1e8) / 1e8,
+      debug: debugLog,
     });
   } catch (error: any) {
     console.error("agentChat error:", error.message);

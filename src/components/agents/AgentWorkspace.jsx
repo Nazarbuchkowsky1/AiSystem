@@ -588,6 +588,7 @@ export default function AgentWorkspace({ agent, onBack }) {
     let res;
     try {
       try {
+        console.log("[AgentClient] Calling agentChat with messages:", newMessages.length, "files:", fileSources.length);
         res = await base44.functions.invoke("agentChat", {
           messages: newMessages,
           agent: {
@@ -606,6 +607,10 @@ export default function AgentWorkspace({ agent, onBack }) {
         try {
           sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
         } catch (_) {}
+      }
+      console.log("[AgentClient] agentChat raw result:", res);
+      if (res?.data?.debug && Array.isArray(res.data.debug)) {
+        console.log("[AgentDebug] server debug log:\n" + res.data.debug.join("\n"));
       }
       const response = res?.data?.response || "Error generating response.";
       const responseCost = Number(res?.data?.cost) || 0;
@@ -639,6 +644,7 @@ export default function AgentWorkspace({ agent, onBack }) {
         console.error("Agent message_count update error:", e);
       }
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       loadHistory();
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     } catch (e) {
