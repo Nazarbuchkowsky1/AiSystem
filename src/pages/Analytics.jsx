@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, DollarSign, Clock, CheckCircle2 } from "lucide-react";
+import { logStep } from "@/lib/clientLogger";
 import MetricCard from "../components/dashboard/MetricCard";
 import DashboardTabs from "../components/dashboard/DashboardTabs";
 import OverviewTab from "../components/dashboard/OverviewTab";
@@ -28,7 +29,9 @@ export default function Analytics() {
   const { data: analytics = {}, isLoading } = useQuery({
     queryKey: ["analytics"],
     queryFn: async () => {
+      logStep("Analytics", "getAnalytics: start");
       const res = await base44.functions.invoke("getAnalytics", {});
+      logStep("Analytics", "getAnalytics: done");
       return res?.data ?? {};
     },
     refetchInterval: 60 * 1000,

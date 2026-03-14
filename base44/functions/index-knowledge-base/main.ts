@@ -1,5 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
+import JSZip from 'npm:jszip@3.10.1';
+import mammoth from 'npm:mammoth@1.8.0';
+import * as XLSX from 'npm:xlsx@0.18.5';
 
 // ─── KB indexing: always Kimi K2.5 (OpenRouter). No Gemini used here. ─────────
 const KIMI_API_KEY =
@@ -23,7 +26,217 @@ const INDEXABLE_TYPES = [
   "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "cpp", "c", "cs",
   "java", "php", "swift", "kt", "html", "css", "scss",
   "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
+  "xmind", "docx", "xlsx", "xls", "pptx", "ppt",
 ];
+
+// ─── XMind parser: .xmind files are ZIP archives with content.json ────────────
+async function parseXMindFile(arrayBuf: ArrayBuffer, logDebug: (msg: string) => void): Promise<string> {
+  logDebug(`[XMIND] Loading ZIP archive...`);
+  try {
+    const zip = await JSZip.loadAsync(arrayBuf);
+
+    // XMind 8+ format: content.json at root
+    let contentFile = zip.file("content.json");
+    // XMind Zen format: may also have metadata/content.json
+    if (!contentFile) contentFile = zip.file("metadata/content.json");
+
+    if (contentFile) {
+      logDebug(`[XMIND] Found content.json, extracting text...`);
+      const raw = await contentFile.async("string");
+      const data = JSON.parse(raw);
+      const lines: string[] = [];
+
+      // content.json is an array of sheets
+      const sheets = Array.isArray(data) ? data : [data];
+      for (const sheet of sheets) {
+        const rootTopic = sheet.rootTopic || sheet.root || sheet;
+        if (rootTopic) {
+          walkXMindTopic(rootTopic, 0, lines);
+        }
+      }
+
+      const finalTxt = lines.join("\n");
+      logDebug(`[XMIND] Extracted ${lines.length} lines of text (${finalTxt.length} chars)`);
+      if (lines.length > 0) return finalTxt;
+    }
+
+    logDebug(`[XMIND] content.json not found, falling back to older formats...`);
+    // Fallback: older XMind format with content.xml
+    const xmlFile = zip.file("content.xml");
+    if (xmlFile) {
+      const xmlText = await xmlFile.async("string");
+      // Extract all <title>...</title> tags from the XML
+      const titles: string[] = [];
+      const regex = /<title[^>]*>([\s\S]*?)<\/title>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(xmlText)) !== null) {
+        const t = m[1].replace(/<[^>]+>/g, "").trim();
+        if (t) titles.push(t);
+      }
+      const finalTxt = titles.join("\n");
+      logDebug(`[XMIND] Extracted ${titles.length} lines from XML fallback (${finalTxt.length} chars)`);
+      if (titles.length > 0) return finalTxt;
+    }
+
+    logDebug(`[XMIND] content.xml not found, attempting heuristic scan of all JSON files...`);
+    // Last resort: try to find ANY .json file in the ZIP
+    const jsonFiles = Object.keys(zip.files).filter(n => n.endsWith(".json") && !zip.files[n].dir);
+    for (const name of jsonFiles) {
+      try {
+        const raw = await zip.files[name].async("string");
+        const data = JSON.parse(raw);
+        const lines: string[] = [];
+        walkXMindTopic(data, 0, lines);
+        if (lines.length > 0) return lines.join("\n");
+      } catch { /* try next */ }
+    }
+
+    logDebug(`[XMIND] Error: Could not extract readable text from archive.`);
+    return "[XMind file: could not extract readable content]";
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[XMIND] Parsing failed: ${err}`);
+    console.error("XMind parse error:", err);
+    return `[XMind parse error: ${err}]`;
+  }
+}
+
+function walkXMindTopic(topic: any, depth: number, lines: string[]): void {
+  if (!topic) return;
+  const indent = "  ".repeat(depth);
+  const title = topic.title || topic.name || topic.text || "";
+  if (title) {
+    lines.push(`${indent}${title}`);
+  }
+  // XMind stores notes/labels
+  if (topic.notes?.plain?.content) {
+    lines.push(`${indent}  [Note: ${topic.notes.plain.content}]`);
+  }
+  if (topic.labels && Array.isArray(topic.labels)) {
+    for (const label of topic.labels) {
+      if (typeof label === "string" && label.trim()) {
+        lines.push(`${indent}  [Label: ${label}]`);
+      }
+    }
+  }
+  // Recurse into children (various field names used by different XMind versions)
+  const children =
+    topic.children?.attached ||
+    topic.children?.detached ||
+    topic.children ||
+    topic.topics ||
+    topic.subTopics ||
+    [];
+  const childArray = Array.isArray(children) ? children : [];
+  for (const child of childArray) {
+    walkXMindTopic(child, depth + 1, lines);
+  }
+}
+
+// ─── DOCX parser: uses mammoth to extract raw text ────────────────────────────
+async function parseDocxFile(arrayBuf: ArrayBuffer, logDebug: (msg: string) => void): Promise<string> {
+  logDebug(`[DOCX] Starting mammoth extraction...`);
+  try {
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(arrayBuf) });
+    logDebug(`[DOCX] Extraction complete. Length: ${result.value?.length || 0} chars`);
+    return result.value || "";
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[DOCX] Extraction failed: ${err}`);
+    console.error("DOCX parse error:", err);
+    return `[DOCX parse error: ${err}]`;
+  }
+}
+
+// ─── XLSX/XLS parser: converts each sheet to CSV-like text ────────────────────
+async function parseXlsxFile(arrayBuf: ArrayBuffer, logDebug: (msg: string) => void): Promise<string> {
+  logDebug(`[XLSX] Loading workbook into SheetJS...`);
+  try {
+    const workbook = XLSX.read(new Uint8Array(arrayBuf), { type: "array" });
+    logDebug(`[XLSX] Found ${workbook.SheetNames.length} sheets: ${workbook.SheetNames.join(", ")}`);
+    const parts: string[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      logDebug(`[XLSX] Processing sheet: ${sheetName}`);
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
+      parts.push(`## Sheet: ${sheetName}`);
+      const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+      if (csv.trim()) parts.push(csv.trim());
+    }
+    const finalTxt = parts.join("\n\n") || "";
+    logDebug(`[XLSX] Extraction complete. Length: ${finalTxt.length} chars`);
+    return finalTxt;
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[XLSX] Parsing failed: ${err}`);
+    console.error("XLSX parse error:", err);
+    return `[XLSX parse error: ${err}]`;
+  }
+}
+
+// ─── PPTX parser: extracts text from slide XML files inside the ZIP ───────────
+async function parsePptxFile(arrayBuf: ArrayBuffer, logDebug: (msg: string) => void): Promise<string> {
+  logDebug(`[PPTX] Loading ZIP archive...`);
+  try {
+    const zip = await JSZip.loadAsync(arrayBuf);
+    const slideFiles = Object.keys(zip.files)
+      .filter(name => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+      .sort((a, b) => {
+        const na = parseInt(a.match(/slide(\d+)/i)?.[1] || "0");
+        const nb = parseInt(b.match(/slide(\d+)/i)?.[1] || "0");
+        return na - nb;
+      });
+
+    logDebug(`[PPTX] Found ${slideFiles.length} slide(s)`);
+
+    if (slideFiles.length === 0) {
+      logDebug(`[PPTX] No slides found in archive`);
+      return "[PPTX file: no slides found]";
+    }
+
+    const parts: string[] = [];
+    for (const slidePath of slideFiles) {
+      const slideNum = slidePath.match(/slide(\d+)/i)?.[1] || "?";
+      logDebug(`[PPTX] Extracting text from Slide ${slideNum}...`);
+      const xml = await zip.files[slidePath].async("string");
+      // Extract all <a:t>...</a:t> text runs from the slide XML
+      const texts: string[] = [];
+      const regex = /<a:t>([\s\S]*?)<\/a:t>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(xml)) !== null) {
+        const t = m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+        if (t) texts.push(t);
+      }
+      if (texts.length > 0) {
+        parts.push(`## Slide ${slideNum}\n${texts.join(" ")}`);
+      }
+    }
+    const finalTxt = parts.join("\n\n") || "[PPTX file: no text content found]";
+    logDebug(`[PPTX] Parsing complete. Length: ${finalTxt.length} chars`);
+    return finalTxt;
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[PPTX] Parsing failed: ${err}`);
+    console.error("PPTX parse error:", err);
+    return `[PPTX parse error: ${err}]`;
+  }
+}
+
+// ─── Hardened PDF parser with proper error handling ────────────────────────────
+async function parsePdfFile(arrayBuf: ArrayBuffer, logDebug: (msg: string) => void): Promise<string> {
+  logDebug(`[PDF] Init pdf-parse library...`);
+  try {
+    const pdfData = await pdf(Buffer.from(arrayBuf));
+    logDebug(`[PDF] Extraction successful. Length: ${pdfData.text?.length || 0} chars`);
+    return pdfData.text || "";
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[PDF] Fatal error parsing pdf: ${err}`);
+    console.error("PDF parse error:", err);
+    // Return partial info instead of crashing
+    return `[PDF parse error: ${err}. The file may be corrupted, password-protected, or use unsupported PDF features.]`;
+  }
+}
 
 function getFileType(f: { type?: string; name?: string }): string {
   const t = (f.type || "").toLowerCase().trim();
@@ -171,10 +384,14 @@ function addParagraphOffsetToNode(node: PageIndexNode, offset: number): void {
 
 async function buildPageIndexForText(
   text: string,
-  fileName: string
+  fileName: string,
+  logDebug: (msg: string) => void
 ): Promise<{ doc: PageIndexDocument | null; cost: number }> {
+  logDebug(`[AI] Checking API requirements for "${fileName}"...`);
   if (!KIMI_API_KEY) {
-    console.error("No Kimi API key configured");
+    const err = "No Kimi API key configured";
+    logDebug(`[AI] Error: ${err}`);
+    console.error(err);
     return { doc: null, cost: 0 };
   }
 
@@ -203,6 +420,8 @@ async function buildPageIndexForText(
     response_format: { type: "json_object" },
   };
 
+  logDebug(`[AI] Calling OpenRouter Kimi API... (Prompt chars: ${userPrompt.length})`);
+  const startTime = Date.now();
   const resp = await fetch(KIMI_URL, {
     method: "POST",
     headers: {
@@ -214,9 +433,14 @@ async function buildPageIndexForText(
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error(`Kimi API ${resp.status}: ${errText}`);
+    const errMsg = `Kimi API error ${resp.status}: ${errText}`;
+    logDebug(`[AI] Request failed: ${errMsg}`);
+    console.error(errMsg);
     return { doc: null, cost: 0 };
   }
+
+  const durationStr = ((Date.now() - startTime) / 1000).toFixed(1);
+  logDebug(`[AI] Received API response in ${durationStr}s`);
 
   const data = await resp.json();
 
@@ -246,11 +470,13 @@ async function buildPageIndexForText(
     promptTokens = Math.max(100, Math.ceil(userPrompt.length / 4));
     outputTokens = textOut ? Math.max(50, Math.ceil(textOut.length / 4)) : 50;
   }
+  logDebug(`[AI] Tokens: Input=${promptTokens}, Output=${outputTokens}`);
   const cost =
     (promptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
     (outputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
 
   if (!textOut) {
+    logDebug(`[AI] Error: Empty response (finishReason: ${finishReason || "unknown"})`);
     console.error(`Kimi returned empty response (finishReason: ${finishReason || "unknown"})`);
     return { doc: null, cost };
   }
@@ -300,9 +526,12 @@ async function buildPageIndexForText(
         nodes: structure,
       },
     };
+    logDebug(`[AI] Successfully mapped tree with ${structure.length} top-level nodes for "${fileName}". (Cost: $${cost.toFixed(4)})`);
     return { doc, cost };
   } catch (e) {
-    console.error("Failed to parse Kimi JSON:", e instanceof Error ? e.message : String(e));
+    const err = e instanceof Error ? e.message : String(e);
+    logDebug(`[AI] Failed to parse generated tree: ${err}`);
+    console.error("Failed to parse Kimi JSON:", err);
     return { doc: null, cost };
   }
 }
@@ -310,31 +539,42 @@ async function buildPageIndexForText(
 /** Build PageIndex for large docs by chunking; small docs go to buildPageIndexForText once. */
 async function buildPageIndexWithChunking(
   text: string,
-  fileName: string
+  fileName: string,
+  logDebug: (msg: string) => void
 ): Promise<{ doc: PageIndexDocument | null; cost: number }> {
+  logDebug(`[Chunker] Splitting document "${fileName}" into paragraphs...`);
   const paragraphs = smartSplitText(text || "");
-  if (paragraphs.length === 0) return { doc: null, cost: 0 };
+  if (paragraphs.length === 0) {
+    logDebug(`[Chunker] Empty document, nothing to process.`);
+    return { doc: null, cost: 0 };
+  }
 
   const totalChars = paragraphs.join("").length;
   const useChunking = paragraphs.length > MAX_PARAGRAPHS_PER_CHUNK || totalChars > MAX_CHARS_PER_CHUNK;
 
   if (!useChunking) {
-    return buildPageIndexForText(text, fileName);
+    logDebug(`[Chunker] Document small enough (Ch: ${totalChars}, P: ${paragraphs.length}), processing directly.`);
+    return buildPageIndexForText(text, fileName, logDebug);
   }
 
+  logDebug(`[Chunker] Document is large (Ch: ${totalChars}, P: ${paragraphs.length}). Chunking required.`);
   const chunks = splitParagraphsIntoChunks(paragraphs);
+  logDebug(`[Chunker] Split into ${chunks.length} manageable parts.`);
   const mergedNodes: PageIndexNode[] = [];
   let docTitle = fileName;
   let docDescription = "";
   let totalCost = 0;
 
-  for (const { start, end } of chunks) {
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const { start, end } = chunks[idx];
+    logDebug(`[Chunker] Processing part ${idx + 1}/${chunks.length} [paragraphs ${start}..${end - 1}]...`);
     const chunkParagraphs = paragraphs.slice(start, end);
     const chunkText = chunkParagraphs.join("\n\n");
-    const chunkResult = await buildPageIndexForText(chunkText, fileName);
+    const chunkResult = await buildPageIndexForText(chunkText, `${fileName} (Part ${idx + 1})`, logDebug);
     totalCost += chunkResult.cost;
     const chunkDoc = chunkResult.doc;
     if (!chunkDoc?.root?.nodes?.length) {
+      logDebug(`[Chunker] WARNING: AI returned invalid tree for part ${idx + 1}, using fallback flat index.`);
       const fallback = buildFallbackTree(chunkText, fileName);
       for (const node of fallback.root.nodes || []) {
         addParagraphOffsetToNode(node, start);
@@ -342,6 +582,7 @@ async function buildPageIndexWithChunking(
       }
       if (!docDescription && fallback.doc_description) docDescription = fallback.doc_description;
     } else {
+      logDebug(`[Chunker] Part ${idx + 1} indexed successfully.`);
       docTitle = chunkDoc.doc_title;
       if (chunkDoc.doc_description) docDescription = chunkDoc.doc_description;
       for (const node of chunkDoc.root.nodes) {
@@ -351,6 +592,7 @@ async function buildPageIndexWithChunking(
     }
   }
 
+  logDebug(`[Chunker] All parts processed, merging nodes into single unified tree...`);
   renumberNodes(mergedNodes);
 
   const doc: PageIndexDocument = {
@@ -383,10 +625,12 @@ function renumberNodes(nodes: PageIndexNode[]) {
   walk(nodes);
 }
 
-function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
+function buildFallbackTree(text: string, fileName: string, logDebug?: (msg: string) => void): PageIndexDocument {
+  if (logDebug) logDebug(`[Fallback] Building basic flat index for "${fileName}"...`);
   const paragraphs = smartSplitText(text || "");
 
   if (paragraphs.length === 0) {
+    if (logDebug) logDebug(`[Fallback] Document is empty.`);
     return {
       doc_title: fileName,
       doc_description: fileName,
@@ -407,6 +651,7 @@ function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
   const sectionSize = Math.max(1, Math.ceil(paragraphs.length / sectionCount));
   const sections: PageIndexNode[] = [];
 
+  if (logDebug) logDebug(`[Fallback] Creating ${sectionCount} generic sections...`);
   for (let i = 0; i < paragraphs.length; i += sectionSize) {
     const end = Math.min(i + sectionSize - 1, paragraphs.length - 1);
     const sectionSummary = paragraphs.slice(i, end + 1).join(" ").trim().slice(0, 300);
@@ -420,6 +665,7 @@ function buildFallbackTree(text: string, fileName: string): PageIndexDocument {
     });
   }
 
+  if (logDebug) logDebug(`[Fallback] Generated flat index with ${paragraphs.length} paragraphs in ${sections.length} sections.`);
   return {
     doc_title: fileName,
     doc_description: summary,
@@ -444,6 +690,22 @@ Deno.serve(async (req) => {
   const logDebug = (msg: string) => {
     console.log(msg);
     debugLogs.push(msg);
+    if (base44 && kbId) {
+      base44.asServiceRole.entities.KnowledgeBase.update(kbId, {
+        debug_logs: [...debugLogs]
+      }).catch(() => {});
+    }
+  };
+  /** Emit a structured step as JSON for System Status (client shows full payload). */
+  const logStepStructured = (step: string, data: Record<string, unknown>) => {
+    const entry = JSON.stringify({ step, _t: Date.now(), ...data });
+    debugLogs.push(entry);
+    console.log(entry);
+    if (base44 && kbId) {
+      base44.asServiceRole.entities.KnowledgeBase.update(kbId, {
+        debug_logs: [...debugLogs]
+      }).catch(() => {});
+    }
   };
 
   try {
@@ -502,6 +764,7 @@ Deno.serve(async (req) => {
     logDebug(`[KB_DEBUG] kbId=${kbId}, total files=${files.length}, indexableFiles=${indexableFiles.length}`);
 
     if (indexableFiles.length === 0) {
+      logStepStructured("index_skip", { kbId, reason: "no_indexable_files", totalFiles: files.length });
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         processing: false,
         index_status: "succeeded",
@@ -511,6 +774,13 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, indexed: false, debug: debugLogs });
     }
 
+    logStepStructured("index_start", {
+      kbId,
+      kbName: kb.name,
+      totalFiles: files.length,
+      indexableCount: indexableFiles.length,
+      status: "indexing",
+    });
     await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
       processing: true,
       index_status: "indexing",
@@ -539,11 +809,13 @@ Deno.serve(async (req) => {
       }
 
       try {
+        logStepStructured("file_start", { fileName: file.name, fileIndex: i, fileType, totalFiles: updatedFiles.length });
         logDebug(`[KB_DEBUG] Start processing file "${file.name}"...`);
         let text: string;
         if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
           logDebug(`[KB_DEBUG] Using inline_text for "${file.name}" (${file.inline_text.length} chars)`);
           text = file.inline_text;
+          logStepStructured("file_fetched", { fileName: file.name, source: "inline_text", textLength: text?.length });
         } else {
           logDebug(`[KB_DEBUG] Fetching URL for "${file.name}": ${file.url}`);
           const fileResp = await fetch(file.url);
@@ -551,19 +823,44 @@ Deno.serve(async (req) => {
             throw new Error(`HTTP ${fileResp.status} fetching ${file.name}`);
           }
 
-          if (fileType === "pdf") {
+          const BINARY_TYPES = ["pdf", "xmind", "docx", "xlsx", "xls", "pptx", "ppt"];
+          if (BINARY_TYPES.includes(fileType)) {
             const arrayBuf = await fileResp.arrayBuffer();
-            const pdfData = await pdf(Buffer.from(arrayBuf));
-            text = pdfData.text || "";
+
+            if (fileType === "pdf") {
+              text = await parsePdfFile(arrayBuf, logDebug);
+            } else if (fileType === "xmind") {
+              text = await parseXMindFile(arrayBuf, logDebug);
+            } else if (fileType === "docx") {
+              text = await parseDocxFile(arrayBuf, logDebug);
+            } else if (fileType === "xlsx" || fileType === "xls") {
+              text = await parseXlsxFile(arrayBuf, logDebug);
+            } else if (fileType === "pptx" || fileType === "ppt") {
+              text = await parsePptxFile(arrayBuf, logDebug);
+            } else {
+              text = "";
+            }
           } else {
             text = await fileResp.text();
           }
+          logStepStructured("file_fetched", { fileName: file.name, source: "url", textLength: text?.length, ok: true });
         }
 
-        const indexResult = await buildPageIndexWithChunking(text, file.name);
-        const finalDoc = indexResult.doc || buildFallbackTree(text, file.name);
+        const indexResult = await buildPageIndexWithChunking(text, file.name, logDebug);
+        const finalDoc = indexResult.doc || buildFallbackTree(text, file.name, logDebug);
         totalKbCost += indexResult.cost;
 
+        const paragraphsCount = finalDoc?.paragraphs?.length ?? 0;
+        const topLevelNodes = (finalDoc?.root?.nodes?.length) ?? 0;
+        logStepStructured("file_indexed", {
+          fileName: file.name,
+          processed: true,
+          paragraphs: paragraphsCount,
+          topLevelNodes,
+          cost: indexResult.cost,
+          usedFallback: !indexResult.doc,
+        });
+        logDebug(`[KB_DEBUG] Finished parsing & indexing "${file.name}". Saving to DB...`);
         updatedFiles[i] = {
           ...file,
           processed: true,
@@ -575,6 +872,7 @@ Deno.serve(async (req) => {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`File "${file.name}" indexing error: ${msg}`);
         errors.push(`${file.name}: ${msg}`);
+        logStepStructured("file_error", { fileName: file.name, error: msg, processed: false });
 
         updatedFiles[i] = {
           ...file,
@@ -587,6 +885,7 @@ Deno.serve(async (req) => {
 
       completed += 1;
       const progress = Math.round((completed / indexableFiles.length) * 100);
+      logStepStructured("progress", { completed, total: indexableFiles.length, progress, indexing: completed < indexableFiles.length });
 
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         files: updatedFiles,
@@ -601,24 +900,32 @@ Deno.serve(async (req) => {
       await recordIndexingCost(base44, kb.name || "KB", totalKbCost);
     }
 
+    logStepStructured("index_done", {
+      kbId,
+      indexed,
+      completed: indexableFiles.length,
+      cost: totalKbCost,
+      status: "succeeded",
+      errors: errors.length > 0 ? errors : undefined,
+    });
     return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.2" });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("indexKnowledgeBase fatal error:", msg);
-
     if (base44 && kbId) {
       try {
+        debugLogs.push(JSON.stringify({ step: "index_failed", error: msg, status: "failed", _t: Date.now() }));
         await base44.asServiceRole.entities.KnowledgeBase.update(kbId, {
           processing: false,
           index_status: "failed",
           index_progress: 0,
           last_error: msg,
+          debug_logs: [...debugLogs],
         });
       } catch {
         console.error("Failed to update KB error state");
       }
     }
-
     return Response.json({ error: msg, debug: debugLogs }, { status: 500 });
   }
 });

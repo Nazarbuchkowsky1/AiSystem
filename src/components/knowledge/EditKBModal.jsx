@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { X, Trash2, Upload, Loader2, FileText, Download } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { logStep } from "@/lib/clientLogger";
+import { extractTextFromPdfIfLarge } from "@/lib/pdfTextExtract";
 
 const SUPPORTED_EXTENSIONS = [
   "pdf","txt","md","csv","json",
   "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
   "java","php","swift","kt","html","css","scss",
   "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+  "xmind","docx","xlsx","xls","pptx","ppt",
 ];
 
 function formatFileSize(bytes) {
@@ -20,7 +23,8 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
   const [name, setName] = useState(kb.name || "");
   const [description, setDescription] = useState(kb.description || "");
   const [files, setFiles] = useState(kb.files || []);
-  const [newFiles, setNewFiles] = useState([]);
+  // New files: upload starts when added; Save only does KB.update (quick)
+  const [newFiles, setNewFiles] = useState([]); // { key, file, status: 'uploading'|'done'|'error', url?, error? }
   const [isSaving, setIsSaving] = useState(false);
   const [removedFileIndexes, setRemovedFileIndexes] = useState(new Set());
   const [rejectedFiles, setRejectedFiles] = useState([]);
@@ -102,6 +106,24 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
     setNewFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const startUploadForNewFile = async (file, key) => {
+    let fileToUpload = file;
+    const extracted = await extractTextFromPdfIfLarge(file);
+    if (extracted) {
+      logStep("KB", "EditKBModal: large PDF → text only", file.name);
+      fileToUpload = extracted;
+    }
+    logStep("KB", "EditKBModal: UploadFile (background)", fileToUpload.name);
+    base44.integrations.Core.UploadFile({ file: fileToUpload })
+      .then((res) => {
+        setNewFiles(prev => prev.map(item => item.key === key ? { ...item, status: "done", url: res?.file_url, file: fileToUpload } : item));
+      })
+      .catch((e) => {
+        logStep("KB", "EditKBModal: UploadFile error", file.name + " " + String(e?.message || e));
+        setNewFiles(prev => prev.map(item => item.key === key ? { ...item, status: "error", error: e?.message || String(e) } : item));
+      });
+  };
+
   const handleAddFiles = (e) => {
     const all = Array.from(e.target.files || []);
     if (all.length === 0) return;
@@ -112,49 +134,60 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
       if (ext && SUPPORTED_EXTENSIONS.includes(ext)) accepted.push(f);
       else rejected.push(f.name);
     }
-    setNewFiles(prev => [...prev, ...accepted]);
+    const toAdd = accepted.map((file) => ({
+      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      status: "uploading",
+    }));
+    setNewFiles(prev => [...prev, ...toAdd]);
     setRejectedFiles(rejected);
+    toAdd.forEach(({ file, key }) => startUploadForNewFile(file, key));
     e.target.value = "";
   };
 
+  const uploadingCount = newFiles.filter(n => n.status === "uploading").length;
+  const canSave = !isSaving && name.trim() && uploadingCount === 0;
+
   const handleSave = async () => {
-    if (!name.trim() || isSaving) return;
+    if (!canSave) return;
+    logStep("KB", "EditKBModal: save start", kb.id);
     setIsSaving(true);
+    try {
+      const keptFiles = originalFiles.filter((_, i) => !removedFileIndexes.has(i));
+      const uploadedNewFiles = newFiles
+        .filter(n => n.status === "done" && n.url)
+        .map(n => ({
+          name: n.file.name,
+          url: n.url,
+          size: n.file.size,
+          type: n.file.name.split(".").pop()?.toLowerCase(),
+          processed: false,
+        }));
+      const finalFiles = [...keptFiles, ...uploadedNewFiles];
+      const filesChanged = removedFileIndexes.size > 0 || uploadedNewFiles.length > 0;
+      const updateData = {
+        name: name.trim(),
+        description: description.trim(),
+        files: finalFiles,
+        processing: filesChanged,
+      };
 
-    const keptFiles = originalFiles.filter((_, i) => !removedFileIndexes.has(i));
-    const filesChanged = removedFileIndexes.size > 0 || newFiles.length > 0;
+      logStep("KB", "EditKBModal: KnowledgeBase.update");
+      await base44.entities.KnowledgeBase.update(kb.id, updateData);
 
-    // Upload new files
-    const uploadedNewFiles = [];
-    for (const file of newFiles) {
-      const uploadRes = await base44.integrations.Core.UploadFile({ file });
-      uploadedNewFiles.push({
-        name: file.name,
-        url: uploadRes.file_url,
-        size: file.size,
-        type: file.name.split(".").pop().toLowerCase(),
-        processed: false,
-      });
+      if (filesChanged) {
+        logStep("KB", "EditKBModal: indexKnowledgeBase start", kb.id);
+        base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch((e) => {
+          logStep("KB", "EditKBModal: indexKnowledgeBase error", String(e?.message || e));
+        });
+      }
+      logStep("KB", "EditKBModal: save done");
+      onSaved();
+    } catch (e) {
+      logStep("KB", "EditKBModal: save error", String(e?.message || e));
+    } finally {
+      setIsSaving(false);
     }
-
-    const finalFiles = [...keptFiles, ...uploadedNewFiles];
-
-    const updateData = {
-      name: name.trim(),
-      description: description.trim(),
-      files: finalFiles,
-      processing: filesChanged,
-    };
-
-    await base44.entities.KnowledgeBase.update(kb.id, updateData);
-
-    // If files changed, trigger real PageIndex tree indexing (runs in background)
-    if (filesChanged) {
-      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
-    }
-
-    onSaved();
-    setIsSaving(false);
   };
 
   const visibleExistingFiles = originalFiles.filter((_, i) => !removedFileIndexes.has(i));
@@ -289,16 +322,24 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
                 );
               })}
 
-              {/* New files (not yet uploaded) */}
-              {newFiles.map((file, index) => (
-                <div key={"new-" + index} style={{
+              {/* New files: upload runs in background when added */}
+              {newFiles.map((n, index) => (
+                <div key={n.key ?? "new-" + index} style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
                   borderRadius: 8, background: "#0f0f0f", border: "1px dashed rgba(249,115,22,0.3)"
                 }}>
-                  <FileText style={{ width: 14, height: 14, color: "#22c55e", flexShrink: 0 }} />
+                  {n.status === "uploading" ? (
+                    <Loader2 style={{ width: 14, height: 14, color: "#f97316", flexShrink: 0, animation: "spin 1s linear infinite" }} />
+                  ) : n.status === "error" ? (
+                    <span style={{ fontSize: 10, color: "#ef4444", flexShrink: 0 }}>!</span>
+                  ) : (
+                    <FileText style={{ width: 14, height: 14, color: "#22c55e", flexShrink: 0 }} />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
-                    <p style={{ fontSize: 10, color: "#22c55e" }}>New • {formatFileSize(file.size)}</p>
+                    <p style={{ fontSize: 12, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.file.name}</p>
+                    <p style={{ fontSize: 10, color: n.status === "error" ? "#ef4444" : n.status === "uploading" ? "#f97316" : "#22c55e" }}>
+                      {n.status === "uploading" ? "Uploading…" : n.status === "error" ? (n.error || "Upload failed") : `Ready • ${formatFileSize(n.file.size)}`}
+                    </p>
                   </div>
                   <button onClick={() => handleRemoveNew(index)} style={{
                     background: "rgba(239,68,68,0.1)", border: "none", color: "#ef4444",
@@ -319,14 +360,14 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
             )}
             {(removedFileIndexes.size > 0 || newFiles.length > 0) && (
               <p style={{ fontSize: 10, color: "#f97316", marginTop: 8 }}>
-                New files will be indexed after saving.
+                {uploadingCount > 0 ? "Wait for uploads to finish, then Save. Indexing will run after save." : "New files will be indexed after saving."}
               </p>
             )}
           </div>
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button onClick={onClose} style={{
+            <button onClick={handleClose} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "transparent",
               border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, fontWeight: 500,
               cursor: "pointer", transition: "all 0.2s"
@@ -335,17 +376,17 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               Cancel
             </button>
-            <button onClick={handleSave} disabled={!name.trim() || isSaving} style={{
+            <button onClick={handleSave} disabled={!canSave} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "rgba(249,115,22,0.1)",
               border: "1px solid rgba(249,115,22,0.3)", color: "#f97316", fontSize: 14, fontWeight: 500,
-              cursor: !name.trim() || isSaving ? "not-allowed" : "pointer",
-              opacity: !name.trim() || isSaving ? 0.5 : 1, transition: "all 0.2s",
+              cursor: canSave ? "pointer" : "not-allowed",
+              opacity: canSave ? 1 : 0.5, transition: "all 0.2s",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 6
             }}
-              onMouseEnter={e => { if (name.trim() && !isSaving) e.currentTarget.style.background = "rgba(249,115,22,0.2)"; }}
+              onMouseEnter={e => { if (canSave) e.currentTarget.style.background = "rgba(249,115,22,0.2)"; }}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
               {isSaving && <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />}
-              {isSaving ? "Saving..." : "Save"}
+              {isSaving ? "Saving..." : uploadingCount > 0 ? `Uploading (${uploadingCount})…` : "Save"}
             </button>
           </div>
         </div>

@@ -16,6 +16,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import TOOLS_LIST from "../shared/toolsList";
+import { logStep } from "@/lib/clientLogger";
 
 const AVAILABLE_TOOLS = TOOLS_LIST.map(t => ({ name: t.name, label: t.label }));
 
@@ -103,6 +104,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
 
   const analyzeAndSuggest = async () => {
     if (!name.trim()) return;
+    logStep("AgentModal", "analyzeAndSuggest: start");
     setIsAnalyzing(true);
     try {
       const response = await base44.integrations.Core.InvokeLLM({
@@ -122,8 +124,10 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
       if (response.iconName && !iconFile) {
         // Will use this as fallback icon_name when creating
       }
+      logStep("AgentModal", "analyzeAndSuggest: done");
     } catch (e) {
       console.error("Suggestion failed:", e);
+      logStep("AgentModal", "analyzeAndSuggest: error", String(e?.message || e));
     } finally {
       setIsAnalyzing(false);
     }
@@ -131,10 +135,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
 
   const handleCreate = async () => {
     if (!name.trim()) return;
+    logStep("AgentModal", isEditing ? "Agent.update: start" : "Agent.create: start", name.trim());
     setIsCreating(true);
     try {
       let iconUrl = isEditing ? editAgent.icon_url : null;
       if (iconFile) {
+        logStep("AgentModal", "UploadFile: icon");
         const uploadRes = await base44.integrations.Core.UploadFile({ file: iconFile });
         iconUrl = uploadRes.file_url;
       }
@@ -155,10 +161,15 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
 
       if (isEditing) {
         await onUpdate(editAgent.id, agentData);
+        logStep("AgentModal", "Agent.update: done", editAgent.id);
       } else {
         await onCreate(agentData);
+        logStep("AgentModal", "Agent.create: done");
       }
       reset();
+    } catch (e) {
+      logStep("AgentModal", isEditing ? "Agent.update: error" : "Agent.create: error", String(e?.message || e));
+      throw e;
     } finally {
       setIsCreating(false);
     }

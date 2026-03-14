@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Wrench, Plus } from "lucide-react";
+import { logStep } from "@/lib/clientLogger";
 import ToolCard from "../components/tools/ToolCard";
 import NewToolModal from "../components/tools/NewToolModal";
 import ToolDetailModal from "../components/tools/ToolDetailModal";
@@ -164,24 +165,42 @@ export default function Tools() {
 
   const { data: dbTools = [] } = useQuery({
     queryKey: ["tools"],
-    queryFn: () => base44.entities.Tool.list("-created_date"),
+    queryFn: async () => {
+      logStep("Tools", "Tool.list: start");
+      const list = await base44.entities.Tool.list("-created_date");
+      logStep("Tools", "Tool.list: done count", list?.length);
+      return list;
+    },
   });
 
   const allTools = [...BUILTIN_TOOLS, ...dbTools];
 
   const createTool = useMutation({
     mutationFn: d => base44.entities.Tool.create(d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tools"] }); setShowNew(false); },
+    onSuccess: (created) => {
+      logStep("Tools", "Tool.create: done", created?.id);
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      setShowNew(false);
+    },
+    onError: (e) => logStep("Tools", "Tool.create: error", String(e?.message || e)),
   });
 
   const updateTool = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Tool.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["tools"] }); },
+    onSuccess: (_, { id }) => {
+      logStep("Tools", "Tool.update: done", id);
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+    },
+    onError: (e) => logStep("Tools", "Tool.update: error", String(e?.message || e)),
   });
 
   const deleteTool = useMutation({
     mutationFn: id => base44.entities.Tool.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tools"] }),
+    onSuccess: (_, id) => {
+      logStep("Tools", "Tool.delete: done", id);
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+    },
+    onError: (e) => logStep("Tools", "Tool.delete: error", String(e?.message || e)),
   });
 
   return (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { logStep } from "@/lib/clientLogger";
 import CalendarHeader from "../components/calendar/CalendarHeader";
 import MonthView from "../components/calendar/MonthView";
 import WeekView from "../components/calendar/WeekView";
@@ -25,7 +26,12 @@ export default function Calendar() {
 
   const { data: allEvents = [] } = useQuery({
     queryKey: ["events"],
-    queryFn: () => base44.entities.CalendarEvent.list("-date"),
+    queryFn: async () => {
+      logStep("Calendar", "CalendarEvent.list: start");
+      const list = await base44.entities.CalendarEvent.list("-date");
+      logStep("Calendar", "CalendarEvent.list: done count", list?.length);
+      return list;
+    },
   });
 
   // Filter events by search
@@ -40,34 +46,42 @@ export default function Calendar() {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.CalendarEvent.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); closeModal(); },
+    onSuccess: (created) => {
+      logStep("Calendar", "CalendarEvent.create: done", created?.id);
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      closeModal();
+    },
+    onError: (e) => logStep("Calendar", "CalendarEvent.create: error", String(e?.message || e)),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.CalendarEvent.update(id, data),
     onMutate: async ({ id, data }) => {
-      // Cancel outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ["events"] });
       const previous = queryClient.getQueryData(["events"]);
-      // Optimistically update the cache
       queryClient.setQueryData(["events"], (old) =>
         (old || []).map(ev => ev.id === id ? { ...ev, ...data } : ev)
       );
       return { previous };
     },
-    onError: (_err, _vars, context) => {
-      // Roll back on error
+    onError: (e, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(["events"], context.previous);
+      logStep("Calendar", "CalendarEvent.update: error", String(e?.message || e));
     },
-    onSuccess: () => {
-      // Refetch only after server confirmed the update
+    onSuccess: (_, { id }) => {
+      logStep("Calendar", "CalendarEvent.update: done", id);
       queryClient.invalidateQueries({ queryKey: ["events"] });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.CalendarEvent.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); closeModal(); },
+    onSuccess: (_, id) => {
+      logStep("Calendar", "CalendarEvent.delete: done", id);
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      closeModal();
+    },
+    onError: (e) => logStep("Calendar", "CalendarEvent.delete: error", String(e?.message || e)),
   });
 
   const closeModal = () => {

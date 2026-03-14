@@ -62,6 +62,11 @@
     "last_error": {
       "type": "string",
       "description": "Last indexing error message (if any)"
+    },
+    "debug_logs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Detailed step-by-step logs from the indexing process"
     }
   },
   "required": [

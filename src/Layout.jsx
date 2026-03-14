@@ -381,7 +381,13 @@ export default function Layout({ children, currentPageName }) {
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button
                   onClick={() => {
-                    const textToCopy = debugLogs.map(entry => `[${entry.time?.slice(11, 19) || "--:--:--"}] ${entry.level?.toUpperCase() || "LOG"} - ${entry.message}`).join("\n");
+                    const textToCopy = debugLogs.map(entry => {
+                    const line = `[${entry.time?.slice(11, 19) || "--:--:--"}] ${entry.tag ? `[${entry.tag}] ` : ""}${entry.level?.toUpperCase() || "LOG"} - ${entry.message}`;
+                    if (entry.payload != null && typeof entry.payload === "object") {
+                      return line + "\n" + JSON.stringify(entry.payload, null, 2);
+                    }
+                    return line;
+                  }).join("\n\n");
                     navigator.clipboard.writeText(textToCopy);
                     const btn = document.getElementById("copy-logs-btn");
                     if (btn) {
@@ -435,13 +441,13 @@ export default function Layout({ children, currentPageName }) {
               }}
             >
               {debugLogs.length === 0 ? (
-                <div style={{ color: "#6b7280" }}>Логів поки немає.</div>
+                <div style={{ color: "#6b7280" }}>Логів поки немає. Виконуйте дії в додатку — логи з’являться тут.</div>
               ) : (
                 debugLogs.map((entry, idx) => (
                   <div
                     key={idx}
                     style={{
-                      marginBottom: 4,
+                      marginBottom: 8,
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-word",
                       color:
@@ -455,10 +461,30 @@ export default function Layout({ children, currentPageName }) {
                     <span style={{ color: "#6b7280" }}>
                       [{entry.time?.slice(11, 19) || "--:--:--"}]
                     </span>{" "}
-                    <span style={{ textTransform: "uppercase" }}>
+                    {entry.tag ? (
+                      <span style={{ color: "#f97316", fontWeight: 600 }}>[{entry.tag}]</span>
+                    ) : null}{" "}
+                    <span style={{ textTransform: "uppercase", fontSize: 10 }}>
                       {entry.level || "log"}
                     </span>{" "}
                     – {entry.message}
+                    {entry.payload != null && typeof entry.payload === "object" ? (
+                      <pre
+                        style={{
+                          marginTop: 6,
+                          marginBottom: 0,
+                          padding: 10,
+                          background: "rgba(0,0,0,0.35)",
+                          borderRadius: 6,
+                          fontSize: 10,
+                          overflow: "auto",
+                          color: "#94a3b8",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                        }}
+                      >
+                        {JSON.stringify(entry.payload, null, 2)}
+                      </pre>
+                    ) : null}
                   </div>
                 ))
               )}

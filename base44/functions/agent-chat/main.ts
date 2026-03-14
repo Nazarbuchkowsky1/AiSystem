@@ -657,13 +657,27 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { messages, agent, mode, fileSources = [], isVoiceMessage = false } = body;
     const debugLog: string[] = [];
+    const processLog: Record<string, unknown>[] = [];
 
-    // Use agent's chosen model for the reply (voice or text). Only "gemini" → Gemini; anything else → Kimi.
+    const pushProcess = (step: string, data: Record<string, unknown>) => {
+      const entry = { step, _t: Date.now(), ...data };
+      processLog.push(entry);
+    };
+
     const requestedModel = agent?.model != null ? String(agent.model).toLowerCase() : "kimi";
     const effectiveModel: "kimi" | "gemini" =
       requestedModel === "gemini" ? "gemini" : "kimi";
     const callLLM =
       effectiveModel === "gemini" ? callGemini : callKimi;
+
+    pushProcess("chat_start", {
+      agentId: agent?.id,
+      agentName: agent?.name,
+      model: agent?.model ?? "kimi",
+      effectiveModel,
+      messagesCount: Array.isArray(messages) ? messages.length : 0,
+      hasFileSources: Array.isArray(fileSources) && fileSources.length > 0,
+    });
 
     const systemParts: string[] = [];
     const agentName = agent.name || "AI Assistant";
@@ -700,6 +714,7 @@ Deno.serve(async (req) => {
               "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
               "java","php","swift","kt","html","css","scss",
               "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+              "xmind","docx","xlsx","xls","pptx","ppt",
             ].includes(file.type)) {
               unindexedFiles.push({ name: file.name, url: file.url });
             }
@@ -709,6 +724,13 @@ Deno.serve(async (req) => {
         console.error("KB fetch error:", e instanceof Error ? e.message : String(e));
       }
     }
+
+    pushProcess("kb_loaded", {
+      kbIds: agent?.knowledge_base_ids ?? [],
+      indexedFilesCount: indexedFiles.length,
+      unindexedFilesCount: unindexedFiles.length,
+      indexedFileNames: indexedFiles.map((f: IndexedFile) => f.name),
+    });
 
     // ─── PageIndex 2-step retrieval ───────────────────────────────────
     let retrievedContext = "";
@@ -767,6 +789,14 @@ Rules:
         }
 
         if (routingResult?.selections && Array.isArray(routingResult.selections)) {
+          pushProcess("routing_result", {
+            reasoning: routingResult.reasoning ?? null,
+            selectionsCount: routingResult.selections.length,
+            selections: routingResult.selections.map((s: any) => ({
+              file_index: s.file_index,
+              node_ids: s.node_ids,
+            })),
+          });
           const parts: string[] = [];
           if (routingResult.reasoning) {
             parts.push(`Retrieval reasoning: ${routingResult.reasoning}`);
@@ -781,6 +811,12 @@ Rules:
             const file = indexedFiles[fileIdx];
             const sectionText = extractSectionText(file.doc, nodeIds);
             if (sectionText) {
+              pushProcess("retrieved_section", {
+                fileIndex: fileIdx,
+                fileName: file.name,
+                nodeIds,
+                textLength: sectionText.length,
+              });
               parts.push(`\n--- Retrieved from: ${file.name} (sections: ${nodeIds.join(", ")}) ---\n${sectionText}`);
               routingSucceeded = true;
             }
@@ -796,6 +832,7 @@ Rules:
 
       // Fallback: if routing failed or returned nothing, provide tree summaries as context
       if (!routingSucceeded) {
+        pushProcess("routing_fallback", { reason: "no_selections_or_parse_failed", usedTreeSummaries: true });
         retrievedContext = indexedFiles
           .map(f => `--- Document structure: ${f.name} ---\n${f.tree}`)
           .join("\n\n");
@@ -981,26 +1018,22 @@ ${retrievedContext}`);
                     ytData.transcript.length > 20000
                       ? ytData.transcript.slice(0, 20000)
                       : ytData.transcript;
-                  const indexTree = buildInlineTranscriptIndex(text, ytData.title || `YouTube transcript ${videoId}`);
-                  newFiles.push({
-                    name: ytData.title || `YouTube transcript ${videoId}`,
+                   newFiles.push({
+                    name: (ytData.title || `YouTube transcript ${videoId}`) + ".txt",
                     type: "txt",
                     url: "",
                     inline_text: `Source: ${url}\n\n${text}`,
-                    processed: true,
-                    index_tree: indexTree,
-                    doc_description: indexTree.doc_description || "",
+                    processed: false,
                   });
                 } catch (e) {
                   const msg = e instanceof Error ? e.message : String(e);
                   console.error("KB expander youtube error:", msg);
-                  // Все одно кладемо файл, щоб видно було джерело й помилку
+                  // Створюємо файл з помилкою, щоб було видно
                   newFiles.push({
-                    name: `YouTube transcript error ${videoId}`,
+                    name: `YouTube transcript error ${videoId}.txt`,
                     type: "txt",
                     url: "",
                     inline_text: `Source: ${url}\n\n[Error fetching transcript: ${msg}]`,
-                    processed: true,
                     index_tree: buildInlineTranscriptIndex(
                       `Error fetching transcript: ${msg}`,
                       `YouTube transcript error ${videoId}`,
@@ -1165,10 +1198,19 @@ ${retrievedContext}`);
         : (totalPromptTokens / 1e6) * KIMI_INPUT_COST_PER_1M +
           (totalOutputTokens / 1e6) * KIMI_OUTPUT_COST_PER_1M;
 
+    pushProcess("response_done", {
+      model: effectiveModel,
+      promptTokens: totalPromptTokens,
+      outputTokens: totalOutputTokens,
+      cost: Math.round(cost * 1e8) / 1e8,
+      responseLength: responseText?.length ?? 0,
+    });
+
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",
       cost: Math.round(cost * 1e8) / 1e8,
       debug: debugLog,
+      processLog,
     });
   } catch (error: any) {
     console.error("agentChat error:", error.message);

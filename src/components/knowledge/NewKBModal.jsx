@@ -1,22 +1,26 @@
 import React, { useState } from "react";
 import { X, Upload, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { logStep, logStepJSON } from "@/lib/clientLogger";
+import { extractTextFromPdfIfLarge } from "@/lib/pdfTextExtract";
 
 const SUPPORTED_EXTENSIONS = [
   "pdf","txt","md","csv","json",
   "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
   "java","php","swift","kt","html","css","scss",
   "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+  "xmind","docx","xlsx","xls","pptx","ppt",
 ];
 
 export default function NewKBModal({ onClose, onCreate, isLoading }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [files, setFiles] = useState([]);
+  const [files, setFiles] = useState([]); // { key, file, status: 'uploading'|'done'|'error', url?, error? }
   const [isCreating, setIsCreating] = useState(false);
   const [rejectedFiles, setRejectedFiles] = useState([]);
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   React.useEffect(() => {
     const t = setTimeout(() => setMounted(true), 20);
@@ -39,30 +43,82 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
     return () => window.dispatchEvent(new CustomEvent("modal-open", { detail: false }));
   }, []);
 
-  const handleCreate = async () => {
-    if (!name.trim() || files.length === 0 || isLoading || isCreating) return;
-    
-    setIsCreating(true);
-    const uploadedFiles = [];
-    for (const file of files) {
-      const uploadRes = await base44.integrations.Core.UploadFile({ file });
-      uploadedFiles.push({
-        name: file.name,
-        url: uploadRes.file_url,
-        size: file.size,
-        type: file.name.split(".").pop().toLowerCase(),
-        processed: false,
-      });
+  const startUploadForFile = async (file, key) => {
+    let fileToUpload = file;
+    const extracted = await extractTextFromPdfIfLarge(file);
+    if (extracted) {
+      logStep("KB", "NewKBModal: large PDF → text only", file.name);
+      fileToUpload = extracted;
     }
+    logStep("KB", "NewKBModal: UploadFile (background)", fileToUpload.name);
+    base44.integrations.Core.UploadFile({ file: fileToUpload })
+      .then((res) => {
+        setFiles((prev) => prev.map((n) => (n.key === key ? { ...n, status: "done", url: res?.file_url, file: fileToUpload } : n)));
+      })
+      .catch((e) => {
+        logStep("KB", "NewKBModal: UploadFile error", file.name + " " + String(e?.message || e));
+        setFiles((prev) => prev.map((n) => (n.key === key ? { ...n, status: "error", error: e?.message || String(e) } : n)));
+      });
+  };
 
-    onCreate({
+  const handleFileSelect = (e) => {
+    const raw = e.target.files;
+    if (!raw || raw.length === 0) return;
+    const all = Array.from(raw).slice(0, 100);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    const accepted = [];
+    const rejected = [];
+    for (const f of all) {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (ext && SUPPORTED_EXTENSIONS.includes(ext)) accepted.push(f);
+      else rejected.push(f.name);
+    }
+    setRejectedFiles(rejected);
+    const toAdd = accepted.map((file) => ({
+      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      status: "uploading",
+    }));
+    setFiles((prev) => [...prev, ...toAdd]);
+    toAdd.forEach(({ file, key }) => startUploadForFile(file, key));
+  };
+
+  const uploadingCount = files.filter((n) => n.status === "uploading").length;
+  const canCreate = name.trim() && files.length > 0 && uploadingCount === 0 && !isCreating && !isLoading;
+
+  const handleCreate = () => {
+    if (!canCreate) return;
+    const uploadedFiles = files
+      .filter((n) => n.status === "done" && n.url)
+      .map((n) => ({
+        name: n.file.name,
+        url: n.url,
+        size: n.file.size,
+        type: n.file.name.split(".").pop()?.toLowerCase(),
+        processed: false,
+      }));
+    if (uploadedFiles.length === 0) return;
+    logStepJSON("KB", "user_create_kb", {
+      action: "create",
       name: name.trim(),
-      description: description.trim(),
-      files: uploadedFiles,
-      processing: true,
+      filesCount: uploadedFiles.length,
+      fileNames: uploadedFiles.map((f) => f.name),
     });
-    
-    setIsCreating(false);
+    setIsCreating(true);
+    try {
+      logStep("KB", "NewKBModal: KnowledgeBase.create");
+      onCreate({
+        name: name.trim(),
+        description: description.trim(),
+        files: uploadedFiles,
+        processing: true,
+      });
+      logStep("KB", "NewKBModal: create done");
+    } catch (e) {
+      logStep("KB", "NewKBModal: create error", String(e?.message || e));
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const show = mounted && !closing;
@@ -134,34 +190,28 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Upload style={{ width: 16, height: 16, color: files.length > 0 ? "#f97316" : "#555" }} />
                 <span style={{ fontSize: 12, color: files.length > 0 ? "#f5f5f5" : "#555" }}>
-                  {files.length > 0 ? `${files.length} file${files.length !== 1 ? "s" : ""} selected` : "Click to upload files (up to 100)"}
+                  {files.length > 0 ? `${files.length} file${files.length !== 1 ? "s" : ""}${uploadingCount > 0 ? ` · ${uploadingCount} uploading…` : ""}` : "Click to upload files (up to 100)"}
                 </span>
               </div>
               {files.length > 0 && (
-                <div style={{ fontSize: 10, color: "#888", marginTop: 8, maxHeight: 80, overflow: "auto", width: "100%" }}>
-                  {files.map((f, i) => (
-                    <div key={i} style={{ padding: "2px 4px", textAlign: "center" }}>{f.name}</div>
+                <div style={{ fontSize: 10, marginTop: 8, maxHeight: 100, overflow: "auto", width: "100%" }}>
+                  {files.map((n) => (
+                    <div key={n.key} style={{ padding: "4px 4px", display: "flex", alignItems: "center", gap: 6 }}>
+                      {n.status === "uploading" && <Loader2 style={{ width: 10, height: 10, color: "#f97316", flexShrink: 0, animation: "spin 1s linear infinite" }} />}
+                      {n.status === "error" && <span style={{ color: "#ef4444", flexShrink: 0 }}>!</span>}
+                      {n.status === "done" && <span style={{ color: "#22c55e", flexShrink: 0 }}>✓</span>}
+                      <span style={{ color: n.status === "error" ? "#ef4444" : "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {n.file.name}{n.status === "error" ? ` — ${n.error || "failed"}` : ""}
+                      </span>
+                    </div>
                   ))}
                 </div>
               )}
-              <input
-                type="file"
-                onChange={e => {
-                  const all = Array.from(e.target.files || []).slice(0, 100);
-                  const accepted = [];
-                  const rejected = [];
-                  for (const f of all) {
-                    const ext = f.name.split(".").pop()?.toLowerCase();
-                    if (ext && SUPPORTED_EXTENSIONS.includes(ext)) accepted.push(f);
-                    else rejected.push(f.name);
-                  }
-                  setFiles(accepted);
-                  setRejectedFiles(rejected);
-                }}
-                multiple
-                style={{ display: "none" }}
-              />
+              <input ref={fileInputRef} type="file" onChange={handleFileSelect} multiple accept={SUPPORTED_EXTENSIONS.map((e) => `.${e}`).join(",")} style={{ display: "none" }} />
             </label>
+            {uploadingCount > 0 && (
+              <p style={{ fontSize: 10, color: "#f97316", marginTop: 6 }}>Wait for uploads to finish, then Create.</p>
+            )}
           </div>
 
           {rejectedFiles.length > 0 && (
@@ -178,21 +228,21 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
             }}>
               Cancel
             </button>
-            <button onClick={handleCreate} disabled={!name.trim() || files.length === 0 || isLoading} style={{
+            <button onClick={handleCreate} disabled={!canCreate} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "#f97316",
               border: "none", color: "#fff", fontSize: 14, fontWeight: 500,
-              cursor: !name.trim() || files.length === 0 || isLoading ? "not-allowed" : "pointer",
-              opacity: !name.trim() || files.length === 0 || isLoading ? 0.5 : 1,
+              cursor: canCreate ? "pointer" : "not-allowed",
+              opacity: canCreate ? 1 : 0.5,
               transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6
             }}>
-              {isLoading ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : null}
-              {isLoading ? "Creating..." : "Create"}
+              {isCreating ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : null}
+              {isCreating ? "Creating..." : uploadingCount > 0 ? `Uploading (${uploadingCount})…` : "Create"}
             </button>
           </div>
         </div>
       </div>
 
-      {isCreating && (
+      {(isCreating || isLoading) && (
         <div style={{
           position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
           display: "flex", flexDirection: "column", alignItems: "center", gap: 16, zIndex: 100

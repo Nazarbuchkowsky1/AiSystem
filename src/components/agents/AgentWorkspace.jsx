@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
+import { logStep, logStepJSON } from "@/lib/clientLogger";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
   Loader2, X, FileText, Code2, Check, Trash2, Copy
@@ -502,11 +503,21 @@ export default function AgentWorkspace({ agent, onBack }) {
 
   const handleSend = async () => {
     const hasContent = input.trim() || attachedFiles.length > 0;
-    if (!hasContent || isLoading) return;
-    const isVoiceMessage = Boolean(pendingTranscript);
-    if (pendingTranscript) setPendingTranscript(null);
+    if (!hasContent || isLoading) {
+      logStep("Agent", "handleSend: skip (no content or loading)");
+      return;
+    }
     const userMsg = input.trim();
     const filesToSend = [...attachedFiles];
+    logStepJSON("Agent", "user_send", {
+      action: "send_message",
+      userMessageLength: userMsg.length,
+      userMessagePreview: userMsg.slice(0, 120),
+      attachedFilesCount: filesToSend.length,
+      attachedFileNames: filesToSend.map((f) => f.file.name),
+    });
+    const isVoiceMessage = Boolean(pendingTranscript);
+    if (pendingTranscript) setPendingTranscript(null);
     setInput("");
     setAttachedFiles([]);
 
@@ -514,21 +525,22 @@ export default function AgentWorkspace({ agent, onBack }) {
     if (filesToSend.length > 0) {
       const names = filesToSend.map(f => f.file.name).join(", ");
       displayContent = userMsg ? `${userMsg}\n\n📎 ${names}` : `📎 ${names}`;
+      logStep("Agent", "handleSend: displayContent with files", names);
     }
 
     const now = new Date().toISOString();
     const newMessages = [...messages, { role: "user", content: displayContent, createdAt: now }];
     setMessages(newMessages);
     setIsLoading(true);
+    logStep("Agent", "handleSend: messages count", newMessages.length);
 
     abortControllerRef.current = new AbortController();
 
-    // Ensure there is a Conversation + user Message persisted immediately so
-    // that chat history shows this thread even while the AI is still thinking.
     let cid = currentConversationId ? String(currentConversationId) : null;
     let createdNewConversation = false;
 
     if (!cid) {
+      logStep("Agent", "Conversation.create: start");
       const convo = await base44.entities.Conversation.create({
         agent_id: String(agent.id),
         agent_name: agent.name,
@@ -541,7 +553,9 @@ export default function AgentWorkspace({ agent, onBack }) {
       createdNewConversation = true;
       setCurrentConversationId(convo.id);
       setConversations(prev => [convo, ...prev]);
+      logStep("Agent", "Conversation.create: done", cid);
     } else {
+      logStep("Agent", "Conversation.update: preview");
       try {
         await base44.entities.Conversation.update(cid, {
           last_message_preview: displayContent.substring(0, 100),
@@ -551,25 +565,29 @@ export default function AgentWorkspace({ agent, onBack }) {
       }
     }
 
+    logStep("Agent", "Message.create: user message");
     try {
       await base44.entities.Message.create({
         conversation_id: cid,
         role: "user",
         content: displayContent,
       });
+      logStep("Agent", "Message.create: user done");
     } catch (e) {
       console.error("Failed to persist user message:", e);
+      logStep("Agent", "Message.create: user error", String(e?.message || e));
     }
 
     try {
       sessionStorage.setItem(AGENT_LOADING_CID_KEY, cid);
     } catch (_) {}
 
-    // Upload any attached files so agent-chat can optionally expand a KB with them.
     const fileSources = [];
     if (filesToSend.length > 0) {
+      logStep("Agent", "UploadFile: start count", filesToSend.length);
       for (const af of filesToSend) {
         try {
+          logStep("Agent", "UploadFile: file", af.file.name);
           const uploadRes = await base44.integrations.Core.UploadFile({ file: af.file });
           if (uploadRes?.file_url) {
             const ext = af.file.name.split(".").pop()?.toLowerCase() || "";
@@ -578,16 +596,20 @@ export default function AgentWorkspace({ agent, onBack }) {
               url: uploadRes.file_url,
               type: ext,
             });
+            logStep("Agent", "UploadFile: ok", af.file.name);
           }
         } catch (e) {
           console.error("File upload error:", e);
+          logStep("Agent", "UploadFile: error", af.file.name + " " + String(e?.message || e));
         }
       }
+      logStep("Agent", "UploadFile: total uploaded", fileSources.length);
     }
 
     let res;
     try {
       try {
+        logStep("Agent", "agentChat.invoke: start", { messages: newMessages.length, fileSources: fileSources.length });
         console.log("[AgentClient] Calling agentChat with messages:", newMessages.length, "files:", fileSources.length);
         res = await base44.functions.invoke("agentChat", {
           messages: newMessages,
@@ -608,17 +630,28 @@ export default function AgentWorkspace({ agent, onBack }) {
           sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
         } catch (_) {}
       }
+      logStep("Agent", "agentChat.invoke: done");
       console.log("[AgentClient] agentChat raw result:", res);
       if (res?.data?.debug && Array.isArray(res.data.debug)) {
+        res.data.debug.forEach((line) => logStep("AgentDebug", line));
         console.log("[AgentDebug] server debug log:\n" + res.data.debug.join("\n"));
+      }
+      if (res?.data?.processLog && Array.isArray(res.data.processLog)) {
+        res.data.processLog.forEach((entry) => {
+          const step = entry?.step ?? "process";
+          logStepJSON("Agent", step, entry);
+        });
       }
       const response = res?.data?.response || "Error generating response.";
       const responseCost = Number(res?.data?.cost) || 0;
+      logStep("Agent", "agentChat: response length", response?.length);
+      logStep("Agent", "agentChat: cost", responseCost);
       setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
       setIsLoading(false);
       setGeneratingPlaceholderForConvoId(null);
       abortControllerRef.current = null;
 
+      logStep("Agent", "Message.create: assistant");
       try {
         if (cid) {
           await base44.entities.Message.create({
@@ -631,23 +664,29 @@ export default function AgentWorkspace({ agent, onBack }) {
             message_count: createdNewConversation ? 2 : undefined,
             last_message_preview: response.substring(0, 100),
           });
+          logStep("Agent", "Message.create: assistant done");
         }
       } catch (e) {
         console.error("Failed to persist assistant message or update conversation:", e);
+        logStep("Agent", "Message.create: assistant error", String(e?.message || e));
       }
 
       const newCount = lifetimeMessageCountRef.current + 1;
       lifetimeMessageCountRef.current = newCount;
+      logStep("Agent", "Agent.update: message_count", newCount);
       try {
         await base44.entities.Agent.update(agent.id, { message_count: newCount });
       } catch (e) {
         console.error("Agent message_count update error:", e);
       }
+      logStep("Agent", "invalidateQueries: analytics, knowledgeBases, agents");
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       loadHistory();
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      logStep("Agent", "handleSend: full flow done");
     } catch (e) {
+      logStep("Agent", "handleSend: error", String(e?.message || e));
       console.error("Agent chat error:", e);
       setIsLoading(false);
       setGeneratingPlaceholderForConvoId(null);
@@ -879,7 +918,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       )}
 
       <input ref={fileInputRef} type="file" multiple style={{ display: "none" }}
-        accept={[...SUPPORTED_IMAGES, "application/pdf", ".txt,.html,.css,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.cpp,.c,.cs,.java,.php,.swift,.kt,.md,.csv,.json,.xml,.sh,.sql,.yaml,.yml"].join(",")}
+        accept={[...SUPPORTED_IMAGES, "application/pdf", ".txt,.html,.css,.js,.ts,.jsx,.tsx,.py,.rb,.go,.rs,.cpp,.c,.cs,.java,.php,.swift,.kt,.md,.csv,.json,.xml,.sh,.sql,.yaml,.yml,.xmind,.docx,.xlsx,.xls,.pptx,.ppt"].join(",")}
         onChange={e => { addFilesFromList(e.target.files); e.target.value = ""; }} />
     </div>
   );

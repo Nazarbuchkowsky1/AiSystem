@@ -1,29 +1,64 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Trash2, Plus, Loader2, BookOpen } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
+import { logStep, logStepJSON } from "@/lib/clientLogger";
+import { extractTextFromPdfIfLarge } from "@/lib/pdfTextExtract";
 
 const SUPPORTED_EXTENSIONS = [
   "pdf","txt","md","csv","json",
   "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
   "java","php","swift","kt","html","css","scss",
   "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+  "xmind","docx","xlsx","xls","pptx","ppt",
 ];
 
 export default function KnowledgeBaseCard({ kb, onSelect }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFileInput, setShowFileInput] = useState(false);
+  const [isAddingFile, setIsAddingFile] = useState(false);
+  const [addFileError, setAddFileError] = useState(null);
   const [rejectedFiles, setRejectedFiles] = useState([]);
   const queryClient = useQueryClient();
+  const fileInputRef = React.useRef(null);
+
+  const debugLogs = kb.debug_logs || [];
+  const logLengthRef = useRef(0);
+
+  useEffect(() => {
+    if (debugLogs.length > logLengthRef.current) {
+      const newLogs = debugLogs.slice(logLengthRef.current);
+      newLogs.forEach(entry => {
+        if (typeof entry !== "string") return;
+        try {
+          const parsed = JSON.parse(entry);
+          if (parsed && typeof parsed.step === "string") {
+            logStepJSON("KB", parsed.step, parsed);
+          } else {
+            logStep("KB", "index_log", entry);
+          }
+        } catch {
+          logStep("KB", "index_log", entry);
+        }
+      });
+      logLengthRef.current = debugLogs.length;
+    }
+  }, [debugLogs, kb.name]);
 
   const handleDeleteKB = async () => {
+    logStep("KB", "KnowledgeBase.delete: start", kb.id);
     await base44.entities.KnowledgeBase.delete(kb.id);
+    logStep("KB", "KnowledgeBase.delete: done", kb.id);
     queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     setShowDeleteConfirm(false);
   };
 
   const handleAddFile = async (e) => {
-    const allFiles = Array.from(e.target.files || []).slice(0, 100);
+    const rawList = e.target.files;
+    if (!rawList || rawList.length === 0) return;
+    const allFiles = Array.from(rawList).slice(0, 100);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
     const rejected = [];
     const selectedFiles = allFiles.filter((f) => {
       const ext = f.name.split(".").pop()?.toLowerCase();
@@ -32,55 +67,88 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
       return false;
     });
     setRejectedFiles(rejected);
+    setAddFileError(null);
     if (selectedFiles.length === 0) return;
 
-    const updatedFiles = kb.files ? [...kb.files] : [];
-    
-    for (const file of selectedFiles) {
-      const uploadRes = await base44.integrations.Core.UploadFile({ file });
-      updatedFiles.push({
-        name: file.name,
-        url: uploadRes.file_url,
-        size: file.size,
-        type: file.name.split(".").pop().toLowerCase(),
-        processed: false,
-      });
-    }
-
-    await base44.entities.KnowledgeBase.update(kb.id, { 
-      files: updatedFiles,
-      processing: true 
-    });
-    
-    queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     setShowFileInput(false);
+    setIsAddingFile(true);
+    logStep("KB", "KnowledgeBaseCard: addFile start", { kbId: kb.id, count: selectedFiles.length });
 
-    // Trigger real PageIndex tree indexing (runs in background, 30+ sec for docs)
-    base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
+    try {
+      const updatedFiles = kb.files ? [...kb.files] : [];
+      for (const file of selectedFiles) {
+        let fileToUpload = file;
+        const extracted = await extractTextFromPdfIfLarge(file);
+        if (extracted) {
+          logStep("KB", "KnowledgeBaseCard: large PDF → text only", { original: file.name, size: file.size });
+          fileToUpload = extracted;
+        }
+        logStep("KB", "KnowledgeBaseCard: UploadFile", fileToUpload.name);
+        const uploadRes = await base44.integrations.Core.UploadFile({ file: fileToUpload });
+        if (!uploadRes?.file_url) throw new Error(`Upload did not return URL for ${fileToUpload.name}`);
+        updatedFiles.push({
+          name: fileToUpload.name,
+          url: uploadRes.file_url,
+          size: fileToUpload.size,
+          type: (fileToUpload.name.split(".").pop() || "txt").toLowerCase(),
+          processed: false,
+        });
+      }
+      logStep("KB", "KnowledgeBaseCard: KnowledgeBase.update");
+      await base44.entities.KnowledgeBase.update(kb.id, { files: updatedFiles, processing: true });
+      queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
+      setShowFileInput(false);
+      logStep("KB", "KnowledgeBaseCard: indexKnowledgeBase start", kb.id);
+      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch((err) => {
+        logStep("KB", "KnowledgeBaseCard: indexKnowledgeBase error", String(err?.message || err));
+      });
+    } catch (err) {
+      const msg = err?.message || String(err);
+      logStep("KB", "KnowledgeBaseCard: addFile error", msg);
+      setAddFileError(msg);
+    } finally {
+      setIsAddingFile(false);
+    }
   };
 
   const handleRetryIndexing = (e) => {
     e.stopPropagation();
-    base44.entities.KnowledgeBase.update(kb.id, { processing: true }).then(() => {
+    logStep("KB", "KnowledgeBaseCard: retryIndexing start", kb.id);
+    const resetFiles = (kb.files || []).map(f => {
+      if (!f.processed || !f.index_tree?.root) return { ...f, processed: false };
+      return f;
+    });
+    base44.entities.KnowledgeBase.update(kb.id, {
+      files: resetFiles,
+      processing: true,
+      index_status: "idle",
+      last_error: "",
+    }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch(() => {});
+      base44.functions.invoke("indexKnowledgeBase", { kbId: kb.id }).catch((err) => {
+        logStep("KB", "KnowledgeBaseCard: retry indexKnowledgeBase error", String(err?.message || err));
+      });
+      logStep("KB", "KnowledgeBaseCard: retryIndexing done", kb.id);
+    }).catch((err) => {
+      logStep("KB", "KnowledgeBaseCard: retryIndexing error", String(err?.message || err));
     });
   };
 
   const files = kb.files || [];
-  // Only count files that the indexer actually attempts to process.
-  const indexableTypes = ["txt", "md", "csv", "json", "pdf"];
-  const indexableFiles = files.filter(f => indexableTypes.includes((f.type || "").toLowerCase()));
+  // Count all files that the backend indexer supports (the full SUPPORTED_EXTENSIONS list)
+  const indexableFiles = files.filter(f => SUPPORTED_EXTENSIONS.includes((f.type || "").toLowerCase()));
   const processedCount = indexableFiles.filter(f => f.processed).length;
   const totalCount = indexableFiles.length;
   const isProcessing = kb.processing || kb.index_status === "indexing";
   const hasFailedIndexing = kb.index_status === "failed";
+  // Detect incomplete indexing: files exist but not all are processed, and we're not currently processing
+  const hasUnprocessedFiles = totalCount > 0 && processedCount < totalCount && !isProcessing;
   const kbProgress = typeof kb.index_progress === "number" ? kb.index_progress : null;
   const derivedProgress = indexableFiles.length > 0 ? Math.round((processedCount / indexableFiles.length) * 100) : null;
   const progress = kbProgress !== null ? kbProgress : (derivedProgress !== null ? derivedProgress : 0);
 
-  const statusColor = hasFailedIndexing ? "#ef4444" : isProcessing ? "#f97316" : "#22c55e";
-  const statusLabel = hasFailedIndexing ? "Failed" : isProcessing ? "Indexing" : "Ready";
+  const statusColor = isAddingFile ? "#f97316" : hasFailedIndexing ? "#ef4444" : isProcessing ? "#f97316" : hasUnprocessedFiles ? "#eab308" : "#22c55e";
+  const statusLabel = isAddingFile ? "Uploading…" : hasFailedIndexing ? "Failed" : isProcessing ? "Indexing" : hasUnprocessedFiles ? "Incomplete" : "Ready";
 
   return (
     <>
@@ -157,19 +225,25 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
               <BookOpen style={{ width: 18, height: 18, color: "#f97316" }} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: statusColor,
-                  boxShadow: hasFailedIndexing
-                    ? "0 0 8px rgba(239,68,68,0.5)"
-                    : isProcessing
-                      ? "0 0 8px rgba(249,115,22,0.5)"
-                      : "0 0 8px rgba(34,197,94,0.5)",
-                }}
-              />
+              {isAddingFile ? (
+                <Loader2 style={{ width: 12, height: 12, color: "#f97316", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+              ) : (
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: statusColor,
+                    boxShadow: hasFailedIndexing
+                      ? "0 0 8px rgba(239,68,68,0.5)"
+                      : isProcessing
+                        ? "0 0 8px rgba(249,115,22,0.5)"
+                        : hasUnprocessedFiles
+                          ? "0 0 8px rgba(234,179,8,0.5)"
+                          : "0 0 8px rgba(34,197,94,0.5)",
+                  }}
+                />
+              )}
               <span style={{ fontSize: 10, color: statusColor, fontWeight: 500 }}>
                 {statusLabel}
               </span>
@@ -244,7 +318,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
                 animation: "spin 1s linear infinite",
               }}
             />
-          ) : hasFailedIndexing ? (
+          ) : (hasFailedIndexing || hasUnprocessedFiles) ? (
             <button
               type="button"
               onClick={handleRetryIndexing}
@@ -303,36 +377,44 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           </p>
         )}
 
-        {showFileInput && (
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              padding: 10,
-              borderRadius: 8,
-              background: "#0f0f0f",
-              border: "2px dashed rgba(249,115,22,0.3)",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              fontSize: 11,
-              color: "#888",
-              marginTop: 8,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(249,115,22,0.5)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Plus style={{ width: 12, height: 12 }} />
-            <span>Add file</span>
-            <input
-              type="file"
-              onChange={handleAddFile}
-              multiple
-              style={{ display: "none" }}
-            />
-          </label>
+        {showFileInput && !isAddingFile && (
+          <div style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+            {addFileError && (
+              <p style={{ fontSize: 10, color: "#ef4444", marginBottom: 6 }}>
+                {addFileError}
+              </p>
+            )}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                padding: 10,
+                borderRadius: 8,
+                background: "#0f0f0f",
+                border: "2px dashed rgba(249,115,22,0.3)",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                fontSize: 11,
+                color: "#888",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = "rgba(249,115,22,0.5)"}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Plus style={{ width: 12, height: 12 }} />
+              <span>Add file</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleAddFile}
+                multiple
+                accept={SUPPORTED_EXTENSIONS.map((e) => `.${e}`).join(",")}
+                style={{ display: "none" }}
+              />
+            </label>
+          </div>
         )}
       </div>
 

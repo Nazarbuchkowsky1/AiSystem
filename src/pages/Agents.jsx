@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Brain, BookOpen, Loader2 } from "lucide-react";
+import { logStep } from "@/lib/clientLogger";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
@@ -37,19 +38,28 @@ export default function Agents() {
     return () => window.removeEventListener("mobile-new-kb", handler);
   }, []);
 
-  // Broadcast current tab to layout header
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("agents-tab-change", { detail: currentTab }));
   }, [currentTab]);
 
   const { data: agents = [], isLoading: agentsLoading } = useQuery({
     queryKey: ["agents"],
-    queryFn: () => base44.entities.Agent.list("-created_date"),
+    queryFn: async () => {
+      logStep("Agents", "Agent.list: start");
+      const list = await base44.entities.Agent.list("-created_date");
+      logStep("Agents", "Agent.list: done count", list?.length);
+      return list;
+    },
   });
 
   const { data: knowledgeBases = [], isLoading: kbLoading } = useQuery({
     queryKey: ["knowledgeBases"],
-    queryFn: () => base44.entities.KnowledgeBase.list("-created_date"),
+    queryFn: async () => {
+      logStep("Agents", "KnowledgeBase.list: start");
+      const list = await base44.entities.KnowledgeBase.list("-created_date");
+      logStep("Agents", "KnowledgeBase.list: done count", list?.length);
+      return list;
+    },
     refetchInterval: (query) => {
       const data = query.state.data;
       return Array.isArray(data) && data.some((kb) => kb.processing || kb.index_status === "indexing") ? 3000 : false;
@@ -61,6 +71,7 @@ export default function Agents() {
   const createAgentMutation = useMutation({
     mutationFn: (agentData) => base44.entities.Agent.create(agentData),
     onSuccess: (created, agentData) => {
+      logStep("Agents", "Agent.create: done", created?.id);
       if (created?.id != null) {
         const withModel = { ...created, model: created.model ?? agentData?.model ?? "kimi" };
         queryClient.setQueryData(["agents"], (old) => {
@@ -72,42 +83,49 @@ export default function Agents() {
       }
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
+    onError: (e) => logStep("Agents", "Agent.create: error", String(e?.message || e)),
   });
 
   const updateAgentMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Agent.update(id, data),
     onSuccess: (_, variables) => {
+      logStep("Agents", "Agent.update: done", variables.id);
       const { id, data } = variables;
-      // Update cache immediately so the next click on the agent card gets fresh data (e.g. model).
       queryClient.setQueryData(["agents"], (old) => {
         if (!Array.isArray(old)) return old;
         return old.map((a) => (String(a.id) === String(id) ? { ...a, ...data } : a));
       });
       queryClient.invalidateQueries({ queryKey: ["agents"] });
-      // If user had this agent open in workspace, keep selectedAgent in sync (e.g. after editing from elsewhere).
       setSelectedAgent((prev) =>
         prev && String(prev.id) === String(id) ? { ...prev, ...data } : prev
       );
     },
+    onError: (e) => logStep("Agents", "Agent.update: error", String(e?.message || e)),
   });
 
   const deleteAgentMutation = useMutation({
     mutationFn: (id) => base44.entities.Agent.delete(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      logStep("Agents", "Agent.delete: done", id);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
+    onError: (e) => logStep("Agents", "Agent.delete: error", String(e?.message || e)),
   });
 
   const createKBMutation = useMutation({
     mutationFn: (kbData) => base44.entities.KnowledgeBase.create(kbData),
     onSuccess: (created) => {
+      logStep("Agents", "KnowledgeBase.create: done", created?.id);
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       setShowNewKBModal(false);
-      // Trigger real PageIndex tree indexing (runs in background, 30+ sec for docs)
       if (created?.id && created?.files?.length) {
-        base44.functions.invoke("indexKnowledgeBase", { kbId: created.id }).catch(() => {});
+        logStep("Agents", "indexKnowledgeBase: start", created.id);
+        base44.functions.invoke("indexKnowledgeBase", { kbId: created.id }).catch((e) => {
+          logStep("Agents", "indexKnowledgeBase: error", String(e?.message || e));
+        });
       }
     },
+    onError: (e) => logStep("Agents", "KnowledgeBase.create: error", String(e?.message || e)),
   });
 
   if (selectedAgent) {
