@@ -81,7 +81,7 @@ const GEMINI_OUTPUT_COST_PER_1M = 1.50;
 // ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
 
 const YT_PATTERNS = [
-  /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+  /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
 ];
 
 function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: string } | null {
@@ -170,7 +170,7 @@ async function fetchYouTubeTranscript(videoId: string, debug?: string[]) {
   debug?.push(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
   console.log(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
   // 1) RapidAPI YouTube Transcripts — primary path when RAPIDAPI_KEY is configured.
-  const rapidApiKey = "6138d0add7mshb46e8560e14eab0p196722jsn3eb2bf85ad2b";
+  const rapidApiKey = "6ef971ddbamsh4130c4842bf63f0p184c8cjsn3f5385bf53c6";
   const keySource = `[YT] Using RapidAPI key: ${rapidApiKey.slice(0, 10)}...`;
   debug?.push(keySource);
   console.log(keySource);
@@ -646,6 +646,167 @@ function hasStructure(text: string): boolean {
   return !!(hasHeading || hasList);
 }
 
+// ─── History Management ───────────────────────────────────────────────────────
+const HISTORY_MAX_MESSAGES = 20;
+const HISTORY_KEEP_RECENT = 6;
+
+async function summarizeHistory(
+  msgs: any[],
+  callLLMFn: typeof callKimi
+): Promise<any[]> {
+  if (msgs.length <= HISTORY_MAX_MESSAGES) return msgs;
+
+  const toSummarize = msgs.slice(0, msgs.length - HISTORY_KEEP_RECENT);
+  const toKeep = msgs.slice(msgs.length - HISTORY_KEEP_RECENT);
+
+  const conversationText = toSummarize
+    .map((m: any) => `${m.role === "assistant" ? "Assistant" : "User"}: ${(m.content || "").substring(0, 500)}`)
+    .join("\n\n");
+
+  try {
+    const { text } = await callLLMFn(
+      "You are a conversation summarizer. Summarize the following conversation concisely, preserving key facts, decisions, and context needed to continue naturally. Output ONLY the summary.",
+      [{ role: "user", parts: [{ text: conversationText }] }],
+      { temperature: 0.2, maxOutputTokens: 1024 }
+    );
+    return [
+      { role: "user", content: `[Previous conversation summary]\n${text}` },
+      { role: "assistant", content: "I have the context from our earlier conversation. Let's continue." },
+      ...toKeep,
+    ];
+  } catch {
+    return msgs.slice(-HISTORY_MAX_MESSAGES);
+  }
+}
+
+// ─── Query Decomposition ──────────────────────────────────────────────────────
+
+async function decomposeQuery(
+  query: string,
+  recentContext: string,
+  callLLMFn: typeof callKimi
+): Promise<string[]> {
+  if (query.length < 15) return [query];
+
+  try {
+    const { text } = await callLLMFn(
+      `You are a query decomposition engine. Break the user's question into 3-7 intermediate sub-questions that explore different angles of the topic.
+
+Sub-questions should:
+- Cover different aspects of the original question
+- Include related concepts not explicitly mentioned
+- Use varied terminology to catch information described differently
+- Be in the same language as the original query
+
+Output ONLY a JSON array of strings. No explanation.`,
+      [{ role: "user", parts: [{ text: `Context:\n${recentContext}\n\nQuestion: ${query}` }] }],
+      { temperature: 0.3, maxOutputTokens: 1024, jsonMode: true }
+    );
+
+    let cleaned = text.trim();
+    if (cleaned.startsWith("```")) {
+      const m = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m?.[1]) cleaned = m[1].trim();
+    }
+    const parsed = JSON.parse(cleaned);
+    const result = Array.isArray(parsed) ? parsed : (parsed.questions || []);
+    const valid = result.filter((q: unknown) => typeof q === "string" && (q as string).length > 5);
+    return valid.length > 0 ? valid.slice(0, 8) : [query];
+  } catch {
+    return [query];
+  }
+}
+
+// ─── Section-Level Retrieval ──────────────────────────────────────────────────
+
+async function retrieveRelevantSections(
+  subQuestions: string[],
+  idxFiles: { name: string; tree: string; doc: any }[],
+  callLLMFn: typeof callKimi
+): Promise<{ fileIndex: number; nodeIds: string[]; score: number }[]> {
+  const treeSummaries = idxFiles.map((f, i) =>
+    `═══ File [${i}]: ${f.doc?.doc_title || f.name} ═══\n${f.tree}`
+  ).join("\n\n");
+
+  const questionsText = subQuestions.map((q, i) => `Q${i + 1}: ${q}`).join("\n");
+
+  try {
+    const { text } = await callLLMFn(
+      `You are a document section retrieval engine. Given sub-questions and a hierarchical index of documents, select the most relevant SECTIONS (by node_id) that might contain answers.
+
+Output JSON:
+{
+  "selections": [
+    { "file_index": 0, "node_ids": ["0001", "0003"], "relevance": "high" },
+    { "file_index": 2, "node_ids": ["0000", "0005"], "relevance": "medium" }
+  ]
+}
+
+Rules:
+- Be GENEROUS: select more sections rather than fewer.
+- Match by MEANING across languages.
+- For broad questions, select more sections.
+- Include parent sections when multiple children are relevant.
+- Output ONLY valid JSON.`,
+      [{ role: "user", parts: [{ text: `Sub-questions:\n${questionsText}\n\nDocument index:\n${treeSummaries}` }] }],
+      { temperature: 0.1, maxOutputTokens: 4096, jsonMode: true }
+    );
+
+    let cleaned = text.trim();
+    if (cleaned.startsWith("```")) {
+      const m = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m?.[1]) cleaned = m[1].trim();
+    }
+    const parsed = JSON.parse(cleaned);
+    const selections = parsed.selections || parsed;
+    if (!Array.isArray(selections)) return [];
+
+    return selections
+      .filter((s: any) => typeof s.file_index === "number" && Array.isArray(s.node_ids))
+      .map((s: any) => ({
+        fileIndex: s.file_index,
+        nodeIds: s.node_ids.filter((id: any) => typeof id === "string"),
+        score: s.relevance === "high" ? 3 : s.relevance === "medium" ? 2 : 1,
+      }));
+  } catch {
+    return idxFiles.map((_, i) => ({ fileIndex: i, nodeIds: ["root"], score: 1 }));
+  }
+}
+
+// ─── Evidence Reranking ───────────────────────────────────────────────────────
+
+async function rerankEvidence(
+  candidates: { fileIndex: number; fileName: string; text: string }[],
+  originalQuery: string,
+  callLLMFn: typeof callKimi
+): Promise<number[]> {
+  if (candidates.length <= 5) return candidates.map((_, i) => i);
+
+  const list = candidates.map((c, i) =>
+    `[${i}] ${c.fileName}\n${c.text.substring(0, 600)}${c.text.length > 600 ? "..." : ""}`
+  ).join("\n\n");
+
+  try {
+    const { text } = await callLLMFn(
+      "You are a relevance reranker. Rank the candidate passages by relevance to the question. Output ONLY a JSON array of indices, most relevant first. Include ALL indices.",
+      [{ role: "user", parts: [{ text: `Question: ${originalQuery}\n\nCandidates:\n${list}` }] }],
+      { temperature: 0.1, maxOutputTokens: 1024, jsonMode: true }
+    );
+
+    let cleaned = text.trim();
+    if (cleaned.startsWith("```")) {
+      const m = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m?.[1]) cleaned = m[1].trim();
+    }
+    const parsed = JSON.parse(cleaned);
+    const indices = Array.isArray(parsed) ? parsed : (parsed.ranking || parsed.indices || []);
+    const valid = indices.filter((i: any) => typeof i === "number" && i >= 0 && i < candidates.length);
+    return valid.length > 0 ? valid : candidates.map((_, i) => i);
+  } catch {
+    return candidates.map((_, i) => i);
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -684,10 +845,6 @@ Deno.serve(async (req) => {
     const agentDesc = agent.description || "";
     systemParts.push(`You are "${agentName}". ${agentDesc}`);
 
-    if (agent.system_instructions) {
-      systemParts.push(`\n## Your Instructions:\n${agent.system_instructions}`);
-    }
-
     systemParts.push(`\n${DEFAULT_AGENT_SYSTEM_PROMPT}`);
 
     // ─── Collect KB files in one pass ─────────────────────────────────
@@ -695,19 +852,39 @@ Deno.serve(async (req) => {
     const indexedFiles: IndexedFile[] = [];
     const unindexedFiles: { name: string; url: string }[] = [];
 
+    pushProcess("kb_fetch_start", {
+      kbIds: agent?.knowledge_base_ids ?? [],
+      kbCount: (agent.knowledge_base_ids || []).length,
+    });
+
     if (agent.knowledge_base_ids && agent.knowledge_base_ids.length > 0) {
       try {
         for (const kbId of agent.knowledge_base_ids) {
           const kbList = await base44.asServiceRole.entities.KnowledgeBase.filter({ id: kbId });
-          if (!kbList?.length) continue;
+          if (!kbList?.length) {
+            pushProcess("kb_not_found", { kbId });
+            continue;
+          }
           const kb = kbList[0];
+          pushProcess("kb_found", {
+            kbId,
+            kbName: kb.name,
+            fileCount: kb.files?.length ?? 0,
+            processing: kb.processing,
+            indexStatus: kb.index_status,
+          });
           if (!kb.files?.length) continue;
 
           for (const file of kb.files) {
-            if (file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
+            const hasTree = !!(file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0);
+            const paragraphCount = hasTree ? file.index_tree.paragraphs.length : 0;
+            const charCount = hasTree ? file.index_tree.paragraphs.join("").length : 0;
+
+            if (hasTree) {
               const treeText = formatTreeForRouting(file.index_tree, file.name);
               if (treeText) {
                 indexedFiles.push({ name: file.name, tree: treeText, doc: file.index_tree });
+                pushProcess("file_indexed_ok", { fileName: file.name, type: file.type, paragraphs: paragraphCount, chars: charCount, docDescription: file.index_tree.doc_description || "" });
               }
             } else if (file.url && [
               "txt","md","csv","json","pdf",
@@ -717,11 +894,16 @@ Deno.serve(async (req) => {
               "xmind","docx","xlsx","xls","pptx","ppt",
             ].includes(file.type)) {
               unindexedFiles.push({ name: file.name, url: file.url });
+              pushProcess("file_unindexed", { fileName: file.name, type: file.type, processed: file.processed });
+            } else {
+              pushProcess("file_skipped", { fileName: file.name, type: file.type, reason: "no_tree_and_not_text_type" });
             }
           }
         }
       } catch (e) {
-        console.error("KB fetch error:", e instanceof Error ? e.message : String(e));
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error("KB fetch error:", errMsg);
+        pushProcess("kb_fetch_error", { error: errMsg });
       }
     }
 
@@ -730,137 +912,264 @@ Deno.serve(async (req) => {
       indexedFilesCount: indexedFiles.length,
       unindexedFilesCount: unindexedFiles.length,
       indexedFileNames: indexedFiles.map((f: IndexedFile) => f.name),
+      totalIndexedCharsPreview: indexedFiles.reduce((sum, f) => sum + ((f.doc?.paragraphs || []).join("").length), 0),
     });
 
-    // ─── PageIndex 2-step retrieval ───────────────────────────────────
+    // ─── Phase 0: Conversation History Management ────────────────────────
+    let chatMessages = [...messages];
+    if (Array.isArray(messages) && messages.length > HISTORY_MAX_MESSAGES) {
+      pushProcess("history_summarize_start", { messageCount: messages.length });
+      chatMessages = await summarizeHistory(messages, callLLM);
+      pushProcess("history_summarize_done", { originalCount: messages.length, newCount: chatMessages.length });
+    }
+
+    // ─── Phase 1: Query Decomposition ─────────────────────────────────────
+    const lastUserMessage = getLastHumanMessageText(messages);
+    let subQuestions: string[] = [lastUserMessage];
+
+    if (lastUserMessage.length > 15 && (indexedFiles.length > 0 || unindexedFiles.length > 0)) {
+      const recentContext = messages.slice(-4)
+        .map((m: any) => `${m.role}: ${(m.content || "").substring(0, 300)}`)
+        .join("\n");
+      pushProcess("query_decomposition_start", { query: lastUserMessage.substring(0, 200) });
+      subQuestions = await decomposeQuery(lastUserMessage, recentContext, callLLM);
+      pushProcess("query_decomposition_done", { subQuestions, count: subQuestions.length });
+    }
+
+    // ─── Phase 2: Retrieval + Ranking ─────────────────────────────────────
     let retrievedContext = "";
+    const sourcesMap: { index: number; name: string; description: string }[] = [];
 
-    if (indexedFiles.length > 0) {
-      const lastUserMessage = getLastHumanMessageText(messages);
+    let totalIndexedChars = 0;
+    for (const f of indexedFiles) {
+      if (f.doc?.paragraphs && Array.isArray(f.doc.paragraphs)) {
+        for (const p of f.doc.paragraphs) totalIndexedChars += (p || "").length;
+      }
+    }
 
-      const treeOverview = indexedFiles
-        .map((f, i) => `### File ${i}: ${f.name}\n${f.tree}`)
-        .join("\n\n");
+    const FULL_CONTEXT_CHAR_LIMIT = effectiveModel === "gemini" ? 3000000 : 400000;
+    const useFullContext = totalIndexedChars < FULL_CONTEXT_CHAR_LIMIT;
 
-      const routingSystem = `You are a document retrieval router. You will receive:
-1. A user's question
-2. Hierarchical tree indexes of documents (like tables of contents with summaries)
+    pushProcess("retrieval_strategy", {
+      totalIndexedChars,
+      indexedFilesCount: indexedFiles.length,
+      unindexedFilesCount: unindexedFiles.length,
+      strategy: useFullContext ? "full_context_injection" : "section_level_retrieval",
+      charLimit: FULL_CONTEXT_CHAR_LIMIT,
+      subQuestionCount: subQuestions.length,
+    });
 
-Your job: decide which sections of which documents are most likely to contain the answer. Think like a human expert navigating these documents — "where would I look for this answer?"
+    if (useFullContext && (indexedFiles.length > 0 || unindexedFiles.length > 0)) {
+      // ═══ FULL CONTEXT INJECTION (with numbered sources for citations) ════
+      const docParts: string[] = [];
+      let sourceIdx = 1;
 
-Output a JSON object:
-{
-  "reasoning": "Brief explanation of why you chose these sections",
-  "selections": [
-    { "file_index": 0, "node_ids": ["0002", "0005"] }
-  ]
-}
-
-Rules:
-- Select the MOST relevant sections (typically 2-6 node_ids total).
-- Prefer leaf nodes or specific subsections over broad parent sections, UNLESS the parent or root section is the main or only relevant entry.
-- If the question is very broad, select more sections. If specific, select fewer.
-- If no section seems relevant, return empty selections: []
-- Output ONLY valid JSON.`;
-
-      const routingContents = [
-        { role: "user", parts: [{ text: `Question: ${lastUserMessage}\n\nDocument indexes:\n${treeOverview}` }] },
-      ];
-
-      let routingSucceeded = false;
-
-      try {
-        const { text: routingRaw } = await callLLM(routingSystem, routingContents, {
-          temperature: 0.1,
-          maxOutputTokens: 1024,
-          jsonMode: true,
-        });
-
-        let routingResult: any = null;
-        try {
-          let cleaned = routingRaw.trim();
-          if (cleaned.startsWith("```")) {
-            const m = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (m?.[1]) cleaned = m[1].trim();
-          }
-          routingResult = JSON.parse(cleaned);
-        } catch {
-          console.error("Failed to parse routing JSON:", routingRaw.slice(0, 300));
+      for (const f of indexedFiles) {
+        const paragraphs: string[] = f.doc?.paragraphs || [];
+        const docTitle = f.doc?.doc_title || f.name;
+        const docDesc = f.doc?.doc_description || "";
+        const allText = paragraphs.join("\n\n");
+        if (allText.trim()) {
+          sourcesMap.push({ index: sourceIdx, name: docTitle, description: docDesc });
+          docParts.push(
+            `━━━ Source [${sourceIdx}]: ${docTitle} ━━━` +
+            (docDesc ? `\n[${docDesc}]` : "") +
+            `\n\n${allText}`
+          );
+          sourceIdx++;
         }
+      }
 
-        if (routingResult?.selections && Array.isArray(routingResult.selections)) {
-          pushProcess("routing_result", {
-            reasoning: routingResult.reasoning ?? null,
-            selectionsCount: routingResult.selections.length,
-            selections: routingResult.selections.map((s: any) => ({
-              file_index: s.file_index,
-              node_ids: s.node_ids,
-            })),
-          });
-          const parts: string[] = [];
-          if (routingResult.reasoning) {
-            parts.push(`Retrieval reasoning: ${routingResult.reasoning}`);
-          }
-
-          for (const sel of routingResult.selections) {
-            const fileIdx = sel.file_index;
-            const nodeIds = sel.node_ids;
-            if (typeof fileIdx !== "number" || fileIdx < 0 || fileIdx >= indexedFiles.length) continue;
-            if (!Array.isArray(nodeIds) || nodeIds.length === 0) continue;
-
-            const file = indexedFiles[fileIdx];
-            const sectionText = extractSectionText(file.doc, nodeIds);
-            if (sectionText) {
-              pushProcess("retrieved_section", {
-                fileIndex: fileIdx,
-                fileName: file.name,
-                nodeIds,
-                textLength: sectionText.length,
-              });
-              parts.push(`\n--- Retrieved from: ${file.name} (sections: ${nodeIds.join(", ")}) ---\n${sectionText}`);
-              routingSucceeded = true;
+      for (const file of unindexedFiles) {
+        try {
+          const resp = await fetch(file.url);
+          if (resp.ok) {
+            const text = await resp.text();
+            if (text.trim()) {
+              const limit = FULL_CONTEXT_CHAR_LIMIT - totalIndexedChars > 60000 ? 60000 : 30000;
+              const content = text.length > limit
+                ? text.substring(0, limit) + "\n[...document truncated]"
+                : text;
+              sourcesMap.push({ index: sourceIdx, name: file.name, description: "" });
+              docParts.push(`━━━ Source [${sourceIdx}]: ${file.name} ━━━\n\n${content}`);
+              sourceIdx++;
             }
           }
+        } catch { /* skip */ }
+      }
 
-          if (parts.length > 0) {
-            retrievedContext = parts.join("\n");
+      if (docParts.length > 0) {
+        retrievedContext = docParts.join("\n\n\n");
+      }
+
+      pushProcess("full_context_injected", {
+        documentsIncluded: docParts.length,
+        totalChars: retrievedContext.length,
+        sourcesCount: sourcesMap.length,
+      });
+
+    } else if (indexedFiles.length > 0 || unindexedFiles.length > 0) {
+      // ═══ SECTION-LEVEL RETRIEVAL (for large knowledge bases) ═════════════
+      // Multi-step: decompose → route to sections via tree → extract → rerank → pack
+      pushProcess("section_retrieval_start", {
+        indexedFiles: indexedFiles.length,
+        subQuestions: subQuestions.length,
+      });
+
+      // Phase 2a: Route sub-questions to relevant sections via hierarchical tree index
+      const routingResult = await retrieveRelevantSections(subQuestions, indexedFiles, callLLM);
+
+      pushProcess("section_routing_done", {
+        selectionsCount: routingResult.length,
+        selections: routingResult.map(s => ({
+          fileIndex: s.fileIndex,
+          fileName: s.fileIndex < indexedFiles.length ? indexedFiles[s.fileIndex].name : "?",
+          nodeCount: s.nodeIds.length,
+          score: s.score,
+        })),
+      });
+
+      // Phase 2b: Extract section text from matched files
+      const candidates: { fileIndex: number; fileName: string; text: string; nodeIds: string[] }[] = [];
+      for (const sel of routingResult) {
+        if (sel.fileIndex < 0 || sel.fileIndex >= indexedFiles.length) continue;
+        const f = indexedFiles[sel.fileIndex];
+        const sectionText = extractSectionText(f.doc, sel.nodeIds);
+        if (sectionText.trim()) {
+          candidates.push({
+            fileIndex: sel.fileIndex,
+            fileName: f.doc?.doc_title || f.name,
+            text: sectionText,
+            nodeIds: sel.nodeIds,
+          });
+        }
+      }
+
+      pushProcess("sections_extracted", {
+        candidateCount: candidates.length,
+        totalChars: candidates.reduce((sum, c) => sum + c.text.length, 0),
+      });
+
+      // Phase 2c: Rerank candidates if there are many
+      let rankedIndices = candidates.map((_, i) => i);
+      if (candidates.length > 8) {
+        pushProcess("rerank_start", { candidateCount: candidates.length });
+        rankedIndices = await rerankEvidence(candidates, lastUserMessage, callLLM);
+        pushProcess("rerank_done", { rankedOrder: rankedIndices.slice(0, 10) });
+      }
+
+      // Phase 2d: Pack evidence into context budget with source numbering
+      const docParts: string[] = [];
+      let currentChars = 0;
+      let sourceIdx = 1;
+      const seenFiles = new Map<number, number>();
+
+      for (const ri of rankedIndices) {
+        const c = candidates[ri];
+        if (!c) continue;
+        if (currentChars + c.text.length > FULL_CONTEXT_CHAR_LIMIT && docParts.length > 0) {
+          const remaining = FULL_CONTEXT_CHAR_LIMIT - currentChars;
+          if (remaining > 2000) {
+            const sIdx = seenFiles.get(c.fileIndex) ?? sourceIdx;
+            if (!seenFiles.has(c.fileIndex)) {
+              sourcesMap.push({ index: sIdx, name: c.fileName, description: "(truncated)" });
+              seenFiles.set(c.fileIndex, sIdx);
+              sourceIdx++;
+            }
+            docParts.push(
+              `━━━ Source [${sIdx}]: ${c.fileName} (truncated) ━━━\n\n${c.text.substring(0, remaining)}\n[...truncated]`
+            );
           }
+          break;
         }
-      } catch (e) {
-        console.error("Routing step error:", e instanceof Error ? e.message : String(e));
+
+        if (!seenFiles.has(c.fileIndex)) {
+          const f = indexedFiles[c.fileIndex];
+          const docDesc = f.doc?.doc_description || "";
+          sourcesMap.push({ index: sourceIdx, name: c.fileName, description: docDesc });
+          seenFiles.set(c.fileIndex, sourceIdx);
+          docParts.push(
+            `━━━ Source [${sourceIdx}]: ${c.fileName} ━━━` +
+            (docDesc ? `\n[${docDesc}]` : "") +
+            `\n\n${c.text}`
+          );
+          sourceIdx++;
+        } else {
+          const existingIdx = seenFiles.get(c.fileIndex)!;
+          docParts.push(`\n[Additional section from Source [${existingIdx}]]\n${c.text}`);
+        }
+        currentChars += c.text.length;
       }
 
-      // Fallback: if routing failed or returned nothing, provide tree summaries as context
-      if (!routingSucceeded) {
-        pushProcess("routing_fallback", { reason: "no_selections_or_parse_failed", usedTreeSummaries: true });
-        retrievedContext = indexedFiles
-          .map(f => `--- Document structure: ${f.name} ---\n${f.tree}`)
-          .join("\n\n");
+      for (const file of unindexedFiles) {
+        if (currentChars >= FULL_CONTEXT_CHAR_LIMIT) break;
+        try {
+          const resp = await fetch(file.url);
+          if (resp.ok) {
+            const text = await resp.text();
+            const remaining = FULL_CONTEXT_CHAR_LIMIT - currentChars;
+            const limit = Math.min(remaining, 30000);
+            if (limit > 500) {
+              const content = text.substring(0, limit);
+              sourcesMap.push({ index: sourceIdx, name: file.name, description: "" });
+              docParts.push(`━━━ Source [${sourceIdx}]: ${file.name} ━━━\n${content}${text.length > limit ? "\n[...truncated]" : ""}`);
+              currentChars += content.length;
+              sourceIdx++;
+            }
+          }
+        } catch { /* skip */ }
       }
+
+      if (docParts.length > 0) {
+        retrievedContext = docParts.join("\n\n\n");
+      }
+
+      pushProcess("evidence_packed", {
+        documentsIncluded: docParts.length,
+        totalChars: retrievedContext.length,
+        sourcesCount: sourcesMap.length,
+      });
     }
 
-    // Unindexed files: fetch raw content as fallback
-    for (const file of unindexedFiles) {
-      try {
-        const resp = await fetch(file.url);
-        if (resp.ok) {
-          const text = await resp.text();
-          const trimmed = text.substring(0, 6000);
-          retrievedContext += `\n\n--- File (unindexed): ${file.name} ---\n${trimmed}${text.length > 6000 ? "\n[...truncated]" : ""}`;
-        }
-      } catch { /* skip */ }
-    }
-
+    // ─── Source Context Injection into System Prompt ──────────────────────
     if (retrievedContext) {
-      systemParts.push(`\n## Retrieved Knowledge Base Content
-The following content was retrieved from your knowledge bases using reasoning-based document navigation (PageIndex). These are the specific sections identified as most relevant to the user's question.
+      const sourcesList = sourcesMap.map(s =>
+        `[${s.index}] ${s.name}${s.description ? ` — ${s.description}` : ""}`
+      ).join("\n");
 
-ALWAYS use this retrieved content to answer. If the content doesn't fully answer the question, say what you found and what's missing.
+      systemParts.push(`\n## Source Documents
+Below is content from the user's knowledge base. Each source is numbered for citation.
+
+Available sources:
+${sourcesList}
+
+YOUR INSTRUCTIONS FOR USING THESE SOURCES:
+1. Read and analyze ALL provided source content thoroughly before answering.
+2. Sources may be in a DIFFERENT language than the question — match by MEANING, not keywords.
+3. Search the ENTIRE content deeply — important information may be anywhere.
+4. CITE your sources: after each key claim, add the source number in brackets like [1], [2], or [1][3] for multiple.
+5. If sources don't contain the answer, explicitly say: "This information is not found in the provided sources."
+6. NEVER fabricate information. If partially covered, say what you found and what's missing.
+
 ${retrievedContext}`);
+
+      if (subQuestions.length > 1) {
+        systemParts.push(`\n## Investigation Guide\nTo fully answer the user's question, consider exploring these aspects:\n${subQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+      }
     }
 
-    const enabledTools = (agent.tools || []).filter((t: any) => t.enabled);
+    const BUILTIN_TOOL_NAMES = ["youtube_scraper"];
+    const userTools = (agent.tools || []).filter((t: any) => t.enabled);
+    const enabledToolNames = new Set(userTools.map((t: any) => t.name));
+    for (const bt of BUILTIN_TOOL_NAMES) enabledToolNames.add(bt);
+    const enabledTools = [...enabledToolNames].map(name => ({ name, enabled: true }));
     let toolContext = "";
+
+    pushProcess("tools_resolved", {
+      userDefinedTools: userTools.map((t: any) => t.name),
+      builtinTools: BUILTIN_TOOL_NAMES,
+      finalEnabledTools: enabledTools.map((t: any) => t.name),
+    });
     if (enabledTools.length > 0) {
       const toolDescriptions: Record<string, string> = {
         script_runner: "Execute custom scripts and automations.",
@@ -870,8 +1179,6 @@ ${retrievedContext}`);
         local_ai_bridge: "Connect to local AI models and services.",
         system_utility: "System maintenance and monitoring tools.",
         youtube_scraper: "youtube_scraper(url) returns the video transcript and metadata for a given YouTube URL.",
-        kb_expander:
-          "kb_expander({ kbId, text }) can be used to add new text to a knowledge base, then re-index it for future queries.",
       };
 
       const toolsText = enabledTools
@@ -883,15 +1190,19 @@ ${retrievedContext}`);
 
       systemParts.push(`\n## Your Tools\n${toolsText}`);
 
-      // Inline YouTube Scraper execution when user message contains a YouTube URL.
       const hasYouTubeTool = enabledTools.some((t: any) => t.name === "youtube_scraper");
       const lastUserMessage = getLastHumanMessageText(messages);
       if (hasYouTubeTool && lastUserMessage) {
-        console.log("[YT] YouTube scraper triggered from chat message");
         const urls = extractAllYouTubeIds(lastUserMessage);
+        pushProcess("youtube_scraper_check", {
+          hasYouTubeTool: true,
+          urlsFoundInMessage: urls.length,
+          urls: urls.map(u => u.url),
+        });
         if (urls.length > 0) {
-          const limited = urls.slice(0, 3); // hard limit per turn for cost
+          const limited = urls.slice(0, 3);
           for (const yt of limited) {
+            const ytStart = Date.now();
             try {
               const ytResult = await fetchYouTubeTranscript(yt.videoId, debugLog);
               const transcriptSnippet =
@@ -899,264 +1210,39 @@ ${retrievedContext}`);
                   ? ytResult.transcript.slice(0, 4000) + "\n[transcript truncated]"
                   : ytResult.transcript;
               toolContext += `\n\n### YouTube Scraper result\nURL: ${yt.url}\nTitle: ${ytResult.title}\nLanguage: ${ytResult.language}\nLines: ${ytResult.lineCount}\n\nTranscript:\n${transcriptSnippet}`;
+              pushProcess("youtube_scraper_result", {
+                url: yt.url,
+                videoId: yt.videoId,
+                title: ytResult.title,
+                language: ytResult.language,
+                transcriptChars: ytResult.transcript.length,
+                lineCount: ytResult.lineCount,
+                durationMs: Date.now() - ytStart,
+              });
             } catch (e) {
-              console.error("YouTube scraper error:", e instanceof Error ? e.message : String(e));
-              toolContext += `\n\n### YouTube Scraper error\nTried to fetch transcript for a YouTube link (${yt.url}) in the user's question but got an error: ${
-                e instanceof Error ? e.message : String(e)
-              }.\nYou should explain this limitation to the user.`;
-            }
-          }
-        }
-      }
-
-      // ─── KB Expander: create/append KB from chat ─────────────────────
-      const hasKbExpander = enabledTools.some((t: any) => t.name === "kb_expander");
-      if (hasKbExpander && messages && messages.length > 0) {
-        const lastText: string = getLastHumanMessageText(messages);
-
-        const wantsKb =
-          /knowledge base|kb\b|база знань|базу знань|додай до бз|додай до бази/i.test(lastText);
-        const wantsCreate = /create.*knowledge base|new knowledge base|створ(и|іть).*баз[ау] знань/i.test(
-          lastText
-        );
-
-        const ytSources = extractAllYouTubeIds(lastText);
-        const plainTextSource =
-          !ytSources.length && lastText && lastText.length > 200 ? lastText : "";
-
-        const uploadedFiles: { name: string; url: string; type: string }[] = Array.isArray(
-          fileSources
-        )
-          ? fileSources
-          : [];
-
-        if (wantsKb && (ytSources.length > 0 || plainTextSource || uploadedFiles.length > 0)) {
-          console.log(
-            `[KB] KB Expander triggered wantsCreate=${wantsCreate} ytLinks=${ytSources.length} uploadedFiles=${uploadedFiles.length} plainText=${plainTextSource ? "yes" : "no"}`,
-          );
-          const kbIds: string[] = Array.isArray(agent.knowledge_base_ids)
-            ? agent.knowledge_base_ids.map(String)
-            : [];
-
-        // Try to detect specific KB name, e.g. "add to knowledge base Sales"
-        // or "Створи нову базу знань Planning і завантаж..."
-          let explicitKbName: string | null = null;
-        const kbNameMatchAdd =
-          lastText.match(/(?:to|into)\s+(?:knowledge base|KB)\s+["“]?([^"\n]+)["”]?/i) ||
-          lastText.match(/баз[аи] знань\s+["“]?([^"\n]+)["”]?/i);
-        const kbNameMatchCreate =
-          lastText.match(/create(?:\s+new)?\s+knowledge base\s+["“]?([^"\n]+)["”]?/i) ||
-          lastText.match(/створ(?:и|іть)\s+нову?\s+баз[ау] знань\s+["“]?([^"\n]+)["”]?/i);
-
-        const cleanKbName = (raw: string) =>
-          raw
-            .split(/(?:\s+і\s+|\s+and\s+|,|\.|;|:|\n)/i)[0]
-            .trim();
-
-        if (kbNameMatchAdd?.[1]) {
-          explicitKbName = cleanKbName(kbNameMatchAdd[1]);
-        } else if (kbNameMatchCreate?.[1]) {
-          explicitKbName = cleanKbName(kbNameMatchCreate[1]);
-        }
-
-          let targetKbId: string | null = null;
-          let createdKbName = "";
-
-          if (!kbIds.length || wantsCreate) {
-            const kb = await base44.asServiceRole.entities.KnowledgeBase.create({
-              name:
-                explicitKbName ||
-                `${agent.name || "Agent"} KB ${new Date().toISOString().slice(0, 10)}`,
-              files: [],
-              processing: false,
-              index_status: "pending",
-              index_progress: 0,
-              last_error: "",
-            });
-            targetKbId = String(kb.id);
-            createdKbName = kb.name || "Knowledge Base";
-
-            if (agent.id) {
-              const nextKbIds = [...kbIds, targetKbId];
-              await base44.asServiceRole.entities.Agent.update(agent.id, {
-                knowledge_base_ids: nextKbIds,
+              const errMsg = e instanceof Error ? e.message : String(e);
+              console.error("YouTube scraper error:", errMsg);
+              toolContext += `\n\n### YouTube Scraper error\nTried to fetch transcript for a YouTube link (${yt.url}) in the user's question but got an error: ${errMsg}.\nYou should explain this limitation to the user.`;
+              pushProcess("youtube_scraper_error", {
+                url: yt.url,
+                videoId: yt.videoId,
+                error: errMsg,
+                durationMs: Date.now() - ytStart,
               });
             }
-          } else {
-            if (explicitKbName) {
-              const allKbs = await base44.asServiceRole.entities.KnowledgeBase.filter({});
-              const match = allKbs?.find(
-                (k: any) =>
-                  String(k.name || "")
-                    .toLowerCase()
-                    .includes(explicitKbName!.toLowerCase()) && kbIds.includes(String(k.id))
-              );
-              if (match) {
-                targetKbId = String(match.id);
-              }
-            }
-            if (!targetKbId) {
-              targetKbId = kbIds[0];
-            }
-          }
-
-          if (targetKbId) {
-            const kbList = await base44.asServiceRole.entities.KnowledgeBase.filter({
-              id: targetKbId,
-            });
-            if (kbList?.length) {
-              const kb = kbList[0];
-              const files = kb.files || [];
-              const newFiles: any[] = [];
-
-              // Allow up to 50 YouTube links per message for KB expansion.
-              const limitedYt = ytSources.slice(0, 50);
-              for (const { url, videoId } of limitedYt) {
-                try {
-                  const ytData = await fetchYouTubeTranscript(videoId, debugLog);
-                  const text =
-                    ytData.transcript.length > 20000
-                      ? ytData.transcript.slice(0, 20000)
-                      : ytData.transcript;
-                   newFiles.push({
-                    name: (ytData.title || `YouTube transcript ${videoId}`) + ".txt",
-                    type: "txt",
-                    url: "",
-                    inline_text: `Source: ${url}\n\n${text}`,
-                    processed: false,
-                  });
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : String(e);
-                  console.error("KB expander youtube error:", msg);
-                  // Створюємо файл з помилкою, щоб було видно
-                  newFiles.push({
-                    name: `YouTube transcript error ${videoId}.txt`,
-                    type: "txt",
-                    url: "",
-                    inline_text: `Source: ${url}\n\n[Error fetching transcript: ${msg}]`,
-                    index_tree: buildInlineTranscriptIndex(
-                      `Error fetching transcript: ${msg}`,
-                      `YouTube transcript error ${videoId}`,
-                    ),
-                    doc_description: `Error fetching transcript: ${msg}`,
-                  });
-                }
-              }
-
-              if (plainTextSource) {
-                const truncated =
-                  plainTextSource.length > 20000
-                    ? plainTextSource.slice(0, 20000)
-                    : plainTextSource;
-                newFiles.push({
-                  name: "Chat text snippet",
-                  type: "txt",
-                  url: "",
-                  inline_text: truncated,
-                  processed: false,
-                });
-              }
-
-              if (uploadedFiles.length > 0) {
-                for (const f of uploadedFiles) {
-                  newFiles.push({
-                    name: f.name,
-                    type: (f.type || "txt").toLowerCase(),
-                    url: f.url,
-                    inline_text: "",
-                    processed: false,
-                  });
-                }
-              }
-
-              if (newFiles.length > 0) {
-                const updatedFiles = [...files, ...newFiles];
-                await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
-                  files: updatedFiles,
-                  processing: true,
-                  index_status: "indexing",
-                  index_progress: kb.index_progress || 0,
-                  last_error: "",
-                });
-
-                const needsHeavyIndexing = updatedFiles.some(f => !f.processed);
-                
-                if (needsHeavyIndexing) {
-                  try {
-                    const invokeMsg = `[KB] Starting indexKnowledgeBase for kbId=${kb.id}`;
-                    console.log(invokeMsg);
-                    debugLog.push(invokeMsg);
-                    
-                    const indexResult: any = await base44.functions
-                      .invoke("indexKnowledgeBase", { kbId: String(kb.id) });
-                      
-                    const doneMsg = `[KB] indexKnowledgeBase completed successfully!`;
-                    console.log(doneMsg);
-                    debugLog.push(doneMsg);
-                    
-                    // Forward debug traces from indexKnowledgeBase
-                    const resultKeys = Object.keys(indexResult || {});
-                    debugLog.push(`[KB_DEBUG] indexResult keys: ${resultKeys.join(", ")}`);
-                    if (indexResult?.data) {
-                      const data = indexResult.data;
-                      const dataKeys = Object.keys(data).join(", ");
-                      debugLog.push(`[KB_DEBUG] indexResult.data keys: ${dataKeys}`);
-                      if (data.v) {
-                        debugLog.push(`[KB_DEBUG] Function version: ${data.v}`);
-                      } else {
-                        debugLog.push(`[KB_DEBUG] WARNING: No version tag found! The function might be running OLD code.`);
-                      }
-                    }
-                    
-                    if (indexResult?.data?.debug && Array.isArray(indexResult.data.debug)) {
-                      indexResult.data.debug.forEach((msg: string) => debugLog.push(msg));
-                    } else if (indexResult?.debug && Array.isArray(indexResult.debug)) {
-                      indexResult.debug.forEach((msg: string) => debugLog.push(msg));
-                    }
-                  } catch (e) {
-                    const errMsg = `[KB] indexKnowledgeBase failed: ${e instanceof Error ? e.message : String(e)}`;
-                    console.error(errMsg);
-                    debugLog.push(errMsg);
-                  }
-                } else {
-                  const skipMsg = "[KB] Skipping indexKnowledgeBase invocation because all files are already processed inline.";
-                  console.log(skipMsg);
-                  debugLog.push(skipMsg);
-                  // Update KB status to succeeded since we skip indexing
-                  await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
-                    processing: false,
-                    index_status: "succeeded",
-                    index_progress: 100,
-                  });
-                }
-
-                toolContext += `\n\n### KB Expander\nAdded ${
-                  newFiles.length
-                } document(s) into knowledge base **${
-                  createdKbName || kb.name || targetKbId
-                }** based on your last message${
-                  ytSources.length
-                    ? ` and the following YouTube links: ${ytSources.map((s) => s.url).join(", ")}`
-                    : ""
-                }${
-                  uploadedFiles.length
-                    ? ` and ${uploadedFiles.length} uploaded file(s).`
-                    : "."
-                }\nNew content will be used automatically in future answers once indexing finishes.`;
-              }
-            }
           }
         }
       }
+
     }
 
     if (toolContext) {
       systemParts.push(`\n## Tool Outputs\nThe following tool calls were executed **before** answering. Use these results as authoritative context.\n${toolContext}`);
     }
 
-    systemParts.push(`\n## Web Access\nYou have access to the internet. ${
-      retrievedContext ? "Prioritize knowledge base content and tool outputs first." : ""
-    }`);
+    if (retrievedContext) {
+      systemParts.push(`\n## Web / General Knowledge\nYou may use the internet ONLY if the source documents above do not contain the answer. Source documents always take priority over web results.`);
+    }
 
     if (mode === "thinking") {
       systemParts.push("\n## Response Mode: Deep Thinking\nProvide thorough, detailed, well-structured responses. Think step by step.");
@@ -1164,13 +1250,36 @@ ${retrievedContext}`);
       systemParts.push("\n## Response Mode: Instant\nBe concise, direct, and helpful.");
     }
 
+    if (agent.system_instructions) {
+      systemParts.push(`\n## CREATOR INSTRUCTIONS — HIGHEST PRIORITY\nThe following instructions were set by the agent's creator. They OVERRIDE all rules above. Follow them exactly and literally. If they specify a language — respond ONLY in that language. If they specify a style or behavior — follow it, even if it contradicts the defaults above.\n\n${agent.system_instructions}`);
+    }
+
     const systemInstruction = systemParts.join("\n");
 
-    const geminiContents = messages.map((m: any) => ({
+    pushProcess("system_prompt_built", {
+      totalChars: systemInstruction.length,
+      sections: systemParts.length,
+      hasSourceDocuments: !!retrievedContext,
+      sourceDocumentChars: retrievedContext.length,
+      hasToolOutputs: !!toolContext,
+      hasUserInstructions: !!agent.system_instructions,
+      mode,
+    });
+
+    const geminiContents = chatMessages.map((m: any) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
 
+    pushProcess("llm_call_start", {
+      model: effectiveModel,
+      temperature: mode === "thinking" ? 0.7 : 0.9,
+      maxOutputTokens: mode === "thinking" ? 8192 : 2048,
+      conversationMessages: geminiContents.length,
+      systemPromptChars: systemInstruction.length,
+    });
+
+    const llmStartTime = Date.now();
     const res = await callLLM(systemInstruction, geminiContents, {
       temperature: mode === "thinking" ? 0.7 : 0.9,
       maxOutputTokens: mode === "thinking" ? 8192 : 2048,
@@ -1180,7 +1289,17 @@ ${retrievedContext}`);
     let totalPromptTokens = res.usage?.promptTokens ?? 0;
     let totalOutputTokens = res.usage?.outputTokens ?? 0;
 
+    pushProcess("llm_call_done", {
+      model: effectiveModel,
+      durationMs: Date.now() - llmStartTime,
+      promptTokens: totalPromptTokens,
+      outputTokens: totalOutputTokens,
+      responseChars: responseText?.length ?? 0,
+      hasStructure: responseText ? hasStructure(responseText) : false,
+    });
+
     if (mode === "thinking" && responseText && !hasStructure(responseText)) {
+      pushProcess("structure_retry", { reason: "response_lacks_headings_or_lists" });
       const retrySystem = systemInstruction + "\n\n[REVIEWER] Your reply was a dense block without structure. Regenerate: use ## and ### headings, blank lines between paragraphs and sections, and bullet or numbered lists. No wall of text.";
       const retryRes = await callLLM(retrySystem, geminiContents, {
         temperature: mode === "thinking" ? 0.6 : 0.8,
@@ -1189,6 +1308,12 @@ ${retrievedContext}`);
       responseText = retryRes.text;
       totalPromptTokens += retryRes.usage?.promptTokens ?? 0;
       totalOutputTokens += retryRes.usage?.outputTokens ?? 0;
+
+      pushProcess("structure_retry_done", {
+        promptTokens: retryRes.usage?.promptTokens ?? 0,
+        outputTokens: retryRes.usage?.outputTokens ?? 0,
+        responseChars: responseText?.length ?? 0,
+      });
     }
 
     const cost =
@@ -1209,6 +1334,7 @@ ${retrievedContext}`);
     return Response.json({
       response: responseText || "I couldn't generate a response. Please try again.",
       cost: Math.round(cost * 1e8) / 1e8,
+      citations: sourcesMap.length > 0 ? sourcesMap : undefined,
       debug: debugLog,
       processLog,
     });

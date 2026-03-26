@@ -25,6 +25,10 @@
       "type": "number",
       "default": 0,
       "description": "API cost in USD for generating this response"
+    },
+    "citations": {
+      "type": "string",
+      "description": "JSON-serialized array of citation sources used in the response"
     }
   },
   "required": [

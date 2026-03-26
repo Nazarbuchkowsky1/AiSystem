@@ -27,6 +27,7 @@ const INDEXABLE_TYPES = [
   "java", "php", "swift", "kt", "html", "css", "scss",
   "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
   "xmind", "docx", "xlsx", "xls", "pptx", "ppt",
+  "youtube",
 ];
 
 // ─── XMind parser: .xmind files are ZIP archives with content.json ────────────
@@ -681,6 +682,150 @@ function buildFallbackTree(text: string, fileName: string, logDebug?: (msg: stri
   };
 }
 
+// ─── YouTube transcript fetching ──────────────────────────────────────────────
+
+const YT_PATTERNS = [
+  /(?:youtube\.com\/watch\?v=)([\w-]+)/,
+  /(?:youtu\.be\/)([\w-]+)/,
+  /(?:youtube\.com\/embed\/)([\w-]+)/,
+  /(?:youtube\.com\/shorts\/)([\w-]+)/,
+];
+
+function extractYouTubeVideoId(url: string): string | null {
+  for (const p of YT_PATTERNS) {
+    const m = url.match(p);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+async function fetchYouTubeTranscriptForIndexing(url: string, logDebug: (msg: string) => void): Promise<{ title: string; transcript: string } | null> {
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) {
+    logDebug(JSON.stringify({ step: "yt_extract_id_failed", url, error: "no video ID found" }));
+    return null;
+  }
+
+  logDebug(JSON.stringify({ step: "yt_start", videoId, url }));
+  const t0 = Date.now();
+  const RAPIDAPI_KEY = "6ef971ddbamsh4130c4842bf63f0p184c8cjsn3f5385bf53c6";
+
+  // ── Method 1: RapidAPI ──
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const apiUrl = `https://youtube-transcripts.p.rapidapi.com/youtube/transcript?url=${encodeURIComponent(videoUrl)}&chunkSize=500&text=false&lang=en`;
+    logDebug(JSON.stringify({ step: "yt_rapidapi_call", videoId, apiUrl }));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(apiUrl, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "Content-Type": "application/json",
+      },
+    });
+    clearTimeout(timer);
+
+    logDebug(JSON.stringify({ step: "yt_rapidapi_response", status: res.status, ok: res.ok, ms: Date.now() - t0 }));
+
+    if (res.ok) {
+      const raw = await res.text();
+      logDebug(JSON.stringify({ step: "yt_rapidapi_body", bodyLength: raw.length, preview: raw.slice(0, 200) }));
+      let json: any;
+      try { json = JSON.parse(raw); } catch { json = null; }
+      if (json) {
+        const segments = Array.isArray(json) ? json : (json?.content || json?.transcript || json?.data || []);
+        if (Array.isArray(segments) && segments.length > 0) {
+          const text = segments.map((s: any) => s.text || s.snippet || "").filter(Boolean).join(" ").trim();
+          if (text.length > 50) {
+            logDebug(JSON.stringify({ step: "yt_rapidapi_ok", chars: text.length, ms: Date.now() - t0 }));
+            return { title: json?.title || `YouTube: ${videoId}`, transcript: text };
+          }
+          logDebug(JSON.stringify({ step: "yt_rapidapi_short", textLength: text.length }));
+        } else {
+          logDebug(JSON.stringify({ step: "yt_rapidapi_no_segments", jsonKeys: Object.keys(json || {}) }));
+        }
+      }
+    }
+  } catch (e) {
+    logDebug(JSON.stringify({ step: "yt_rapidapi_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
+  }
+
+  // ── Method 2: TubeText ──
+  try {
+    const apiUrl = `https://tubetext.vercel.app/youtube/transcript?video_id=${videoId}`;
+    logDebug(JSON.stringify({ step: "yt_tubetext_call", apiUrl }));
+    const controller2 = new AbortController();
+    const timer2 = setTimeout(() => controller2.abort(), 10000);
+    const apiRes = await fetch(apiUrl, { signal: controller2.signal, headers: { "User-Agent": "LumenAgents/1.0" } });
+    clearTimeout(timer2);
+    logDebug(JSON.stringify({ step: "yt_tubetext_response", status: apiRes.status, ms: Date.now() - t0 }));
+    if (apiRes.ok) {
+      const json: any = await apiRes.json();
+      const fullText = json?.success && json.data && typeof json.data.full_text === "string" ? json.data.full_text.trim() : "";
+      if (fullText.length > 50) {
+        logDebug(JSON.stringify({ step: "yt_tubetext_ok", chars: fullText.length, ms: Date.now() - t0 }));
+        return { title: json.data.details?.title || `YouTube: ${videoId}`, transcript: fullText };
+      }
+      logDebug(JSON.stringify({ step: "yt_tubetext_empty", textLength: fullText.length }));
+    }
+  } catch (e) {
+    logDebug(JSON.stringify({ step: "yt_tubetext_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
+  }
+
+  // ── Method 3: HTML scraping ──
+  try {
+    const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    logDebug(JSON.stringify({ step: "yt_html_call", pageUrl }));
+    const controller3 = new AbortController();
+    const timer3 = setTimeout(() => controller3.abort(), 12000);
+    const res = await fetch(pageUrl, {
+      signal: controller3.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9" },
+    });
+    clearTimeout(timer3);
+    const html = await res.text();
+    logDebug(JSON.stringify({ step: "yt_html_fetched", htmlLength: html.length, ms: Date.now() - t0 }));
+    const titleMatch = html.match(/<title>(.*?)<\/title>/);
+    const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : `YouTube: ${videoId}`;
+    const captionMatch = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
+    if (captionMatch) {
+      const tracks = JSON.parse(captionMatch[1]);
+      logDebug(JSON.stringify({ step: "yt_html_tracks", trackCount: tracks.length }));
+      if (tracks.length > 0) {
+        const controller4 = new AbortController();
+        const timer4 = setTimeout(() => controller4.abort(), 8000);
+        const captionRes = await fetch(tracks[0].baseUrl, { signal: controller4.signal });
+        clearTimeout(timer4);
+        const captionXml = await captionRes.text();
+        const texts: string[] = [];
+        const regex = /<text[^>]*>([\s\S]*?)<\/text>/g;
+        let m2: RegExpExecArray | null;
+        while ((m2 = regex.exec(captionXml)) !== null) {
+          const cleaned = m2[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+          if (cleaned) texts.push(cleaned);
+        }
+        const fullText = texts.join(" ");
+        if (fullText.length > 50) {
+          logDebug(JSON.stringify({ step: "yt_html_ok", chars: fullText.length, ms: Date.now() - t0 }));
+          return { title, transcript: fullText };
+        }
+        logDebug(JSON.stringify({ step: "yt_html_short", textLength: fullText.length }));
+      }
+    } else {
+      logDebug(JSON.stringify({ step: "yt_html_no_captions", ms: Date.now() - t0 }));
+    }
+  } catch (e) {
+    logDebug(JSON.stringify({ step: "yt_html_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
+  }
+
+  logDebug(JSON.stringify({ step: "yt_all_failed", videoId, totalMs: Date.now() - t0 }));
+  return null;
+}
+
 // ─── Deno serve ───────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -709,33 +854,41 @@ Deno.serve(async (req) => {
   };
 
   try {
+    debugLogs.push(JSON.stringify({ step: "function_invoked", _t: Date.now(), v: "1.3" }));
+    console.log("[indexKnowledgeBase] function invoked v1.3");
+
     base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      debugLogs.push(JSON.stringify({ step: "auth_failed", _t: Date.now() }));
+      return Response.json({ error: "Unauthorized", debug: debugLogs }, { status: 401 });
     }
+    debugLogs.push(JSON.stringify({ step: "auth_ok", user: user.email || "unknown", _t: Date.now() }));
 
     if (!KIMI_API_KEY || KIMI_API_KEY.trim() === "") {
-      console.error("indexKnowledgeBase: KIMI_API_KEY (or OPENROUTER_API_KEY) secret is missing or empty");
-      return Response.json(
-        { error: "Indexing requires KIMI_API_KEY or OPENROUTER_API_KEY secret" },
-        { status: 500 }
-      );
+      console.warn("indexKnowledgeBase: KIMI_API_KEY not set — LLM-based indexing unavailable, but light indexing (text extraction, YouTube) will still work");
+      debugLogs.push(JSON.stringify({ step: "warn_no_kimi_key", _t: Date.now() }));
     }
 
     const body = await req.json();
     kbId = body.kbId;
+    debugLogs.push(JSON.stringify({ step: "got_kbId", kbId, _t: Date.now() }));
     if (!kbId || typeof kbId !== "string") {
-      return Response.json({ error: "kbId is required" }, { status: 400 });
+      return Response.json({ error: "kbId is required", debug: debugLogs }, { status: 400 });
     }
+
+    // Flush initial logs to KB so the frontend can see the function is running
+    await base44.asServiceRole.entities.KnowledgeBase.update(kbId, { debug_logs: [...debugLogs] }).catch(() => {});
 
     const kbList = await base44.asServiceRole.entities.KnowledgeBase.filter({ id: kbId });
     if (!kbList?.length) {
-      return Response.json({ error: "Knowledge base not found" }, { status: 404 });
+      return Response.json({ error: "Knowledge base not found", debug: debugLogs }, { status: 404 });
     }
 
     let kb = kbList[0];
     let files = kb.files || [];
+    debugLogs.push(JSON.stringify({ step: "kb_loaded", kbId, kbName: kb.name, totalFiles: files.length, fileDetails: files.map((f: any) => ({ name: f.name, type: f.type, url: f.url?.slice(0, 80), processed: f.processed, hasInlineText: typeof f.inline_text === "string" })), _t: Date.now() }));
+    await base44.asServiceRole.entities.KnowledgeBase.update(kbId, { debug_logs: [...debugLogs] }).catch(() => {});
 
     let indexableFiles = files.filter((f: any) => {
       const type = getFileType(f);
@@ -812,7 +965,18 @@ Deno.serve(async (req) => {
         logStepStructured("file_start", { fileName: file.name, fileIndex: i, fileType, totalFiles: updatedFiles.length });
         logDebug(`[KB_DEBUG] Start processing file "${file.name}"...`);
         let text: string;
-        if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
+
+        if (fileType === "youtube" && file.url) {
+          logDebug(`[KB_DEBUG] YouTube source detected, fetching transcript for "${file.url}"...`);
+          const ytResult = await fetchYouTubeTranscriptForIndexing(file.url, logDebug);
+          if (ytResult && ytResult.transcript.length > 0) {
+            text = ytResult.transcript;
+            updatedFiles[i] = { ...updatedFiles[i], name: ytResult.title || file.name, inline_text: text };
+            logStepStructured("file_fetched", { fileName: file.name, source: "youtube_transcript", textLength: text.length });
+          } else {
+            throw new Error(`Could not fetch YouTube transcript for ${file.url}`);
+          }
+        } else if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
           logDebug(`[KB_DEBUG] Using inline_text for "${file.name}" (${file.inline_text.length} chars)`);
           text = file.inline_text;
           logStepStructured("file_fetched", { fileName: file.name, source: "inline_text", textLength: text?.length });
@@ -846,23 +1010,41 @@ Deno.serve(async (req) => {
           logStepStructured("file_fetched", { fileName: file.name, source: "url", textLength: text?.length, ok: true });
         }
 
-        const indexResult = await buildPageIndexWithChunking(text, file.name, logDebug);
-        const finalDoc = indexResult.doc || buildFallbackTree(text, file.name, logDebug);
-        totalKbCost += indexResult.cost;
+        let finalDoc: PageIndexDocument;
+        if (KIMI_API_KEY && KIMI_API_KEY.trim() !== "") {
+          logDebug(`[AI] LLM-powered indexing enabled for "${file.name}"...`);
+          const aiResult = await buildPageIndexWithChunking(text, file.name, logDebug);
+          totalKbCost += aiResult.cost;
+          if (aiResult.doc) {
+            finalDoc = aiResult.doc;
+            logStepStructured("file_ai_indexed", {
+              fileName: file.name,
+              topNodes: aiResult.doc.root?.nodes?.length ?? 0,
+              paragraphs: aiResult.doc.paragraphs?.length ?? 0,
+              cost: aiResult.cost,
+            });
+          } else {
+            logDebug(`[AI] LLM indexing failed for "${file.name}", falling back to light indexing.`);
+            finalDoc = buildFallbackTree(text, file.name, logDebug);
+          }
+        } else {
+          finalDoc = buildFallbackTree(text, file.name, logDebug);
+        }
 
         const paragraphsCount = finalDoc?.paragraphs?.length ?? 0;
         const topLevelNodes = (finalDoc?.root?.nodes?.length) ?? 0;
+        const usedAI = KIMI_API_KEY && KIMI_API_KEY.trim() !== "" && finalDoc.doc_description !== file.name;
         logStepStructured("file_indexed", {
           fileName: file.name,
           processed: true,
           paragraphs: paragraphsCount,
           topLevelNodes,
-          cost: indexResult.cost,
-          usedFallback: !indexResult.doc,
+          cost: usedAI ? totalKbCost : 0,
+          mode: usedAI ? "ai_hierarchical" : "light_extraction",
         });
         logDebug(`[KB_DEBUG] Finished parsing & indexing "${file.name}". Saving to DB...`);
         updatedFiles[i] = {
-          ...file,
+          ...updatedFiles[i],
           processed: true,
           index_tree: finalDoc,
           doc_description: finalDoc.doc_description || "",

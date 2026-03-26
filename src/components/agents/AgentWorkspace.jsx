@@ -4,9 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { logStep, logStepJSON } from "@/lib/clientLogger";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
-  Loader2, X, FileText, Code2, Check, Trash2, Copy
+  Loader2, X, FileText, Code2, Check, Trash2, Copy, BookOpen
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import AgentSourcesPanel from "./AgentSourcesPanel";
 
 const MAX_FILES = 30;
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -46,6 +47,43 @@ function blobToBase64(blob) {
 }
 
 const noSelect = { userSelect: "none", WebkitUserSelect: "none", MozUserSelect: "none", msUserSelect: "none" };
+
+function CitationMarker({ num, citations }) {
+  const [show, setShow] = useState(false);
+  const source = citations?.find(c => c.index === num);
+  if (!source) return <sup style={{ color: "#f97316", cursor: "default", fontSize: "0.7em", fontWeight: 600 }}>[{num}]</sup>;
+  return (
+    <span style={{ position: "relative", display: "inline" }}>
+      <sup
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        style={{ color: "#f97316", cursor: "pointer", fontSize: "0.7em", fontWeight: 600, padding: "0 1px" }}
+      >[{num}]</sup>
+      {show && (
+        <span style={{
+          position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
+          background: "#1e1e1e", border: "1px solid #333", borderRadius: 8, padding: "6px 10px",
+          fontSize: 11, color: "#ccc", whiteSpace: "nowrap", maxWidth: 280, overflow: "hidden",
+          textOverflow: "ellipsis", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.4)", pointerEvents: "none",
+        }}>
+          <span style={{ color: "#f97316", fontWeight: 600 }}>[{num}]</span>{" "}
+          {source.name}{source.description ? ` — ${source.description}` : ""}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function renderWithCitations(text, citations) {
+  if (!citations || !Array.isArray(citations) || citations.length === 0) return null;
+  const parts = text.split(/(\[\d+\])/g);
+  if (parts.length <= 1) return null;
+  return parts.map((part, i) => {
+    const m = part.match(/^\[(\d+)\]$/);
+    if (m) return <CitationMarker key={i} num={parseInt(m[1], 10)} citations={citations} />;
+    return <span key={i}>{part}</span>;
+  });
+}
 
 function markdownToPlainText(md) {
   if (!md || typeof md !== "string") return "";
@@ -97,6 +135,8 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("instant");
   const [isLoading, setIsLoading] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [kbIds, setKbIds] = useState(agent.knowledge_base_ids || []);
   const [showHistory, setShowHistory] = useState(false);
   const [historyPanelClosing, setHistoryPanelClosing] = useState(false);
   const [historyPanelOpening, setHistoryPanelOpening] = useState(false);
@@ -437,7 +477,13 @@ export default function AgentWorkspace({ agent, onBack }) {
     }
     const msgs = await base44.entities.Message.filter({ conversation_id: String(convo.id) }, "created_date", 3000);
     const list = Array.isArray(msgs) ? msgs : [];
-    const chronological = list.map((m) => ({ role: m.role || "user", content: m.content || "", createdAt: m.created_date || m.created_at }));
+    const chronological = list.map((m) => {
+      let citations = null;
+      if (m.citations) {
+        try { citations = typeof m.citations === "string" ? JSON.parse(m.citations) : m.citations; } catch { /* ignore */ }
+      }
+      return { role: m.role || "user", content: m.content || "", citations, createdAt: m.created_date || m.created_at };
+    });
     setMessages(chronological);
     setCurrentConversationId(convo.id);
     setShowHistory(false);
@@ -617,7 +663,7 @@ export default function AgentWorkspace({ agent, onBack }) {
             name: agent.name,
             description: agent.description || "",
             system_instructions: agent.system_instructions || agent.system_prompt || "",
-            knowledge_base_ids: agent.knowledge_base_ids || [],
+            knowledge_base_ids: kbIds,
             tools: agent.tools || [],
             model: agent.model === "gemini" ? "gemini" : "kimi",
           },
@@ -644,9 +690,10 @@ export default function AgentWorkspace({ agent, onBack }) {
       }
       const response = res?.data?.response || "Error generating response.";
       const responseCost = Number(res?.data?.cost) || 0;
+      const responseCitations = res?.data?.citations || null;
       logStep("Agent", "agentChat: response length", response?.length);
       logStep("Agent", "agentChat: cost", responseCost);
-      setMessages(prev => [...prev, { role: "assistant", content: response, createdAt: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { role: "assistant", content: response, citations: responseCitations, createdAt: new Date().toISOString() }]);
       setIsLoading(false);
       setGeneratingPlaceholderForConvoId(null);
       abortControllerRef.current = null;
@@ -659,6 +706,7 @@ export default function AgentWorkspace({ agent, onBack }) {
             role: "assistant",
             content: response,
             cost: responseCost,
+            citations: responseCitations ? JSON.stringify(responseCitations) : undefined,
           });
           await base44.entities.Conversation.update(cid, {
             message_count: createdNewConversation ? 2 : undefined,
@@ -925,7 +973,9 @@ export default function AgentWorkspace({ agent, onBack }) {
   };
 
   return (
-    <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
+    <div style={{ ...noSelect, height: "100%", display: "flex", flexDirection: "row", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
+      {/* Main chat column */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, position: "relative", overflow: "hidden" }}>
       {/* Click-outside overlay: close history when clicking on main content */}
       {(showHistory || historyPanelClosing) && (
         <div
@@ -977,7 +1027,12 @@ export default function AgentWorkspace({ agent, onBack }) {
               </button>
             ))}
           </div>
-          {/* 2) Clock (second) */}
+          {/* 2) Sources toggle */}
+          <button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(!showSources)}
+            style={{ padding: 7, borderRadius: 10, background: showSources ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showSources ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}>
+            <BookOpen style={{ width: 15, height: 15 }} />
+          </button>
+          {/* 3) Clock (history) */}
           <button onMouseDown={e => e.preventDefault()} onClick={() => {
             if (showHistory && !historyPanelClosing) {
               setHistoryPanelClosing(true);
@@ -1129,7 +1184,39 @@ export default function AgentWorkspace({ agent, onBack }) {
                       border: isUser ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
                       wordBreak: "break-word", overflowWrap: "break-word" }}>
                       {msg.role === "assistant" ? (
-                        <ReactMarkdown className="chat-markdown">
+                        <ReactMarkdown
+                          className="chat-markdown"
+                          components={msg.citations ? {
+                            p: ({ children }) => {
+                              const processChildren = (nodes) =>
+                                React.Children.map(nodes, (child) => {
+                                  if (typeof child !== "string") return child;
+                                  const parts = child.split(/(\[\d+\])/g);
+                                  if (parts.length <= 1) return child;
+                                  return parts.map((part, j) => {
+                                    const cm = part.match(/^\[(\d+)\]$/);
+                                    if (cm) return <CitationMarker key={j} num={parseInt(cm[1], 10)} citations={msg.citations} />;
+                                    return part;
+                                  });
+                                });
+                              return <p>{processChildren(children)}</p>;
+                            },
+                            li: ({ children }) => {
+                              const processChildren = (nodes) =>
+                                React.Children.map(nodes, (child) => {
+                                  if (typeof child !== "string") return child;
+                                  const parts = child.split(/(\[\d+\])/g);
+                                  if (parts.length <= 1) return child;
+                                  return parts.map((part, j) => {
+                                    const cm = part.match(/^\[(\d+)\]$/);
+                                    if (cm) return <CitationMarker key={j} num={parseInt(cm[1], 10)} citations={msg.citations} />;
+                                    return part;
+                                  });
+                                });
+                              return <li>{processChildren(children)}</li>;
+                            },
+                          } : undefined}
+                        >
                           {msg.content}
                         </ReactMarkdown>
                       ) : (
@@ -1187,7 +1274,24 @@ export default function AgentWorkspace({ agent, onBack }) {
         .chat-markdown pre { margin: 0.9em 0; padding: 10px 12px; background: rgba(0,0,0,0.3); border-radius: 8px; overflow-x: auto; }
         .chat-markdown pre code { background: none; padding: 0; }
         .chat-markdown blockquote { margin: 0.85em 0; padding-left: 1em; border-left: 3px solid rgba(249,115,22,0.5); color: #b0b0b0; font-style: normal; }
+        .chat-markdown hr { border: none; border-top: 1px solid #333; margin: 1.2em 0; }
       `}</style>
+      </div>{/* end main chat column */}
+
+      {/* Sources Panel (right side, smooth slide animation) */}
+      <div style={{
+        width: showSources ? 280 : 0,
+        minWidth: showSources ? 280 : 0,
+        overflow: "hidden",
+        transition: "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+        flexShrink: 0,
+        height: "100%",
+      }}>
+        <AgentSourcesPanel
+          agent={agent}
+          onKbIdsChange={(ids) => setKbIds(ids)}
+        />
+      </div>
     </div>
   );
 }

@@ -13,21 +13,22 @@ import {
   Palette,
   Rocket,
   Trash2,
-  BookOpen,
 } from "lucide-react";
 import TOOLS_LIST from "../shared/toolsList";
 import { logStep } from "@/lib/clientLogger";
 
-const AVAILABLE_TOOLS = TOOLS_LIST.map(t => ({ name: t.name, label: t.label }));
+const BUILTIN_TOOL_NAMES = ["youtube_scraper"];
+const AVAILABLE_TOOLS = TOOLS_LIST
+  .filter(t => !BUILTIN_TOOL_NAMES.includes(t.name))
+  .map(t => ({ name: t.name, label: t.label }));
 
-export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, knowledgeBases = [], editAgent = null }) {
+export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, editAgent = null }) {
   const isEditing = !!editAgent;
   const [name, setName] = useState(editAgent?.name || "");
   const [description, setDescription] = useState(editAgent?.description || "");
   const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || editAgent?.system_prompt || "");
   const [selectedTools, setSelectedTools] = useState(editAgent?.tools?.map(t => t.name) || []);
   const [selectedModel, setSelectedModel] = useState(editAgent?.model === "gemini" ? "gemini" : "kimi");
-  const [selectedKnowledgeBase, setSelectedKnowledgeBase] = useState(editAgent?.knowledge_base_ids?.[0] || "");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
   const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_url ? null : (editAgent?.icon_name || editAgent?.icon || "Bot"));
@@ -53,10 +54,9 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     setSelectedTools(editAgent.tools?.map(t => t.name) || []);
     const model = editAgent.model ?? editAgent.chat_model ?? "kimi";
     setSelectedModel(model === "gemini" ? "gemini" : "kimi");
-    setSelectedKnowledgeBase(editAgent.knowledge_base_ids?.[0] || "");
     setIconPreview(editAgent.icon_url || null);
     setSelectedIcon(editAgent.icon_url ? null : (editAgent.icon_name || editAgent.icon || "Bot"));
-  }, [editAgent?.id, editAgent?.model, editAgent?.name, editAgent?.description, editAgent?.system_instructions, editAgent?.tools, editAgent?.knowledge_base_ids, editAgent?.icon_url, editAgent?.icon_name, editAgent?.icon]);
+  }, [editAgent?.id, editAgent?.model, editAgent?.name, editAgent?.description, editAgent?.system_instructions, editAgent?.tools, editAgent?.icon_url, editAgent?.icon_name, editAgent?.icon]);
 
   React.useEffect(() => {
     if (!closing) return;
@@ -153,9 +153,9 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
         icon_url: iconUrl,
         icon_name: selectedIcon,
         icon: selectedIcon,
-        tools: selectedTools.map(t => ({ name: t, enabled: true })),
+        tools: [...new Set([...selectedTools, ...BUILTIN_TOOL_NAMES])].map(t => ({ name: t, enabled: true })),
         model: selectedModel,
-        knowledge_base_ids: selectedKnowledgeBase ? [selectedKnowledgeBase] : [],
+        knowledge_base_ids: isEditing ? (editAgent.knowledge_base_ids || []) : [],
         status: isEditing ? editAgent.status : "active"
       };
 
@@ -181,7 +181,6 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
     setSystemInstructions("");
     setSelectedTools([]);
     setSelectedModel("kimi");
-    setSelectedKnowledgeBase("");
     setIconFile(null);
     setIconPreview(null);
     setSelectedIcon("Bot");
@@ -340,31 +339,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
             </label>
           </div>
 
-          {/* Tools Access */}
-           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Tools Access</p>
-             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-               {AVAILABLE_TOOLS.map(tool => (
-                 <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
-                   display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20,
-                   background: selectedTools.includes(tool.name) ? "#f97316" : "#0f0f0f",
-                   border: `1px solid ${selectedTools.includes(tool.name) ? "#f97316" : "#2a2a2a"}`,
-                   cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
-                   color: selectedTools.includes(tool.name) ? "#fff" : "#f5f5f5",
-                   whiteSpace: "nowrap"
-                 }}>
-                   <div style={{
-                     width: 6, height: 6, borderRadius: "50%", 
-                     background: selectedTools.includes(tool.name) ? "#fff" : "#f97316",
-                     flexShrink: 0
-                   }} />
-                   {tool.label}
-                 </button>
-               ))}
-             </div>
-           </div>
-
-          {/* Model: chat and tools use selected model; voice and KB indexing always use Kimi */}
+          {/* Model */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Model</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -394,61 +369,31 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, k
             </div>
           </div>
 
-          {/* Knowledge Base */}
-          <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Knowledge Bases (Optional)</p>
-            {knowledgeBases.length === 0 ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    background: "rgba(249,115,22,0.1)",
-                    border: "1px solid rgba(249,115,22,0.25)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <BookOpen style={{ width: 16, height: 16, color: "#f97316" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#f5f5f5", marginBottom: 2 }}>
-                    No knowledge bases yet
-                  </div>
-                  <div style={{ fontSize: 11, color: "#555" }}>
-                    Create a knowledge base first to connect it.
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {knowledgeBases.map(kb => {
-                  const isSelected = selectedKnowledgeBase === kb.id;
-                  return (
-                    <button key={kb.id} onClick={() => setSelectedKnowledgeBase(isSelected ? "" : kb.id)} style={{
-                      padding: "10px 12px", borderRadius: 10,
-                      background: isSelected ? "#f97316" : "#0f0f0f",
-                      border: `1px solid ${isSelected ? "#f97316" : "#2a2a2a"}`,
-                      cursor: "pointer", transition: "all 0.2s", fontSize: 11, fontWeight: 500,
-                      color: isSelected ? "#fff" : "#f5f5f5",
-                      textAlign: "left",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4
-                    }}>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kb.name}</span>
-                      <span style={{ fontSize: 9, color: isSelected ? "#fff" : "#f5f5f5", fontWeight: 400 }}>
-                        {kb.files ? kb.files.length : 1} file{(kb.files ? kb.files.length : 1) !== 1 ? "s" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* Tools Access — only shown if there are non-built-in tools */}
+          {AVAILABLE_TOOLS.length > 0 && (
+           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Tools Access</p>
+             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+               {AVAILABLE_TOOLS.map(tool => (
+                 <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
+                   display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20,
+                   background: selectedTools.includes(tool.name) ? "#f97316" : "#0f0f0f",
+                   border: `1px solid ${selectedTools.includes(tool.name) ? "#f97316" : "#2a2a2a"}`,
+                   cursor: "pointer", transition: "all 0.2s", fontSize: 12, fontWeight: 500,
+                   color: selectedTools.includes(tool.name) ? "#fff" : "#f5f5f5",
+                   whiteSpace: "nowrap"
+                 }}>
+                   <div style={{
+                     width: 6, height: 6, borderRadius: "50%", 
+                     background: selectedTools.includes(tool.name) ? "#fff" : "#f97316",
+                     flexShrink: 0
+                   }} />
+                   {tool.label}
+                 </button>
+               ))}
+             </div>
+           </div>
+          )}
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 10 }}>

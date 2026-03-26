@@ -9,8 +9,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-
-  BookOpen,
   Menu,
   X,
   Plus
@@ -49,13 +47,7 @@ export default function Layout({ children, currentPageName }) {
     return () => clearTimeout(id);
   }, [mobileOverlayClosing]);
 
-  const [agentsTab, setAgentsTab] = useState("agents");
   const [modalOpen, setModalOpen] = useState(false);
-  useEffect(() => {
-    const handler = (e) => setAgentsTab(e.detail);
-    window.addEventListener("agents-tab-change", handler);
-    return () => window.removeEventListener("agents-tab-change", handler);
-  }, []);
   useEffect(() => {
     const handler = (e) => setModalOpen(e.detail);
     window.addEventListener("modal-open", handler);
@@ -127,20 +119,12 @@ export default function Layout({ children, currentPageName }) {
             <img src="/logo.png?v=2" alt="Lumen" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>Lumen</span>
           </button>
-          {currentPageName === "Agents" && agentsTab === "agents" && (
+          {currentPageName === "Agents" && (
             <button
               onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-agent"))}
               style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
             >
               <Plus style={{ width: 12, height: 12 }} /> New Agent
-            </button>
-          )}
-          {currentPageName === "Agents" && agentsTab === "knowledge" && (
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-kb"))}
-              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
-            >
-              <Plus style={{ width: 12, height: 12 }} /> New KB
             </button>
           )}
         </div>

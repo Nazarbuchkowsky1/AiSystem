@@ -1,22 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Brain, BookOpen, Loader2 } from "lucide-react";
+import { Plus, Brain, Loader2 } from "lucide-react";
 import { logStep } from "@/lib/clientLogger";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
-import NewKBModal from "../components/knowledge/NewKBModal.jsx";
-import KnowledgeBaseCard from "../components/knowledge/KnowledgeBaseCard";
-import EditKBModal from "../components/knowledge/EditKBModal";
 
 export default function Agents() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
-  const [showNewKBModal, setShowNewKBModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState(null);
-  const [editingKB, setEditingKB] = useState(null);
-  const [currentTab, setCurrentTab] = useState("agents");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const queryClient = useQueryClient();
 
@@ -32,16 +26,6 @@ export default function Agents() {
     return () => window.removeEventListener("mobile-new-agent", handler);
   }, []);
 
-  useEffect(() => {
-    const handler = () => setShowNewKBModal(true);
-    window.addEventListener("mobile-new-kb", handler);
-    return () => window.removeEventListener("mobile-new-kb", handler);
-  }, []);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("agents-tab-change", { detail: currentTab }));
-  }, [currentTab]);
-
   const { data: agents = [], isLoading: agentsLoading } = useQuery({
     queryKey: ["agents"],
     queryFn: async () => {
@@ -51,22 +35,6 @@ export default function Agents() {
       return list;
     },
   });
-
-  const { data: knowledgeBases = [], isLoading: kbLoading } = useQuery({
-    queryKey: ["knowledgeBases"],
-    queryFn: async () => {
-      logStep("Agents", "KnowledgeBase.list: start");
-      const list = await base44.entities.KnowledgeBase.list("-created_date");
-      logStep("Agents", "KnowledgeBase.list: done count", list?.length);
-      return list;
-    },
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      return Array.isArray(data) && data.some((kb) => kb.processing || kb.index_status === "indexing") ? 3000 : false;
-    },
-  });
-
-  const contentLoading = currentTab === "agents" ? agentsLoading : kbLoading;
 
   const createAgentMutation = useMutation({
     mutationFn: (agentData) => base44.entities.Agent.create(agentData),
@@ -112,29 +80,13 @@ export default function Agents() {
     onError: (e) => logStep("Agents", "Agent.delete: error", String(e?.message || e)),
   });
 
-  const createKBMutation = useMutation({
-    mutationFn: (kbData) => base44.entities.KnowledgeBase.create(kbData),
-    onSuccess: (created) => {
-      logStep("Agents", "KnowledgeBase.create: done", created?.id);
-      queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-      setShowNewKBModal(false);
-      if (created?.id && created?.files?.length) {
-        logStep("Agents", "indexKnowledgeBase: start", created.id);
-        base44.functions.invoke("indexKnowledgeBase", { kbId: created.id }).catch((e) => {
-          logStep("Agents", "indexKnowledgeBase: error", String(e?.message || e));
-        });
-      }
-    },
-    onError: (e) => logStep("Agents", "KnowledgeBase.create: error", String(e?.message || e)),
-  });
-
   if (selectedAgent) {
     return <AgentWorkspace agent={selectedAgent} onBack={() => setSelectedAgent(null)} />;
   }
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "#0a0a0a" }}>
-      {/* Header: height 64 to align border with sidebar logo block */}
+      {/* Header */}
       <div style={{
         height: 64,
         padding: "0 24px",
@@ -169,71 +121,8 @@ export default function Agents() {
         </div>
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            {/* Switcher: left segment fixed width so orange pill doesn't bleed; pill rounded like Instant */}
-            <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a2a", position: "relative", width: 220 }}>
-              <div style={{
-                position: "absolute",
-                left: currentTab === "agents" ? 0 : 94,
-                top: 0,
-                bottom: 0,
-                width: currentTab === "agents" ? 94 : 126,
-                background: "rgba(249,115,22,0.15)",
-                borderRadius: 9,
-                transition: "left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-                zIndex: 0,
-              }} />
-              <button
-                onClick={() => setCurrentTab("agents")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 5,
-                  padding: "5px 12px",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  background: "transparent",
-                  color: currentTab === "agents" ? "#f97316" : "#555",
-                  border: "none",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  transition: "color 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  position: "relative",
-                  zIndex: 1,
-                  width: 94,
-                  flexShrink: 0,
-                }}
-              >
-                <Brain style={{ width: 11, height: 11 }} />
-                Agents
-              </button>
-              <button
-                onClick={() => setCurrentTab("knowledge")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 5,
-                  padding: "5px 12px",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  background: "transparent",
-                  color: currentTab === "knowledge" ? "#f97316" : "#555",
-                  border: "none",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  transition: "color 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  position: "relative",
-                  zIndex: 1,
-                  flex: 1,
-                }}
-              >
-                <BookOpen style={{ width: 11, height: 11 }} />
-                Knowledge Base
-              </button>
-            </div>
             <button
-              onClick={currentTab === "agents" ? () => setShowNewModal(true) : () => setShowNewKBModal(true)}
+              onClick={() => setShowNewModal(true)}
               style={{
                 background: "rgba(249,115,22,0.15)",
                 color: "#f97316",
@@ -255,7 +144,7 @@ export default function Agents() {
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
             >
-              <Plus style={{ width: 12, height: 12 }} /> {currentTab === "agents" ? "New Agent" : "New KB"}
+              <Plus style={{ width: 12, height: 12 }} /> New Agent
             </button>
           </div>
         )}
@@ -267,32 +156,12 @@ export default function Agents() {
           onCreate={(agentData) => createAgentMutation.mutate(agentData)}
           onUpdate={(id, data) => updateAgentMutation.mutate({ id, data })}
           onDelete={(id) => deleteAgentMutation.mutate(id)}
-          knowledgeBases={knowledgeBases}
           editAgent={editingAgent}
         />
       )}
 
-      {showNewKBModal && (
-        <NewKBModal 
-          onClose={() => setShowNewKBModal(false)} 
-          onCreate={(kbData) => createKBMutation.mutate(kbData)}
-          isLoading={createKBMutation.isPending}
-        />
-      )}
-
-      {editingKB && (
-        <EditKBModal
-          kb={editingKB}
-          onClose={() => setEditingKB(null)}
-          onSaved={() => {
-            setEditingKB(null);
-            queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
-          }}
-        />
-      )}
-
       <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", padding: "16px 16px 16px 16px" }}>
-        {contentLoading && (
+        {agentsLoading && (
           <div
             style={{
               position: "absolute",
@@ -311,7 +180,7 @@ export default function Agents() {
             </div>
           </div>
         )}
-        {!contentLoading && (currentTab === "agents" ? (
+        {!agentsLoading && (
           agents.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
@@ -332,27 +201,7 @@ export default function Agents() {
               ))}
             </div>
           )
-        ) : (
-          knowledgeBases.length === 0 ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
-                <BookOpen style={{ width: 24, height: 24, color: "#f97316" }} />
-              </div>
-              <p style={{ fontSize: 13, color: "#f5f5f5" }}>No knowledge bases yet</p>
-              <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, alignItems: "stretch" }}>
-              {knowledgeBases.map((kb) => (
-                <KnowledgeBaseCard
-                  key={kb.id}
-                  kb={kb}
-                  onSelect={() => setEditingKB(kb)}
-                />
-              ))}
-            </div>
-          )
-        ))}
+        )}
       </div>
 
       <style>{`@keyframes agents-page-spin { to { transform: rotate(360deg); } }`}</style>

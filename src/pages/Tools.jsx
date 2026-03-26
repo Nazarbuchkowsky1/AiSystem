@@ -109,52 +109,6 @@ Deno.serve(async (req) => {
     return Response.json({ error: error.message }, { status: 500 });
   }
 });`
-  },
-  {
-    name: "KB Expander",
-    description: "Takes a YouTube URL or raw text, expands an existing Knowledge Base with new documents, and re-indexes it.",
-    icon_name: "BookOpen",
-    tool_type: "builtin",
-    status: "active",
-    code: `// Knowledge Base Expander
-// High-level flow:
-// 1) Input: { kbId, youtubeUrl?: string, rawText?: string }
-// 2) If youtubeUrl -> call YouTube Scraper to get transcript text
-// 3) Upload transcript/rawText as a new KB file
-// 4) Trigger KB indexing function so future queries can use it
-
-async function kbExpander({ kbId, youtubeUrl, rawText }) {
-  if (!kbId) throw new Error("kbId is required");
-
-  let text = rawText || "";
-
-  if (youtubeUrl) {
-    const ytRes = await fetch("https://YOUR_APP_URL/functions/youtubeTranscript", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: youtubeUrl }),
-    });
-    const ytData = await ytRes.json();
-    if (ytData.error) throw new Error(ytData.error);
-    text = ytData.transcript;
-  }
-
-  if (!text) throw new Error("No text to add to Knowledge Base");
-
-  // Example: upload text somewhere and attach to KB entity.
-  // const fileUrl = await uploadToStorage("yt-" + Date.now() + ".txt", text);
-  // await base44.entities.KnowledgeBase.update(kbId, {
-  //   files: [...kb.files, { name: "YouTube transcript", url: fileUrl, type: "txt" }]
-  // });
-
-  await fetch("https://YOUR_APP_URL/functions/index-knowledge-base", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kbId }),
-  });
-
-  return { ok: true };
-}`
   }
 ];
 

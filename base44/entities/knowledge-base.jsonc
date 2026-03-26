@@ -38,6 +38,10 @@
           "doc_description": {
             "type": "string",
             "description": "High-level description of this document generated during indexing"
+          },
+          "inline_text": {
+            "type": "string",
+            "description": "Raw text content stored inline (used for YouTube transcripts and pasted text)"
           }
         }
       },
