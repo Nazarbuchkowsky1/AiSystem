@@ -88,6 +88,9 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
         if (!uploadRes?.file_url) throw new Error(`Upload did not return URL for ${fileToUpload.name}`);
         updatedFiles.push({
           name: fileToUpload.name,
+          source_type: "upload",
+          file_path: uploadRes.file_url,
+          source_url: "",
           url: uploadRes.file_url,
           size: fileToUpload.size,
           type: (fileToUpload.name.split(".").pop() || "txt").toLowerCase(),

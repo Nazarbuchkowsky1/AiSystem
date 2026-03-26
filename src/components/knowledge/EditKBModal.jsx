@@ -12,6 +12,10 @@ const SUPPORTED_EXTENSIONS = [
   "xmind","docx","xlsx","xls","pptx","ppt",
 ];
 
+function getFileAccessUrl(file) {
+  return file?.source_url || file?.file_path || file?.url || "";
+}
+
 function formatFileSize(bytes) {
   if (!bytes) return "";
   if (bytes < 1024) return bytes + " B";
@@ -57,9 +61,10 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
 
   const handleDownloadExisting = (file, index) => {
     // Prefer remote URL when available (uploaded files)
-    if (file.url) {
+    const accessUrl = getFileAccessUrl(file);
+    if (accessUrl) {
       try {
-        window.open(file.url, "_blank", "noopener,noreferrer");
+        window.open(accessUrl, "_blank", "noopener,noreferrer");
         return;
       } catch {
         // fall back to blob path below
@@ -158,6 +163,9 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
         .filter(n => n.status === "done" && n.url)
         .map(n => ({
           name: n.file.name,
+          source_type: "upload",
+          file_path: n.url,
+          source_url: "",
           url: n.url,
           size: n.file.size,
           type: n.file.name.split(".").pop()?.toLowerCase(),

@@ -92,6 +92,9 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
       .filter((n) => n.status === "done" && n.url)
       .map((n) => ({
         name: n.file.name,
+        source_type: "upload",
+        file_path: n.url,
+        source_url: "",
         url: n.url,
         size: n.file.size,
         type: n.file.name.split(".").pop()?.toLowerCase(),

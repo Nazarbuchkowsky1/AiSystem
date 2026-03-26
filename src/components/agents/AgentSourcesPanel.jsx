@@ -5,7 +5,8 @@ import { logStep, logStepJSON } from "@/lib/clientLogger";
 import { extractTextFromPdfIfLarge } from "@/lib/pdfTextExtract";
 import {
   Plus, Upload, FileText, Loader2, Trash2, X, Download,
-  CheckCircle, AlertCircle, BookOpen, Link, Youtube
+  CheckCircle, AlertCircle, BookOpen, Link, Youtube,
+  Instagram, Twitter, Facebook, Globe, Music, Video
 } from "lucide-react";
 
 const SUPPORTED_EXTENSIONS = [
@@ -28,11 +29,98 @@ function formatFileSize(bytes) {
 function getFileIcon(type) {
   const codeTypes = ["js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs","java","php","swift","kt","html","css","scss","sh","bash","sql"];
   if (type === "youtube") return { color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: "youtube" };
+  if (type === "tiktok") return { color: "#00f2ea", bg: "rgba(0,242,234,0.12)", icon: "tiktok" };
+  if (type === "instagram") return { color: "#e1306c", bg: "rgba(225,48,108,0.12)", icon: "instagram" };
+  if (type === "twitter") return { color: "#1d9bf0", bg: "rgba(29,155,240,0.12)", icon: "twitter" };
+  if (type === "facebook") return { color: "#1877f2", bg: "rgba(24,119,242,0.12)", icon: "facebook" };
+  if (type === "media") return { color: "#a855f7", bg: "rgba(168,85,247,0.12)", icon: "media" };
+  if (type === "web") return { color: "#f97316", bg: "rgba(249,115,22,0.12)", icon: "web" };
   if (codeTypes.includes(type)) return { color: "#a855f7", bg: "rgba(168,85,247,0.15)" };
   if (type === "pdf") return { color: "#ef4444", bg: "rgba(239,68,68,0.12)" };
   if (["xlsx","xls","csv"].includes(type)) return { color: "#22c55e", bg: "rgba(34,197,94,0.12)" };
   if (["docx","doc","pptx","ppt"].includes(type)) return { color: "#3b82f6", bg: "rgba(59,130,246,0.12)" };
   return { color: "#f97316", bg: "rgba(249,115,22,0.12)" };
+}
+
+function detectPlatformFromUrl(url) {
+  const u = url.toLowerCase();
+  if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
+  if (/tiktok\.com/.test(u)) return "tiktok";
+  if (/instagram\.com/.test(u)) return "instagram";
+  if (/(twitter\.com|x\.com)\//.test(u)) return "twitter";
+  if (/facebook\.com|fb\.com|fb\.watch/.test(u)) return "facebook";
+  return "web";
+}
+
+function getIconComponent(iconType) {
+  switch (iconType) {
+    case "youtube": return Youtube;
+    case "tiktok": return Music;
+    case "instagram": return Instagram;
+    case "twitter": return Twitter;
+    case "facebook": return Facebook;
+    case "web": return Globe;
+    case "media": return Video;
+    default: return FileText;
+  }
+}
+
+function extractUrlsFromText(text) {
+  if (!text) return [];
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  const urls = [];
+  let m;
+  while ((m = urlRegex.exec(text)) !== null) {
+    const cleaned = m[1].replace(/[.,;:!?)]+$/, "");
+    if (cleaned.length > 10) urls.push(cleaned);
+  }
+  return [...new Set(urls)];
+}
+
+const MEDIA_FILE_TYPES = ["youtube", "tiktok", "instagram", "twitter", "facebook", "media", "web"];
+
+function getFileAccessUrl(file) {
+  return file?.source_url || file?.file_path || file?.url || "";
+}
+
+function getTextDownloadPayload(file) {
+  if (typeof file?.inline_text === "string" && file.inline_text.trim().length > 0) {
+    return file.inline_text;
+  }
+  if (Array.isArray(file?.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
+    return file.index_tree.paragraphs.join("\n\n");
+  }
+  return "";
+}
+
+function getPreferredMediaTitle(file) {
+  const candidates = [
+    file?.title,
+    file?.source_title,
+    file?.source_meta?.title,
+    file?.index_tree?.doc_title,
+    file?.name,
+  ];
+  for (const raw of candidates) {
+    if (typeof raw === "string" && raw.trim()) {
+      // If old records still have "YouTube: <url>" style names, do not use it as a title.
+      if (/^(YouTube|TikTok|Instagram|Twitter\/X|Facebook|Web):\s*https?:\/\//i.test(raw.trim())) {
+        continue;
+      }
+      return raw.trim();
+    }
+  }
+  return "media-source";
+}
+
+function toSafeDownloadBaseName(name) {
+  // Keep original language chars; remove only filesystem-invalid chars.
+  const cleaned = String(name || "download")
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/g, "");
+  return cleaned || "download";
 }
 
 export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
@@ -101,43 +189,89 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       const kbIds = agent.knowledge_base_ids || [];
       const currentKbId = kb?.id;
       const idToFetch = currentKbId || (kbIds.length > 0 ? kbIds[0] : null);
-      if (!idToFetch) return;
+      if (!idToFetch) {
+        logStep("Poll", "No KB ID to poll, skipping");
+        return;
+      }
       const kbList = await base44.entities.KnowledgeBase.filter({ id: idToFetch });
       const found = kbList?.[0];
-      if (found) {
-        // Stream new backend debug_logs into the client console
-        if (Array.isArray(found.debug_logs) && found.debug_logs.length > lastDebugLogCount.current) {
-          const newLogs = found.debug_logs.slice(lastDebugLogCount.current);
-          for (const entry of newLogs) {
-            try {
-              const parsed = JSON.parse(entry);
-              logStepJSON("Indexing", parsed.step || "log", parsed);
-            } catch {
-              logStep("Indexing", entry);
-            }
-          }
-          lastDebugLogCount.current = found.debug_logs.length;
-        }
-
-        // Detect stuck indexing (>90 seconds)
-        if (indexingStartedAt && (found.processing || found.index_status === "indexing") && Date.now() - indexingStartedAt > 90000) {
-          logStep("Indexing", "Timeout: indexing has been running for over 90s, resetting status");
-          await base44.entities.KnowledgeBase.update(found.id, {
-            processing: false,
-            index_status: "failed",
-            last_error: "Indexing timed out after 90 seconds",
-          });
-          found.processing = false;
-          found.index_status = "failed";
-          found.last_error = "Indexing timed out after 90 seconds";
-          setIndexingStartedAt(null);
-        }
-
-        setKb(found);
-        setFiles(found.files || []);
+      if (!found) {
+        logStep("Poll", "KB not found in DB", idToFetch);
+        return;
       }
+
+      const elapsed = indexingStartedAt ? ((Date.now() - indexingStartedAt) / 1000).toFixed(1) + "s" : "-";
+      const debugCount = Array.isArray(found.debug_logs) ? found.debug_logs.length : 0;
+      const newDebugCount = debugCount - lastDebugLogCount.current;
+      logStepJSON("Poll", "kb_status", {
+        kbId: idToFetch,
+        processing: found.processing,
+        index_status: found.index_status,
+        index_progress: found.index_progress,
+        last_error: found.last_error || null,
+        debug_logs_total: debugCount,
+        debug_logs_new: newDebugCount,
+        elapsed,
+        files: (found.files || []).map(f => ({ name: f.name, type: f.type, processed: f.processed })),
+      });
+
+      if (newDebugCount > 0) {
+        const newLogs = found.debug_logs.slice(lastDebugLogCount.current);
+        for (const entry of newLogs) {
+          try {
+            const parsed = JSON.parse(entry);
+            logStepJSON("Backend", parsed.step || "log", parsed);
+          } catch {
+            logStep("Backend", entry);
+          }
+        }
+        lastDebugLogCount.current = debugCount;
+      }
+
+      const foundFiles = found.files || [];
+      const hasUnprocessed = foundFiles.some(f => !f.processed || !f.index_tree?.root);
+      const hasAnyFiles = foundFiles.length > 0;
+      if (!hasUnprocessed && (found.processing || found.index_status === "indexing")) {
+        logStep("Poll", "All files processed or removed, clearing stale processing state");
+        await base44.entities.KnowledgeBase.update(found.id, {
+          processing: false,
+          index_status: foundFiles.length > 0 ? "succeeded" : "idle",
+          last_error: "",
+        });
+        found.processing = false;
+        found.index_status = foundFiles.length > 0 ? "succeeded" : "idle";
+        found.last_error = "";
+        setIndexingStartedAt(null);
+      } else if (!hasAnyFiles && (found.index_status === "failed" || found.last_error)) {
+        // If files were removed, stale error banner should disappear.
+        await base44.entities.KnowledgeBase.update(found.id, {
+          processing: false,
+          index_status: "idle",
+          index_progress: 0,
+          last_error: "",
+        });
+        found.processing = false;
+        found.index_status = "idle";
+        found.index_progress = 0;
+        found.last_error = "";
+      } else if (hasAnyFiles && !hasUnprocessed && (found.index_status === "failed" || found.last_error)) {
+        // If all current files are already indexed, old error from a removed/old file is stale.
+        await base44.entities.KnowledgeBase.update(found.id, {
+          processing: false,
+          index_status: "succeeded",
+          index_progress: 100,
+          last_error: "",
+        });
+        found.processing = false;
+        found.index_status = "succeeded";
+        found.index_progress = 100;
+        found.last_error = "";
+      }
+
+      setKb(found);
+      setFiles(found.files || []);
     } catch (e) {
-      logStep("Sources", "refreshKb error", String(e?.message || e));
+      logStep("Poll", "ERROR in refreshKb", String(e?.message || e));
     }
   };
 
@@ -171,6 +305,31 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
     } finally {
       setIsCreatingKb(false);
     }
+  };
+
+  const applyIndexInvokeResult = async (targetKbId, res, kind = "function_returned") => {
+    const payload = res?.data || res || {};
+    logStepJSON("Indexing", kind, payload);
+
+    if (!payload?.error) return;
+
+    const errorMessage = String(payload.error || "Indexing failed");
+    try {
+      await base44.entities.KnowledgeBase.update(targetKbId, {
+        processing: false,
+        index_status: "failed",
+        last_error: errorMessage,
+      });
+    } catch (_) {
+      // Ignore secondary state update failures.
+    }
+
+    setKb(prev => prev ? {
+      ...prev,
+      processing: false,
+      index_status: "failed",
+      last_error: errorMessage,
+    } : prev);
   };
 
   const handleFileSelect = async (e) => {
@@ -228,7 +387,10 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
 
         const fileEntry = {
           name: fileToUpload.name,
-          url: uploadRes.file_url,
+          source_type: "upload",
+          file_path: uploadRes.file_url,
+          source_url: "",
+          url: uploadRes.file_url, // backward compatibility for old records/components
           size: fileToUpload.size,
           type: (fileToUpload.name.split(".").pop() || "txt").toLowerCase(),
           processed: false,
@@ -264,17 +426,30 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
         });
         lastDebugLogCount.current = 0;
         setIndexingStartedAt(Date.now());
-        base44.functions.invoke("indexKnowledgeBase", { kbId: String(targetKb.id) })
-          .then(res => {
-            logStepJSON("Indexing", "function_returned", res?.data || res);
+        base44.functions.invoke("indexKnowledgeBase", {
+          kbId: String(targetKb.id),
+          expectedFileCount: currentFiles.length,
+          expectedPendingCount: currentFiles.filter(f => !f.processed || !f.index_tree?.root).length,
+          filesSnapshot: currentFiles,
+        })
+          .then(async (res) => {
+            await applyIndexInvokeResult(targetKb.id, res, "function_returned");
             if (res?.data?.debug) {
               (res.data.debug || []).forEach(d => {
                 try { logStepJSON("Indexing", JSON.parse(d).step || "debug", JSON.parse(d)); } catch { logStep("Indexing", d); }
               });
             }
           })
-          .catch(e => {
+          .catch(async (e) => {
             logStepJSON("Sources", "indexKnowledgeBase_error", { error: String(e?.message || e), stack: e?.stack });
+            try {
+              await base44.entities.KnowledgeBase.update(targetKb.id, {
+                processing: false,
+                index_status: "failed",
+                last_error: `Function invoke failed: ${e?.message || e}`,
+              });
+              setKb(prev => prev ? { ...prev, processing: false, index_status: "failed" } : prev);
+            } catch { /* ignore update failure */ }
           });
 
         queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
@@ -295,16 +470,47 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       const updatedFiles = files.filter((_, i) => i !== fileIndex);
       await base44.entities.KnowledgeBase.update(kb.id, {
         files: updatedFiles,
-        processing: updatedFiles.some(f => !f.processed),
+        processing: updatedFiles.some(f => !f.processed || !f.index_tree?.root),
+        index_status: updatedFiles.length === 0
+          ? "idle"
+          : updatedFiles.some(f => !f.processed || !f.index_tree?.root)
+            ? "indexing"
+            : "succeeded",
+        index_progress: updatedFiles.length === 0
+          ? 0
+          : updatedFiles.some(f => !f.processed || !f.index_tree?.root)
+            ? 0
+            : 100,
+        last_error: "",
       });
       setFiles(updatedFiles);
-      setKb(prev => prev ? { ...prev, files: updatedFiles } : prev);
+      setKb(prev => prev ? {
+        ...prev,
+        files: updatedFiles,
+        processing: updatedFiles.some(f => !f.processed || !f.index_tree?.root),
+        index_status: updatedFiles.length === 0
+          ? "idle"
+          : updatedFiles.some(f => !f.processed || !f.index_tree?.root)
+            ? "indexing"
+            : "succeeded",
+        index_progress: updatedFiles.length === 0
+          ? 0
+          : updatedFiles.some(f => !f.processed || !f.index_tree?.root)
+            ? 0
+            : 100,
+        last_error: "",
+      } : prev);
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       logStep("Sources", "File removed", files[fileIndex]?.name);
 
       if (updatedFiles.some(f => !f.processed) && updatedFiles.length > 0) {
-        base44.functions.invoke("indexKnowledgeBase", { kbId: String(kb.id) })
-          .then(res => logStepJSON("Indexing", "function_returned", res?.data || res))
+        base44.functions.invoke("indexKnowledgeBase", {
+          kbId: String(kb.id),
+          expectedFileCount: updatedFiles.length,
+          expectedPendingCount: updatedFiles.filter(f => !f.processed || !f.index_tree?.root).length,
+          filesSnapshot: updatedFiles,
+        })
+          .then(async (res) => { await applyIndexInvokeResult(kb.id, res, "function_returned"); })
           .catch(e => logStepJSON("Sources", "indexKnowledgeBase_error", { error: String(e?.message || e) }));
       }
     } catch (e) {
@@ -314,12 +520,18 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
 
   const handleRetryIndexing = async () => {
     if (!kb) return;
-    logStepJSON("Sources", "retry_indexing", { kbId: kb.id, fileCount: files.length });
+    const unprocessed = files.filter(f => !f.processed || !f.index_tree?.root);
+    logStepJSON("Sources", "retry_indexing_start", {
+      kbId: kb.id,
+      totalFiles: files.length,
+      unprocessedFiles: unprocessed.map(f => ({ name: f.name, type: f.type })),
+    });
     const resetFiles = files.map(f => {
       if (!f.processed || !f.index_tree?.root) return { ...f, processed: false };
       return f;
     });
     try {
+      logStep("Sources", "Resetting KB state: clearing debug_logs, setting processing=true");
       await base44.entities.KnowledgeBase.update(kb.id, {
         files: resetFiles,
         processing: true,
@@ -331,43 +543,67 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       setKb(prev => prev ? { ...prev, files: resetFiles, processing: true, index_status: "indexing", last_error: "", debug_logs: [] } : prev);
       lastDebugLogCount.current = 0;
       setIndexingStartedAt(Date.now());
-      base44.functions.invoke("indexKnowledgeBase", { kbId: String(kb.id) })
-        .then(res => logStepJSON("Indexing", "function_returned", res?.data || res))
-        .catch(e => logStepJSON("Sources", "retry_error", { error: String(e?.message || e) }));
+      logStep("Sources", "Invoking indexKnowledgeBase (retry)...", { kbId: kb.id });
+      base44.functions.invoke("indexKnowledgeBase", {
+        kbId: String(kb.id),
+        expectedFileCount: resetFiles.length,
+        expectedPendingCount: resetFiles.filter(f => !f.processed || !f.index_tree?.root).length,
+        filesSnapshot: resetFiles,
+      })
+        .then(async (res) => {
+          await applyIndexInvokeResult(kb.id, res, "retry_function_returned");
+          if (res?.data?.debug && Array.isArray(res.data.debug)) {
+            res.data.debug.forEach((d, idx) => {
+              try { logStepJSON("Backend", JSON.parse(d).step || `debug_${idx}`, JSON.parse(d)); }
+              catch { logStep("Backend", d); }
+            });
+          }
+        })
+        .catch(e => logStepJSON("Sources", "retry_invoke_FAILED", { error: String(e?.message || e) }));
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
     } catch (e) {
-      logStep("Sources", "Retry error", String(e?.message || e));
+      logStepJSON("Sources", "retry_CRASH", { error: String(e?.message || e) });
     }
-  };
-
-  const isYouTubeUrl = (url) => {
-    return /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)[\w-]+/.test(url);
   };
 
   const handleLinkSubmit = async () => {
-    const url = linkInput.trim();
-    if (!url) return;
+    const raw = linkInput.trim();
+    if (!raw) return;
     setLinkError("");
 
-    if (!isYouTubeUrl(url)) {
-      setLinkError("Only YouTube links are supported for now.");
+    const urls = extractUrlsFromText(raw);
+    if (urls.length === 0) {
+      setLinkError("No valid URLs found. Paste one or more links.");
       return;
     }
+    logStepJSON("Sources", "url_submit_start", { rawLength: raw.length, urlsFound: urls.length, urls });
 
     setLinkLoading(true);
     try {
       const targetKb = await ensureKb();
-      if (!targetKb) { setLinkError("Failed to create knowledge base."); return; }
+      if (!targetKb) {
+        setLinkError("Failed to create knowledge base.");
+        return;
+      }
+      logStepJSON("Sources", "kb_ready", { kbId: String(targetKb.id), kbName: targetKb.name, existingFiles: (targetKb.files || []).length });
 
-      const fileEntry = {
-        name: `YouTube: ${url.length > 60 ? url.slice(0, 60) + "..." : url}`,
-        url: url,
-        size: 0,
-        type: "youtube",
-        processed: false,
-      };
+      const newEntries = urls.map(url => {
+        const platform = detectPlatformFromUrl(url);
+        const platformLabel = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", twitter: "Twitter/X", facebook: "Facebook", web: "Web" }[platform] || "Link";
+        return {
+          name: `${platformLabel}: ${url.length > 55 ? url.slice(0, 55) + "..." : url}`,
+          source_type: "link",
+          source_url: url,
+          file_path: "",
+          url, // backward compatibility for old records/components
+          size: 0,
+          type: platform,
+          processed: false,
+        };
+      });
+      logStepJSON("Sources", "file_entries_created", { count: newEntries.length, entries: newEntries.map(e => ({ name: e.name, type: e.type })) });
 
-      const currentFiles = [...(targetKb.files || []), fileEntry];
+      const currentFiles = [...(targetKb.files || []), ...newEntries];
       await base44.entities.KnowledgeBase.update(targetKb.id, {
         files: currentFiles,
         processing: true,
@@ -376,31 +612,48 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       setFiles(currentFiles);
       setKb(prev => prev ? { ...prev, files: currentFiles, processing: true, index_status: "indexing" } : prev);
 
-      logStepJSON("Sources", "youtube_link_added", {
-        url,
-        kbId: String(targetKb.id),
-        totalFiles: currentFiles.length,
-      });
       lastDebugLogCount.current = 0;
       setIndexingStartedAt(Date.now());
-      base44.functions.invoke("indexKnowledgeBase", { kbId: String(targetKb.id) })
-        .then(res => {
-          logStepJSON("Indexing", "yt_function_returned", res?.data || res);
-          if (res?.data?.debug) {
-            (res.data.debug || []).forEach(d => {
-              try { logStepJSON("Indexing", JSON.parse(d).step || "debug", JSON.parse(d)); } catch { logStep("Indexing", d); }
+
+      const invokePayload = {
+        kbId: String(targetKb.id),
+        expectedFileCount: currentFiles.length,
+        expectedPendingCount: currentFiles.filter(f => !f.processed || !f.index_tree?.root).length,
+        filesSnapshot: currentFiles,
+      };
+      logStepJSON("Sources", "invoking_indexKnowledgeBase", invokePayload);
+
+      base44.functions.invoke("indexKnowledgeBase", invokePayload)
+        .then(async (res) => {
+          await applyIndexInvokeResult(targetKb.id, res, "function_returned");
+          if (res?.data?.debug && Array.isArray(res.data.debug)) {
+            res.data.debug.forEach((d, idx) => {
+              try {
+                const parsed = JSON.parse(d);
+                logStepJSON("Backend", parsed.step || `debug_${idx}`, parsed);
+              } catch {
+                logStep("Backend", d);
+              }
             });
           }
         })
-        .catch(e => {
-          logStepJSON("Sources", "indexKnowledgeBase_error", { error: String(e?.message || e), url });
+        .catch(async (e) => {
+          logStepJSON("Sources", "invoke_FAILED", { error: String(e?.message || e), stack: e?.stack?.substring(0, 300) });
+          try {
+            await base44.entities.KnowledgeBase.update(targetKb.id, {
+              processing: false,
+              index_status: "failed",
+              last_error: `Function invoke failed: ${e?.message || e}`,
+            });
+            setKb(prev => prev ? { ...prev, processing: false, index_status: "failed", last_error: `Function invoke failed: ${e?.message || e}` } : prev);
+          } catch { /* ignore */ }
         });
 
       queryClient.invalidateQueries({ queryKey: ["knowledgeBases"] });
       setLinkInput("");
       setShowAddModal(false);
     } catch (e) {
-      logStep("Sources", "Link add error", String(e?.message || e));
+      logStepJSON("Sources", "link_add_CRASH", { error: String(e?.message || e), stack: e?.stack?.substring(0, 300) });
       setLinkError("Failed to add link. Try again.");
     } finally {
       setLinkLoading(false);
@@ -429,9 +682,29 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
   const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
 
   const handleDownloadFile = (file) => {
-    if (!file.url) return;
+    const accessUrl = getFileAccessUrl(file);
+    const hasMediaType = MEDIA_FILE_TYPES.includes(file?.type);
+
+    // Media sources (YouTube/TikTok/etc.) usually do not have a downloadable file URL.
+    // For them we export transcript/indexed text as .txt.
+    if (hasMediaType) {
+      const textPayload = getTextDownloadPayload(file);
+      if (!textPayload) return;
+      const blob = new Blob([textPayload], { type: "text/plain;charset=utf-8" });
+      const safeNameBase = toSafeDownloadBaseName(getPreferredMediaTitle(file));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = safeNameBase.endsWith(".txt") ? safeNameBase : `${safeNameBase}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      return;
+    }
+
+    if (!accessUrl) return;
     const a = document.createElement("a");
-    a.href = file.url;
+    a.href = accessUrl;
     a.download = file.name || "download";
     a.target = "_blank";
     a.rel = "noopener noreferrer";
@@ -594,7 +867,10 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             {files.map((file, index) => {
               const iconStyle = getFileIcon(file.type);
               const isReady = file.processed && file.index_tree?.root;
-              const FileIcon = iconStyle.icon === "youtube" ? Youtube : FileText;
+              const quality = file.index_quality || (isReady ? "basic" : "");
+              const isBasic = isReady && quality === "basic";
+              const isPremium = isReady && quality === "premium";
+              const FileIcon = iconStyle.icon ? getIconComponent(iconStyle.icon) : FileText;
               return (
                 <div key={`file-${index}-${file.name}`} style={{
                   display: "flex", alignItems: "center", gap: 8,
@@ -626,7 +902,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                       color: isReady ? "#555" : (kb?.index_status === "failed" && !file.processed) ? "#ef4444" : "#f97316",
                     }}>
                       {isReady ? (
-                        `${(file.type === "youtube" ? "YT" : (file.type || "").toUpperCase())}${file.size ? " · " + formatFileSize(file.size) : ""}`
+                        `${MEDIA_FILE_TYPES.includes(file.type) ? ({ youtube: "YT", tiktok: "TT", instagram: "IG", twitter: "X", facebook: "FB", media: "Media", web: "Web" }[file.type] || file.type) : (file.type || "").toUpperCase()}${file.size ? " · " + formatFileSize(file.size) : ""}${isBasic ? " · Basic" : ""}${isPremium ? " · Premium" : ""}${file.index_upgrade_pending ? " · Upgrading…" : ""}`
                       ) : isProcessing ? (
                         "Indexing..."
                       ) : (kb?.index_status === "failed" && !file.processed) ? (
@@ -636,7 +912,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                       )}
                     </p>
                   </div>
-                  {isReady && file.url && file.type !== "youtube" && (
+                  {isReady && (getFileAccessUrl(file) || getTextDownloadPayload(file)) && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }}
                       style={{
@@ -791,19 +1067,21 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Link style={{ width: 14, height: 14, color: "#f97316", flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: "#e5e5e5", fontWeight: 500 }}>Or paste a YouTube URL</span>
+                <span style={{ fontSize: 12, color: "#e5e5e5", fontWeight: 500 }}>Paste URL</span>
+                <span style={{ fontSize: 10, color: "#555" }}>YouTube, TikTok, Instagram, X, or any link</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="text"
+                <textarea
                   value={linkInput}
                   onChange={e => { setLinkInput(e.target.value); setLinkError(""); }}
-                  onKeyDown={e => { if (e.key === "Enter") handleLinkSubmit(); }}
-                  placeholder="https://youtube.com/watch?v=..."
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleLinkSubmit(); }}}
+                  placeholder={"Paste one or more URLs\u2026"}
+                  rows={1}
                   style={{
                     flex: 1, padding: "9px 12px", borderRadius: 10, fontSize: 13,
                     background: "#0f0f0f", border: "1px solid #2a2a2a", color: "#f5f5f5",
-                    outline: "none", minWidth: 0,
+                    outline: "none", minWidth: 0, fontFamily: "inherit", resize: "none",
+                    lineHeight: "20px", height: 38, overflow: "hidden",
                   }}
                   onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
                   onBlur={e => e.target.style.borderColor = "#2a2a2a"}
@@ -818,7 +1096,8 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                     cursor: linkLoading || !linkInput.trim() ? "not-allowed" : "pointer",
                     opacity: linkLoading ? 0.6 : 1,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0, transition: "all 0.2s",
+                    flexShrink: 0, transition: "all 0.2s", alignSelf: "flex-end",
+                    height: 38,
                   }}
                 >
                   {linkLoading ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : "Add"}

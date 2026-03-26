@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
-import pdf from 'npm:pdf-parse/lib/pdf-parse.js';
+import pdf from 'npm:pdf-parse@1.1.1';
 import JSZip from 'npm:jszip@3.10.1';
 import mammoth from 'npm:mammoth@1.8.0';
 import * as XLSX from 'npm:xlsx@0.18.5';
@@ -27,7 +27,7 @@ const INDEXABLE_TYPES = [
   "java", "php", "swift", "kt", "html", "css", "scss",
   "yaml", "yml", "xml", "sh", "bash", "sql", "toml", "ini", "env",
   "xmind", "docx", "xlsx", "xls", "pptx", "ppt",
-  "youtube",
+  "youtube", "tiktok", "instagram", "twitter", "facebook", "media", "web",
 ];
 
 // ─── XMind parser: .xmind files are ZIP archives with content.json ────────────
@@ -682,148 +682,141 @@ function buildFallbackTree(text: string, fileName: string, logDebug?: (msg: stri
   };
 }
 
-// ─── YouTube transcript fetching ──────────────────────────────────────────────
+// ─── Supadata API: transcript + metadata for YouTube, TikTok, Instagram, etc. ─
 
-const YT_PATTERNS = [
-  /(?:youtube\.com\/watch\?v=)([\w-]+)/,
-  /(?:youtu\.be\/)([\w-]+)/,
-  /(?:youtube\.com\/embed\/)([\w-]+)/,
-  /(?:youtube\.com\/shorts\/)([\w-]+)/,
-];
+const SUPADATA_API_KEY = "sd_8ca36aab85b68983db4fcddfc3298d5d";
+const SUPADATA_BASE = "https://api.supadata.ai/v1";
+const MEDIA_FILE_TYPES = ["youtube", "tiktok", "instagram", "twitter", "facebook", "media"];
 
-function extractYouTubeVideoId(url: string): string | null {
-  for (const p of YT_PATTERNS) {
-    const m = url.match(p);
-    if (m?.[1]) return m[1];
-  }
-  return null;
+function detectPlatformFromUrl(url: string): string {
+  const u = url.toLowerCase();
+  if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
+  if (/tiktok\.com/.test(u)) return "tiktok";
+  if (/instagram\.com/.test(u)) return "instagram";
+  if (/(?:twitter\.com|x\.com)\//.test(u)) return "twitter";
+  if (/facebook\.com|fb\.com|fb\.watch/.test(u)) return "facebook";
+  return "media";
 }
 
-async function fetchYouTubeTranscriptForIndexing(url: string, logDebug: (msg: string) => void): Promise<{ title: string; transcript: string } | null> {
-  const videoId = extractYouTubeVideoId(url);
-  if (!videoId) {
-    logDebug(JSON.stringify({ step: "yt_extract_id_failed", url, error: "no video ID found" }));
+async function fetchSupadataTranscript(
+  url: string,
+  logDebug: (msg: string) => void
+): Promise<{ title: string; transcript: string; platform: string } | null> {
+  if (!SUPADATA_API_KEY) {
+    logDebug(JSON.stringify({ step: "supadata_fatal", reason: "SUPADATA_API_KEY not configured" }));
+    throw new Error("SUPADATA_API_KEY is not configured — cannot fetch media transcripts");
+  }
+
+  const t0 = Date.now();
+  const platform = detectPlatformFromUrl(url);
+  logDebug(JSON.stringify({ step: "supadata_start", url, platform }));
+
+  let title = `${platform} video`;
+  try {
+    const metaRes = await fetch(`${SUPADATA_BASE}/metadata?url=${encodeURIComponent(url)}`, {
+      headers: { "x-api-key": SUPADATA_API_KEY },
+    });
+    if (metaRes.ok) {
+      const meta = await metaRes.json();
+      title = meta.title || meta.description?.slice(0, 100) || title;
+      logDebug(JSON.stringify({ step: "supadata_metadata_ok", title: title.slice(0, 80), platform: meta.platform, author: meta.author?.displayName }));
+    } else {
+      logDebug(JSON.stringify({ step: "supadata_metadata_fail", status: metaRes.status }));
+    }
+  } catch (e) {
+    logDebug(JSON.stringify({ step: "supadata_metadata_error", error: e instanceof Error ? e.message : String(e) }));
+  }
+
+  try {
+    const tUrl = `${SUPADATA_BASE}/transcript?url=${encodeURIComponent(url)}&text=true&mode=auto`;
+    logDebug(JSON.stringify({ step: "supadata_transcript_call", tUrl }));
+    const res = await fetch(tUrl, {
+      headers: { "x-api-key": SUPADATA_API_KEY },
+    });
+
+    if (res.status === 202) {
+      const { jobId } = await res.json();
+      logDebug(JSON.stringify({ step: "supadata_transcript_async", jobId }));
+      const deadline = Date.now() + 120000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        const pollRes = await fetch(`${SUPADATA_BASE}/transcript/${jobId}`, {
+          headers: { "x-api-key": SUPADATA_API_KEY },
+        });
+        if (!pollRes.ok) {
+          logDebug(JSON.stringify({ step: "supadata_poll_http_error", status: pollRes.status, ms: Date.now() - t0 }));
+          return null;
+        }
+        const job = await pollRes.json();
+        logDebug(JSON.stringify({ step: "supadata_poll", jobId, jobStatus: job.status, elapsed: Date.now() - t0 }));
+
+        if (job.status === "completed") {
+          const text = typeof job.content === "string" ? job.content : "";
+          if (text.length > 0) {
+            logDebug(JSON.stringify({ step: "supadata_transcript_ok", chars: text.length, ms: Date.now() - t0, source: "async" }));
+            return { title, transcript: text, platform };
+          }
+          logDebug(JSON.stringify({ step: "supadata_completed_empty", ms: Date.now() - t0 }));
+          return null;
+        }
+        if (job.status === "failed") {
+          const errDetail = job.error?.message || job.error?.details || "unknown";
+          logDebug(JSON.stringify({ step: "supadata_job_failed", error: errDetail, ms: Date.now() - t0 }));
+          return null;
+        }
+      }
+      logDebug(JSON.stringify({ step: "supadata_poll_timeout", jobId, ms: Date.now() - t0 }));
+      return null;
+    }
+
+    if (!res.ok) {
+      const body = await res.text();
+      logDebug(JSON.stringify({ step: "supadata_transcript_error", status: res.status, body: body.slice(0, 200), ms: Date.now() - t0 }));
+      return null;
+    }
+
+    const data = await res.json();
+    const text = typeof data.content === "string" ? data.content : "";
+    if (text.length > 0) {
+      logDebug(JSON.stringify({ step: "supadata_transcript_ok", chars: text.length, ms: Date.now() - t0, source: "sync" }));
+      return { title, transcript: text, platform };
+    }
+    logDebug(JSON.stringify({ step: "supadata_transcript_empty", ms: Date.now() - t0 }));
+    return null;
+  } catch (e) {
+    logDebug(JSON.stringify({ step: "supadata_transcript_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
     return null;
   }
+}
 
-  logDebug(JSON.stringify({ step: "yt_start", videoId, url }));
-  const t0 = Date.now();
-  const RAPIDAPI_KEY = "6ef971ddbamsh4130c4842bf63f0p184c8cjsn3f5385bf53c6";
-
-  // ── Method 1: RapidAPI ──
+async function fetchSupadataWebScrape(
+  url: string,
+  logDebug: (msg: string) => void
+): Promise<{ title: string; content: string } | null> {
+  if (!SUPADATA_API_KEY) {
+    logDebug(JSON.stringify({ step: "supadata_web_fatal", reason: "SUPADATA_API_KEY not configured" }));
+    throw new Error("SUPADATA_API_KEY is not configured — cannot scrape web content");
+  }
   try {
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const apiUrl = `https://youtube-transcripts.p.rapidapi.com/youtube/transcript?url=${encodeURIComponent(videoUrl)}&chunkSize=500&text=false&lang=en`;
-    logDebug(JSON.stringify({ step: "yt_rapidapi_call", videoId, apiUrl }));
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(apiUrl, {
-      method: "GET",
-      signal: controller.signal,
-      headers: {
-        "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "Content-Type": "application/json",
-      },
+    const scrapeUrl = `${SUPADATA_BASE}/web/scrape?url=${encodeURIComponent(url)}`;
+    logDebug(JSON.stringify({ step: "supadata_web_scrape_call", url }));
+    const res = await fetch(scrapeUrl, {
+      headers: { "x-api-key": SUPADATA_API_KEY },
     });
-    clearTimeout(timer);
-
-    logDebug(JSON.stringify({ step: "yt_rapidapi_response", status: res.status, ok: res.ok, ms: Date.now() - t0 }));
-
-    if (res.ok) {
-      const raw = await res.text();
-      logDebug(JSON.stringify({ step: "yt_rapidapi_body", bodyLength: raw.length, preview: raw.slice(0, 200) }));
-      let json: any;
-      try { json = JSON.parse(raw); } catch { json = null; }
-      if (json) {
-        const segments = Array.isArray(json) ? json : (json?.content || json?.transcript || json?.data || []);
-        if (Array.isArray(segments) && segments.length > 0) {
-          const text = segments.map((s: any) => s.text || s.snippet || "").filter(Boolean).join(" ").trim();
-          if (text.length > 50) {
-            logDebug(JSON.stringify({ step: "yt_rapidapi_ok", chars: text.length, ms: Date.now() - t0 }));
-            return { title: json?.title || `YouTube: ${videoId}`, transcript: text };
-          }
-          logDebug(JSON.stringify({ step: "yt_rapidapi_short", textLength: text.length }));
-        } else {
-          logDebug(JSON.stringify({ step: "yt_rapidapi_no_segments", jsonKeys: Object.keys(json || {}) }));
-        }
-      }
+    if (!res.ok) {
+      const body = await res.text();
+      logDebug(JSON.stringify({ step: "supadata_web_scrape_error", status: res.status, body: body.slice(0, 200) }));
+      return null;
     }
+    const data = await res.json();
+    const content = data.content || "";
+    const title = data.name || data.description || url;
+    logDebug(JSON.stringify({ step: "supadata_web_scrape_ok", chars: content.length, title: (title || "").slice(0, 80) }));
+    return { title, content };
   } catch (e) {
-    logDebug(JSON.stringify({ step: "yt_rapidapi_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
+    logDebug(JSON.stringify({ step: "supadata_web_scrape_error", error: e instanceof Error ? e.message : String(e) }));
+    return null;
   }
-
-  // ── Method 2: TubeText ──
-  try {
-    const apiUrl = `https://tubetext.vercel.app/youtube/transcript?video_id=${videoId}`;
-    logDebug(JSON.stringify({ step: "yt_tubetext_call", apiUrl }));
-    const controller2 = new AbortController();
-    const timer2 = setTimeout(() => controller2.abort(), 10000);
-    const apiRes = await fetch(apiUrl, { signal: controller2.signal, headers: { "User-Agent": "LumenAgents/1.0" } });
-    clearTimeout(timer2);
-    logDebug(JSON.stringify({ step: "yt_tubetext_response", status: apiRes.status, ms: Date.now() - t0 }));
-    if (apiRes.ok) {
-      const json: any = await apiRes.json();
-      const fullText = json?.success && json.data && typeof json.data.full_text === "string" ? json.data.full_text.trim() : "";
-      if (fullText.length > 50) {
-        logDebug(JSON.stringify({ step: "yt_tubetext_ok", chars: fullText.length, ms: Date.now() - t0 }));
-        return { title: json.data.details?.title || `YouTube: ${videoId}`, transcript: fullText };
-      }
-      logDebug(JSON.stringify({ step: "yt_tubetext_empty", textLength: fullText.length }));
-    }
-  } catch (e) {
-    logDebug(JSON.stringify({ step: "yt_tubetext_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
-  }
-
-  // ── Method 3: HTML scraping ──
-  try {
-    const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    logDebug(JSON.stringify({ step: "yt_html_call", pageUrl }));
-    const controller3 = new AbortController();
-    const timer3 = setTimeout(() => controller3.abort(), 12000);
-    const res = await fetch(pageUrl, {
-      signal: controller3.signal,
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9" },
-    });
-    clearTimeout(timer3);
-    const html = await res.text();
-    logDebug(JSON.stringify({ step: "yt_html_fetched", htmlLength: html.length, ms: Date.now() - t0 }));
-    const titleMatch = html.match(/<title>(.*?)<\/title>/);
-    const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : `YouTube: ${videoId}`;
-    const captionMatch = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
-    if (captionMatch) {
-      const tracks = JSON.parse(captionMatch[1]);
-      logDebug(JSON.stringify({ step: "yt_html_tracks", trackCount: tracks.length }));
-      if (tracks.length > 0) {
-        const controller4 = new AbortController();
-        const timer4 = setTimeout(() => controller4.abort(), 8000);
-        const captionRes = await fetch(tracks[0].baseUrl, { signal: controller4.signal });
-        clearTimeout(timer4);
-        const captionXml = await captionRes.text();
-        const texts: string[] = [];
-        const regex = /<text[^>]*>([\s\S]*?)<\/text>/g;
-        let m2: RegExpExecArray | null;
-        while ((m2 = regex.exec(captionXml)) !== null) {
-          const cleaned = m2[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-          if (cleaned) texts.push(cleaned);
-        }
-        const fullText = texts.join(" ");
-        if (fullText.length > 50) {
-          logDebug(JSON.stringify({ step: "yt_html_ok", chars: fullText.length, ms: Date.now() - t0 }));
-          return { title, transcript: fullText };
-        }
-        logDebug(JSON.stringify({ step: "yt_html_short", textLength: fullText.length }));
-      }
-    } else {
-      logDebug(JSON.stringify({ step: "yt_html_no_captions", ms: Date.now() - t0 }));
-    }
-  } catch (e) {
-    logDebug(JSON.stringify({ step: "yt_html_error", error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 }));
-  }
-
-  logDebug(JSON.stringify({ step: "yt_all_failed", videoId, totalMs: Date.now() - t0 }));
-  return null;
 }
 
 // ─── Deno serve ───────────────────────────────────────────────────────────────
@@ -858,12 +851,13 @@ Deno.serve(async (req) => {
     console.log("[indexKnowledgeBase] function invoked v1.3");
 
     base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) {
-      debugLogs.push(JSON.stringify({ step: "auth_failed", _t: Date.now() }));
-      return Response.json({ error: "Unauthorized", debug: debugLogs }, { status: 401 });
+    const user = await base44.auth.me().catch(() => null);
+    if (user) {
+      debugLogs.push(JSON.stringify({ step: "auth_ok", user: user.email || "unknown", _t: Date.now() }));
+    } else {
+      // Allow KB indexing from public app flows where invoke() has no user context.
+      debugLogs.push(JSON.stringify({ step: "auth_missing_continue_service_role", _t: Date.now() }));
     }
-    debugLogs.push(JSON.stringify({ step: "auth_ok", user: user.email || "unknown", _t: Date.now() }));
 
     if (!KIMI_API_KEY || KIMI_API_KEY.trim() === "") {
       console.warn("indexKnowledgeBase: KIMI_API_KEY not set — LLM-based indexing unavailable, but light indexing (text extraction, YouTube) will still work");
@@ -872,7 +866,17 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     kbId = body.kbId;
-    debugLogs.push(JSON.stringify({ step: "got_kbId", kbId, _t: Date.now() }));
+    const expectedFileCount = Number(body.expectedFileCount || 0);
+    const expectedPendingCount = Number(body.expectedPendingCount || 0);
+    const filesSnapshot = Array.isArray(body.filesSnapshot) ? body.filesSnapshot : null;
+    debugLogs.push(JSON.stringify({
+      step: "got_kbId",
+      kbId,
+      expectedFileCount,
+      expectedPendingCount,
+      filesSnapshotCount: filesSnapshot?.length || 0,
+      _t: Date.now()
+    }));
     if (!kbId || typeof kbId !== "string") {
       return Response.json({ error: "kbId is required", debug: debugLogs }, { status: 400 });
     }
@@ -890,34 +894,77 @@ Deno.serve(async (req) => {
     debugLogs.push(JSON.stringify({ step: "kb_loaded", kbId, kbName: kb.name, totalFiles: files.length, fileDetails: files.map((f: any) => ({ name: f.name, type: f.type, url: f.url?.slice(0, 80), processed: f.processed, hasInlineText: typeof f.inline_text === "string" })), _t: Date.now() }));
     await base44.asServiceRole.entities.KnowledgeBase.update(kbId, { debug_logs: [...debugLogs] }).catch(() => {});
 
-    let indexableFiles = files.filter((f: any) => {
+    const hasBuiltTree = (f: any) =>
+      !!(f.index_tree?.root && Array.isArray(f.index_tree?.paragraphs) && f.index_tree.paragraphs.length > 0);
+
+    const isIndexableFile = (f: any) => {
       const type = getFileType(f);
       const isIndexable = (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
       logDebug(`[KB_DEBUG] File check: name="${f.name}", type="${f.type}", derivedType="${type}", hasUrl=${!!f.url}, typeof inline_text="${typeof f.inline_text}", processed=${f.processed}, isIndexable=${isIndexable}`);
       return isIndexable;
-    });
+    };
 
-    // Retry once if no indexable files found (might be DB lag)
-    if (indexableFiles.length === 0) {
-      logDebug(`[KB_DEBUG] No indexable files found initially. Waiting 1.5s for DB sync...`);
-      await new Promise(r => setTimeout(r, 1500));
+    const countPendingFiles = (list: any[]) =>
+      list.filter((f: any) => isIndexableFile(f) && !hasBuiltTree(f)).length;
+
+    if (filesSnapshot && filesSnapshot.length > 0) {
+      const snapshotPendingCount = countPendingFiles(filesSnapshot);
+      const dbPendingCount = countPendingFiles(files);
+      const shouldUseSnapshot =
+        filesSnapshot.length > files.length ||
+        snapshotPendingCount > dbPendingCount ||
+        (expectedFileCount > 0 && filesSnapshot.length >= expectedFileCount) ||
+        (expectedPendingCount > 0 && snapshotPendingCount >= expectedPendingCount);
+
+      if (shouldUseSnapshot) {
+        files = filesSnapshot;
+        logDebug(`[KB_DEBUG] Using client filesSnapshot as source of truth: dbFiles=${kb.files?.length || 0}, snapshotFiles=${filesSnapshot.length}, dbPending=${dbPendingCount}, snapshotPending=${snapshotPendingCount}`);
+      }
+    }
+
+    let indexableFiles = files.filter(isIndexableFile);
+    let pendingFiles = indexableFiles.filter((f: any) => !hasBuiltTree(f));
+
+    let syncAttempt = 0;
+    while (
+      syncAttempt < 6 &&
+      (
+        (expectedFileCount > 0 && files.length < expectedFileCount) ||
+        (expectedPendingCount > 0 && pendingFiles.length < expectedPendingCount)
+      )
+    ) {
+      syncAttempt += 1;
+      logDebug(`[KB_DEBUG] Waiting for fresh KB state (attempt ${syncAttempt}/6): files=${files.length}/${expectedFileCount}, pending=${pendingFiles.length}/${expectedPendingCount}`);
+      await new Promise(r => setTimeout(r, 1200));
       const retryList = await base44.asServiceRole.entities.KnowledgeBase.filter({ id: kbId });
       if (retryList?.length) {
         kb = retryList[0];
         files = kb.files || [];
-        indexableFiles = files.filter((f: any) => {
-          const type = getFileType(f);
-          const isIndexable = (f.url || typeof f.inline_text === "string") && type && INDEXABLE_TYPES.includes(type);
-          logDebug(`[KB_DEBUG] Retry File check: name="${f.name}", type="${f.type}", derivedType="${type}", hasUrl=${!!f.url}, typeof inline_text="${typeof f.inline_text}", processed=${f.processed}, isIndexable=${isIndexable}`);
-          return isIndexable;
-        });
+        indexableFiles = files.filter(isIndexableFile);
+        pendingFiles = indexableFiles.filter((f: any) => !hasBuiltTree(f));
       }
     }
 
-    logDebug(`[KB_DEBUG] kbId=${kbId}, total files=${files.length}, indexableFiles=${indexableFiles.length}`);
+    logDebug(`[KB_DEBUG] kbId=${kbId}, total files=${files.length}, indexableFiles=${indexableFiles.length}, pendingFiles=${pendingFiles.length}`);
 
     if (indexableFiles.length === 0) {
       logStepStructured("index_skip", { kbId, reason: "no_indexable_files", totalFiles: files.length });
+      await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
+        processing: false,
+        index_status: "succeeded",
+        index_progress: 100,
+        last_error: "",
+      });
+      return Response.json({ ok: true, indexed: false, debug: debugLogs });
+    }
+
+    if (pendingFiles.length === 0) {
+      logStepStructured("index_skip", {
+        kbId,
+        reason: "no_pending_files",
+        totalFiles: files.length,
+        indexableFiles: indexableFiles.length,
+      });
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         processing: false,
         index_status: "succeeded",
@@ -932,6 +979,7 @@ Deno.serve(async (req) => {
       kbName: kb.name,
       totalFiles: files.length,
       indexableCount: indexableFiles.length,
+      pendingCount: pendingFiles.length,
       status: "indexing",
     });
     await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
@@ -947,6 +995,8 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     let totalKbCost = 0;
 
+    const totalToProcess = pendingFiles.length;
+
     for (let i = 0; i < updatedFiles.length; i++) {
       const file = updatedFiles[i];
       const fileType = getFileType(file);
@@ -955,9 +1005,8 @@ Deno.serve(async (req) => {
         logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it lacks url/inline_text or has invalid fileType=${fileType}`);
         continue;
       }
-      if (file.processed && file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0) {
+      if (hasBuiltTree(file)) {
         logDebug(`[KB_DEBUG] Skipping file "${file.name}" because it is already processed.`);
-        completed += 1;
         continue;
       }
 
@@ -966,15 +1015,27 @@ Deno.serve(async (req) => {
         logDebug(`[KB_DEBUG] Start processing file "${file.name}"...`);
         let text: string;
 
-        if (fileType === "youtube" && file.url) {
-          logDebug(`[KB_DEBUG] YouTube source detected, fetching transcript for "${file.url}"...`);
-          const ytResult = await fetchYouTubeTranscriptForIndexing(file.url, logDebug);
-          if (ytResult && ytResult.transcript.length > 0) {
-            text = ytResult.transcript;
-            updatedFiles[i] = { ...updatedFiles[i], name: ytResult.title || file.name, inline_text: text };
-            logStepStructured("file_fetched", { fileName: file.name, source: "youtube_transcript", textLength: text.length });
+        if (MEDIA_FILE_TYPES.includes(fileType) && file.url) {
+          logDebug(`[KB_DEBUG] Media source (${fileType}) detected, fetching transcript for "${file.url}"...`);
+          const mediaResult = await fetchSupadataTranscript(file.url, logDebug);
+          if (mediaResult && mediaResult.transcript.length > 0) {
+            text = mediaResult.transcript;
+            const newName = mediaResult.title || file.name;
+            updatedFiles[i] = { ...updatedFiles[i], name: newName, inline_text: text };
+            logStepStructured("file_fetched", { fileName: newName, source: `supadata_${mediaResult.platform}`, textLength: text.length });
           } else {
-            throw new Error(`Could not fetch YouTube transcript for ${file.url}`);
+            throw new Error(`Could not fetch transcript for ${file.url} via Supadata`);
+          }
+        } else if (fileType === "web" && file.url) {
+          logDebug(`[KB_DEBUG] Web source detected, scraping "${file.url}"...`);
+          const webResult = await fetchSupadataWebScrape(file.url, logDebug);
+          if (webResult && webResult.content.length > 0) {
+            text = webResult.content;
+            const newName = webResult.title || file.name;
+            updatedFiles[i] = { ...updatedFiles[i], name: newName, inline_text: text };
+            logStepStructured("file_fetched", { fileName: newName, source: "supadata_web", textLength: text.length });
+          } else {
+            throw new Error(`Could not scrape content from ${file.url} via Supadata`);
           }
         } else if (typeof file.inline_text === "string" && file.inline_text.trim().length > 0) {
           logDebug(`[KB_DEBUG] Using inline_text for "${file.name}" (${file.inline_text.length} chars)`);
@@ -1066,13 +1127,13 @@ Deno.serve(async (req) => {
       }
 
       completed += 1;
-      const progress = Math.round((completed / indexableFiles.length) * 100);
-      logStepStructured("progress", { completed, total: indexableFiles.length, progress, indexing: completed < indexableFiles.length });
+      const progress = Math.round((completed / totalToProcess) * 100);
+      logStepStructured("progress", { completed, total: totalToProcess, progress, indexing: completed < totalToProcess });
 
       await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
         files: updatedFiles,
-        processing: completed < indexableFiles.length,
-        index_status: completed < indexableFiles.length ? "indexing" : "succeeded",
+        processing: completed < totalToProcess,
+        index_status: completed < totalToProcess ? "indexing" : "succeeded",
         index_progress: progress,
         last_error: errors.length > 0 ? errors.join("; ") : "",
       });
@@ -1085,10 +1146,17 @@ Deno.serve(async (req) => {
     logStepStructured("index_done", {
       kbId,
       indexed,
-      completed: indexableFiles.length,
+      completed: totalToProcess,
       cost: totalKbCost,
       status: "succeeded",
       errors: errors.length > 0 ? errors : undefined,
+    });
+    await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, {
+      files: updatedFiles,
+      processing: false,
+      index_status: "succeeded",
+      index_progress: 100,
+      last_error: errors.length > 0 ? errors.join("; ") : "",
     });
     return Response.json({ ok: true, indexed, cost: totalKbCost, debug: debugLogs, v: "1.2" });
   } catch (error) {

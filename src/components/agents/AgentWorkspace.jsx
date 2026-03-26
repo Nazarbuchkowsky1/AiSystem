@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { logStep, logStepJSON } from "@/lib/clientLogger";
 import {
   ArrowLeft, Clock, Zap, Brain, Send, Square, Plus, Mic, Bot,
-  Loader2, X, FileText, Code2, Check, Trash2, Copy, BookOpen
+  Loader2, X, FileText, Code2, Check, Trash2, Copy, BookOpen,
+  ChevronDown, ChevronRight, Search, Sparkles, Database, Youtube
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import AgentSourcesPanel from "./AgentSourcesPanel";
@@ -129,6 +130,169 @@ function SegmentedSpinner() {
   );
 }
 
+function LiveActivity({ mode, hasKb, startTime }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Date.now() - startTime), 400);
+    return () => clearInterval(id);
+  }, [startTime]);
+
+  const steps = React.useMemo(() => {
+    const s = [];
+    if (mode === "thinking") {
+      s.push({ id: "reason", label: "Reasoning through the problem", delay: 0 });
+    } else {
+      s.push({ id: "process", label: "Processing request", delay: 0 });
+    }
+    if (hasKb) {
+      s.push({ id: "kb", label: "Searching knowledge base", delay: 1400 });
+      s.push({ id: "analyze", label: "Analyzing sources", delay: 4000 });
+    }
+    s.push({ id: "generate", label: "Writing response", delay: hasKb ? 7000 : 2200 });
+    return s;
+  }, [mode, hasKb]);
+
+  const visible = steps.filter(s => elapsed >= s.delay);
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: 0,
+      background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18,
+      padding: "12px 16px", maxWidth: "68%",
+    }}>
+      {visible.map((step, i) => {
+        const isActive = i === visible.length - 1;
+        const justAppeared = elapsed - step.delay < 500;
+        return (
+          <div key={step.id} style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "3px 0",
+            opacity: justAppeared ? 0 : 1,
+            transform: justAppeared ? "translateY(4px)" : "translateY(0)",
+            transition: "opacity 0.4s ease, transform 0.4s ease",
+          }}>
+            {isActive
+              ? <Loader2 style={{ width: 12, height: 12, color: "#f97316", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+              : <Check style={{ width: 12, height: 12, color: "#4ade80", flexShrink: 0 }} />
+            }
+            <span style={{ fontSize: 12, color: isActive ? "#999" : "#666", transition: "color 0.3s" }}>{step.label}</span>
+            {!isActive && <span style={{ fontSize: 10, color: "#444", marginLeft: "auto" }}>
+              {((steps[i + 1]?.delay ?? elapsed) - step.delay) >= 1000
+                ? `${(((steps[i + 1]?.delay ?? elapsed) - step.delay) / 1000).toFixed(1)}s`
+                : ""}
+            </span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const ACTIVITY_ICON_MAP = {
+  kb: Database,
+  search: Search,
+  generate: Sparkles,
+  yt: Youtube,
+  default: Check,
+};
+
+function buildActivityFromProcessLog(processLog) {
+  if (!processLog || !Array.isArray(processLog) || processLog.length < 2) return null;
+  const steps = [];
+  const t0 = processLog[0]?._t || 0;
+  let tEnd = t0;
+
+  for (const e of processLog) {
+    if (e._t > tEnd) tEnd = e._t;
+    switch (e.step) {
+      case "kb_loaded": {
+        const fc = e.indexedFilesCount || e.indexedFileCount || 0;
+        if (fc > 0)
+          steps.push({ icon: "kb", text: `Loaded ${fc} source${fc > 1 ? "s" : ""}` });
+        break;
+      }
+      case "history_summarize_done":
+        steps.push({ icon: "default", text: "Summarized conversation history" });
+        break;
+      case "query_decomposition_done":
+        if (e.count > 1)
+          steps.push({ icon: "search", text: `Decomposed into ${e.count} sub-questions` });
+        break;
+      case "full_context_injected":
+        steps.push({ icon: "kb", text: `Injected ${e.documentsIncluded} document${e.documentsIncluded > 1 ? "s" : ""} as context` });
+        break;
+      case "evidence_packed":
+        steps.push({ icon: "search", text: `Retrieved ${e.documentsIncluded} relevant section${e.documentsIncluded > 1 ? "s" : ""}` });
+        break;
+      case "rerank_done":
+        steps.push({ icon: "search", text: "Reranked evidence by relevance" });
+        break;
+      case "youtube_scraper_result":
+      case "media_scraper_result":
+        steps.push({ icon: "yt", text: `Fetched transcript: ${(e.title || "video").substring(0, 50)}` });
+        break;
+      case "llm_call_done": {
+        const tokens = (e.promptTokens || 0) + (e.outputTokens || 0);
+        const model = e.model === "gemini" ? "Gemini" : "Kimi";
+        steps.push({ icon: "generate", text: `Generated via ${model}${tokens > 0 ? ` (${tokens} tokens)` : ""}` });
+        break;
+      }
+      case "structure_retry_done":
+        steps.push({ icon: "generate", text: "Restructured for clarity" });
+        break;
+    }
+  }
+  if (!steps.length) return null;
+  return { steps, totalMs: tEnd - t0 };
+}
+
+function ActivityHistory({ activity }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!activity || !activity.steps?.length) return null;
+
+  const totalSec = (activity.totalMs / 1000).toFixed(1);
+  const count = activity.steps.length;
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "none", border: "none", cursor: "pointer",
+          padding: "4px 0", color: "#666", fontSize: 11, fontWeight: 500,
+          transition: "color 0.2s",
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = "#999"}
+        onMouseLeave={e => e.currentTarget.style.color = "#666"}
+      >
+        {expanded
+          ? <ChevronDown style={{ width: 12, height: 12 }} />
+          : <ChevronRight style={{ width: 12, height: 12 }} />
+        }
+        <span>Activity · {totalSec}s · {count} step{count > 1 ? "s" : ""}</span>
+      </button>
+      <div style={{
+        maxHeight: expanded ? 300 : 0,
+        overflow: "hidden",
+        transition: "max-height 0.3s ease",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "4px 0 4px 6px" }}>
+          {activity.steps.map((step, i) => {
+            const IconComp = ACTIVITY_ICON_MAP[step.icon] || Check;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#777" }}>
+                <IconComp style={{ width: 10, height: 10, color: "#4ade80", flexShrink: 0 }} />
+                <span>{step.text}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentWorkspace({ agent, onBack }) {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState([]);
@@ -153,6 +317,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [waveBarCount, setWaveBarCount] = useState(60);
   const [pendingTranscript, setPendingTranscript] = useState(null);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const [liveActivityStart, setLiveActivityStart] = useState(null);
   const copiedTimeoutRef = useRef(null);
 
   const messagesEndRef = useRef(null);
@@ -482,7 +647,11 @@ export default function AgentWorkspace({ agent, onBack }) {
       if (m.citations) {
         try { citations = typeof m.citations === "string" ? JSON.parse(m.citations) : m.citations; } catch { /* ignore */ }
       }
-      return { role: m.role || "user", content: m.content || "", citations, createdAt: m.created_date || m.created_at };
+      let activity = null;
+      if (m.activity) {
+        try { activity = typeof m.activity === "string" ? JSON.parse(m.activity) : m.activity; } catch { /* ignore */ }
+      }
+      return { role: m.role || "user", content: m.content || "", citations, activity, createdAt: m.created_date || m.created_at };
     });
     setMessages(chronological);
     setCurrentConversationId(convo.id);
@@ -541,6 +710,7 @@ export default function AgentWorkspace({ agent, onBack }) {
   const stopGeneration = () => {
     if (abortControllerRef.current) { abortControllerRef.current.abort(); abortControllerRef.current = null; }
     setIsLoading(false);
+    setLiveActivityStart(null);
     try {
       sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
     } catch (_) {}
@@ -578,6 +748,7 @@ export default function AgentWorkspace({ agent, onBack }) {
     const newMessages = [...messages, { role: "user", content: displayContent, createdAt: now }];
     setMessages(newMessages);
     setIsLoading(true);
+    setLiveActivityStart(Date.now());
     logStep("Agent", "handleSend: messages count", newMessages.length);
 
     abortControllerRef.current = new AbortController();
@@ -639,6 +810,9 @@ export default function AgentWorkspace({ agent, onBack }) {
             const ext = af.file.name.split(".").pop()?.toLowerCase() || "";
             fileSources.push({
               name: af.file.name,
+              source_type: "upload",
+              file_path: uploadRes.file_url,
+              source_url: "",
               url: uploadRes.file_url,
               type: ext,
             });
@@ -654,47 +828,69 @@ export default function AgentWorkspace({ agent, onBack }) {
 
     let res;
     try {
+      const invokePayload = {
+        messages: newMessages,
+        agent: {
+          name: agent.name,
+          description: agent.description || "",
+          system_instructions: agent.system_instructions || agent.system_prompt || "",
+          knowledge_base_ids: kbIds,
+          tools: agent.tools || [],
+          model: agent.model === "gemini" ? "gemini" : "kimi",
+        },
+        mode,
+        fileSources,
+        isVoiceMessage,
+      };
+      logStepJSON("Agent", "agentChat_invoke_start", {
+        messagesCount: newMessages.length,
+        lastUserMsg: (newMessages[newMessages.length - 1]?.content || "").substring(0, 150),
+        model: invokePayload.agent.model,
+        mode,
+        kbIds,
+        toolCount: (agent.tools || []).length,
+        fileSourceCount: fileSources.length,
+        hasSystemInstructions: !!(agent.system_instructions || agent.system_prompt),
+      });
       try {
-        logStep("Agent", "agentChat.invoke: start", { messages: newMessages.length, fileSources: fileSources.length });
-        console.log("[AgentClient] Calling agentChat with messages:", newMessages.length, "files:", fileSources.length);
-        res = await base44.functions.invoke("agentChat", {
-          messages: newMessages,
-          agent: {
-            name: agent.name,
-            description: agent.description || "",
-            system_instructions: agent.system_instructions || agent.system_prompt || "",
-            knowledge_base_ids: kbIds,
-            tools: agent.tools || [],
-            model: agent.model === "gemini" ? "gemini" : "kimi",
-          },
-          mode,
-          fileSources,
-          isVoiceMessage,
-        });
+        const t0 = Date.now();
+        res = await base44.functions.invoke("agentChat", invokePayload);
+        logStepJSON("Agent", "agentChat_invoke_done", { durationMs: Date.now() - t0 });
       } finally {
         try {
           sessionStorage.removeItem(AGENT_LOADING_CID_KEY);
         } catch (_) {}
       }
-      logStep("Agent", "agentChat.invoke: done");
-      console.log("[AgentClient] agentChat raw result:", res);
+      if (res?.data?.error) {
+        logStepJSON("Agent", "agentChat_BACKEND_ERROR", { error: res.data.error });
+      }
       if (res?.data?.debug && Array.isArray(res.data.debug)) {
+        logStep("Agent", `Backend debug: ${res.data.debug.length} entries`);
         res.data.debug.forEach((line) => logStep("AgentDebug", line));
-        console.log("[AgentDebug] server debug log:\n" + res.data.debug.join("\n"));
       }
       if (res?.data?.processLog && Array.isArray(res.data.processLog)) {
+        logStep("Agent", `ProcessLog: ${res.data.processLog.length} steps`);
         res.data.processLog.forEach((entry) => {
-          const step = entry?.step ?? "process";
-          logStepJSON("Agent", step, entry);
+          logStepJSON("Process", entry?.step ?? "process", entry);
         });
       }
       const response = res?.data?.response || "Error generating response.";
       const responseCost = Number(res?.data?.cost) || 0;
       const responseCitations = res?.data?.citations || null;
-      logStep("Agent", "agentChat: response length", response?.length);
-      logStep("Agent", "agentChat: cost", responseCost);
-      setMessages(prev => [...prev, { role: "assistant", content: response, citations: responseCitations, createdAt: new Date().toISOString() }]);
+      const responseProcessLog = res?.data?.processLog || null;
+      const responseActivity = buildActivityFromProcessLog(responseProcessLog);
+      logStepJSON("Agent", "response_received", {
+        responseLength: response?.length,
+        cost: responseCost,
+        hasCitations: !!responseCitations,
+        citationCount: responseCitations?.length || 0,
+        hasActivity: !!responseActivity,
+        activitySteps: responseActivity?.steps?.length || 0,
+        responsePreview: response?.substring(0, 200),
+      });
+      setMessages(prev => [...prev, { role: "assistant", content: response, citations: responseCitations, activity: responseActivity, createdAt: new Date().toISOString() }]);
       setIsLoading(false);
+      setLiveActivityStart(null);
       setGeneratingPlaceholderForConvoId(null);
       abortControllerRef.current = null;
 
@@ -707,6 +903,7 @@ export default function AgentWorkspace({ agent, onBack }) {
             content: response,
             cost: responseCost,
             citations: responseCitations ? JSON.stringify(responseCitations) : undefined,
+            activity: responseActivity ? JSON.stringify(responseActivity) : undefined,
           });
           await base44.entities.Conversation.update(cid, {
             message_count: createdNewConversation ? 2 : undefined,
@@ -734,9 +931,9 @@ export default function AgentWorkspace({ agent, onBack }) {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       logStep("Agent", "handleSend: full flow done");
     } catch (e) {
-      logStep("Agent", "handleSend: error", String(e?.message || e));
-      console.error("Agent chat error:", e);
+      logStepJSON("Agent", "handleSend_CRASH", { error: String(e?.message || e), stack: e?.stack?.substring(0, 500) });
       setIsLoading(false);
+      setLiveActivityStart(null);
       setGeneratingPlaceholderForConvoId(null);
       abortControllerRef.current = null;
       setMessages(prev => [...prev, { role: "assistant", content: "Error generating response. Please try again.", createdAt: new Date().toISOString() }]);
@@ -1179,6 +1376,11 @@ export default function AgentWorkspace({ agent, onBack }) {
                   const isUser = msg.role === "user";
                   return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
+                    {msg.role === "assistant" && msg.activity && (
+                      <div style={{ maxWidth: "68%", width: "max-content", minWidth: 0 }}>
+                        <ActivityHistory activity={msg.activity} />
+                      </div>
+                    )}
                     <div style={{ maxWidth: "68%", width: "max-content", minWidth: 0, borderRadius: 18, padding: "10px 16px",
                       background: isUser ? "rgba(249,115,22,0.12)" : "#181818",
                       border: isUser ? "1px solid rgba(249,115,22,0.2)" : "1px solid #2a2a2a",
@@ -1234,10 +1436,18 @@ export default function AgentWorkspace({ agent, onBack }) {
                 })}
                 {(isLoading || generatingPlaceholderForConvoId === currentConversationId) && (
                   <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                    <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-                      <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
-                      <span style={{ fontSize: 12, color: "#555" }}>{mode === "thinking" ? "Thinking deeply..." : "Generating..."}</span>
-                    </div>
+                    {liveActivityStart ? (
+                      <LiveActivity
+                        mode={mode}
+                        hasKb={kbIds.length > 0}
+                        startTime={liveActivityStart}
+                      />
+                    ) : (
+                      <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                        <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
+                        <span style={{ fontSize: 12, color: "#555" }}>Generating...</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div ref={messagesEndRef} />

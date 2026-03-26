@@ -17,7 +17,7 @@ import {
 import TOOLS_LIST from "../shared/toolsList";
 import { logStep } from "@/lib/clientLogger";
 
-const BUILTIN_TOOL_NAMES = ["youtube_scraper"];
+const BUILTIN_TOOL_NAMES = ["media_scraper"];
 const AVAILABLE_TOOLS = TOOLS_LIST
   .filter(t => !BUILTIN_TOOL_NAMES.includes(t.name))
   .map(t => ({ name: t.name, label: t.label }));

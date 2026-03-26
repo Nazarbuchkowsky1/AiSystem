@@ -1,17 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
-import TranscriptClient from 'npm:youtube-transcript-api';
-import { DEFAULT_AGENT_SYSTEM_PROMPT } from './defaultSystemPrompt.ts';
+import { DEFAULT_AGENT_SYSTEM_PROMPT, FINAL_ENFORCEMENT } from './defaultSystemPrompt.ts';
 
 // ─── Kimi K2.5 via OpenRouter configuration ───────────────────────────────────
-// Secrets in Base44: KIMI_API_KEY (OpenRouter key for Kimi), GEMINI_API_KEY for Gemini.
 const KIMI_API_KEY = Deno.env.get("KIMI_API_KEY");
 const KIMI_MODEL = "moonshotai/kimi-k2.5";
 const KIMI_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-// ─── RapidAPI key (read from env in fetchYouTubeTranscript) ────────────────────
-// Reuse a single YouTube transcript client instance (from
-// https://github.com/0x6a69616e/youtube-transcript-api) across requests.
-const ytTranscriptClient: any = new (TranscriptClient as any)();
+// ─── Supadata API (transcript + metadata for YouTube, TikTok, Instagram, etc.) ──
+const SUPADATA_API_KEY = "sd_8ca36aab85b68983db4fcddfc3298d5d";
+const SUPADATA_BASE = "https://api.supadata.ai/v1";
 
 function formatTreeForRouting(doc: any, fileName: string): string {
   if (!doc || !doc.root) return "";
@@ -78,334 +75,123 @@ const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GE
 const GEMINI_INPUT_COST_PER_1M = 0.25;
 const GEMINI_OUTPUT_COST_PER_1M = 1.50;
 
-// ─── Built‑in Tool: YouTube Scraper ──────────────────────────────────────────
+// ─── Built‑in Tool: Media Scraper (via Supadata API) ────────────────────────
 
-const YT_PATTERNS = [
-  /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
+const MEDIA_URL_PATTERNS = [
+  { platform: "youtube", regex: /(?:youtube\.com\/(?:watch|embed|shorts|live)|youtu\.be)\//i },
+  { platform: "tiktok", regex: /tiktok\.com\//i },
+  { platform: "instagram", regex: /instagram\.com\//i },
+  { platform: "twitter", regex: /(?:twitter\.com|x\.com)\//i },
+  { platform: "facebook", regex: /(?:facebook\.com|fb\.com|fb\.watch)\//i },
 ];
 
-function extractYouTubeVideoIdFromText(text: string): { url: string; videoId: string } | null {
-  if (!text) return null;
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = urlRegex.exec(text)) !== null) {
-    const url = m[1];
-    for (const p of YT_PATTERNS) {
-      const pm = url.match(p);
-      if (pm?.[1]) {
-        return { url, videoId: pm[1] };
-      }
-    }
-  }
-  return null;
-}
-
-/** Fetch the real YouTube video title via the free oEmbed endpoint (no API key needed). */
-async function fetchYouTubeTitle(videoId: string): Promise<string> {
-  try {
-    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    const res = await fetch(oembedUrl);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.title && typeof data.title === "string" && data.title.trim()) {
-        return data.title.trim();
-      }
-    }
-  } catch (e) {
-    console.warn("[YT] oEmbed title fetch failed:", e instanceof Error ? e.message : String(e));
-  }
-  return "YouTube Video";
-}
-
-/** Normalize one transcript segment: API sometimes returns text: "[]" or empty. */
-function normalizeSegmentText(val: unknown): string {
-  if (val == null) return "";
-  const s = typeof val === "string" ? val.trim() : String(val).trim();
-  if (!s || s === "[]" || s === "{}") return "";
-  return s;
-}
-
-/** Clean RapidAPI/array transcript response into a single full text. Supports items with .text or .snippet. */
-function transcriptArrayToFullText(transcriptData: unknown): string {
-  if (!transcriptData || !Array.isArray(transcriptData)) return "";
-  const parts = transcriptData
-    .map((item: any) => {
-      if (!item) return "";
-      return normalizeSegmentText(item.text) || normalizeSegmentText(item.snippet) || (typeof item === "string" ? normalizeSegmentText(item) : "");
-    })
-    .filter(Boolean);
-  return parts.join(" ").trim();
-}
-
-/** Extract transcript array from various RapidAPI response shapes. */
-function extractTranscriptArray(json: any): unknown[] | null {
-  if (!json) return null;
-
-  const candidates: any[] = [];
-  // Common top-level fields
-  candidates.push(json.content, json.transcript, json.data);
-  // Nested shapes like { content: { transcript: [...] } }
-  if (json.content && typeof json.content === "object") {
-    candidates.push(json.content.transcript, json.content.data);
-  }
-  if (json.data && typeof json.data === "object") {
-    candidates.push(json.data.transcript);
-  }
-  // Finally consider the whole object/array itself
-  candidates.push(json);
-
-  for (const c of candidates) {
-    if (!c) continue;
-    if (Array.isArray(c)) return c;
-    if (Array.isArray((c as any).transcript)) return (c as any).transcript;
-  }
-
-  if (typeof json === "string" && json.trim()) {
-    return [{ text: json.trim() }];
-  }
-  return null;
-}
-
-async function fetchYouTubeTranscript(videoId: string, debug?: string[]) {
-  debug?.push(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
-  console.log(`[YT] fetchYouTubeTranscript start videoId=${videoId}`);
-  // 1) RapidAPI YouTube Transcripts — primary path when RAPIDAPI_KEY is configured.
-  const rapidApiKey = "6ef971ddbamsh4130c4842bf63f0p184c8cjsn3f5385bf53c6";
-  const keySource = `[YT] Using RapidAPI key: ${rapidApiKey.slice(0, 10)}...`;
-  debug?.push(keySource);
-  console.log(keySource);
-  if (rapidApiKey) {
-    try {
-      const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      // Match RapidAPI HTTP example: GET /youtube/transcript?url=<videoUrl>&chunkSize=500&text=false&lang=en
-      const apiUrl =
-        `https://youtube-transcripts.p.rapidapi.com/youtube/transcript?url=${encodeURIComponent(videoUrl)}&chunkSize=500&text=false&lang=en`;
-      const reqLog = `[YT] RapidAPI HTTP-style request videoId=${videoId} apiUrl=${apiUrl}`;
-      debug?.push(reqLog);
-      console.log(reqLog);
-      const res = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
-          "x-rapidapi-key": rapidApiKey,
-          "Content-Type": "application/json",
-        },
-      });
-      const statusLog = `[YT] RapidAPI response status=${res.status}`;
-      debug?.push(statusLog);
-      console.log(statusLog);
-      if (!res.ok) {
-        const errBody = await res.text();
-        const errLog = `[YT] RapidAPI error status=${res.status} body=${errBody.slice(0, 300)}`;
-        debug?.push(errLog);
-        console.error(errLog);
-      } else {
-        const textBody = await res.text();
-        const bodyLog = `[YT] RapidAPI raw body prefix=${textBody.slice(0, 160)}`;
-        debug?.push(bodyLog);
-        console.log(bodyLog);
-        let json: any;
-        try {
-          json = JSON.parse(textBody);
-        } catch (e) {
-          const parseErr = `[YT] RapidAPI JSON parse error: ${e instanceof Error ? e.message : String(e)}`;
-          debug?.push(parseErr);
-          console.error(parseErr);
-        }
-        const segments = json ? extractTranscriptArray(json) : null;
-        if (!segments || !Array.isArray(segments) || segments.length === 0) {
-          const noSeg = "[YT] RapidAPI returned no transcript segments";
-          debug?.push(noSeg);
-          console.warn(noSeg);
-        }
-        const fullText = segments ? transcriptArrayToFullText(segments) : "";
-        if (fullText && fullText.length > 0) {
-          const lang = json?.lang || json?.language || "auto";
-          const okLog = `[YT] RapidAPI transcript ok videoId=${videoId} lang=${lang} chars=${fullText.length}`;
-          debug?.push(okLog);
-          console.log(okLog);
-          return {
-            title: json?.title || await fetchYouTubeTitle(videoId),
-            videoId,
-            language: lang,
-            transcript: fullText,
-            lineCount: fullText.split(/\s+/).filter(Boolean).length,
-          };
-        }
-      }
-    } catch (e) {
-      const netErr = `[YT] RapidAPI transcript network/parse error: ${e instanceof Error ? e.message : String(e)}`;
-      debug?.push(netErr);
-      console.error(netErr);
-    }
-  } else {
-    const disabled = "[YT] RapidAPI disabled: RAPIDAPI_KEY / YOUTUBE_TRANSCRIPTS_RAPIDAPI_KEY not set in environment";
-    debug?.push(disabled);
-    console.warn(disabled);
-  }
-
-  // 2) Try github.com/0x6a69616e/youtube-transcript-api (npm:youtube-transcript-api)
-  try {
-    if (ytTranscriptClient?.ready) {
-      await ytTranscriptClient.ready;
-    }
-    const result = await ytTranscriptClient.getTranscript(videoId);
-    if (result && Array.isArray(result.tracks) && result.tracks.length > 0) {
-      const track = result.tracks[0];
-      const segments: any[] = Array.isArray(track.transcript) ? track.transcript : [];
-      const text = segments.map((s) => s.text).join(" ").trim();
-      if (text.length > 0) {
-        return {
-          title: result.title || "YouTube Video",
-          videoId,
-          language: track.language || "unknown",
-          transcript: text,
-          lineCount: segments.length,
-        };
-      }
-    }
-  } catch (e) {
-    console.error("youtube-transcript-api error, falling back to TubeText:", e);
-  }
-
-  // 3) Try free TubeText API (fast, JSON, no auth).
-  try {
-    const apiUrl = `https://tubetext.vercel.app/youtube/transcript?video_id=${videoId}`;
-    const apiRes = await fetch(apiUrl, {
-      headers: {
-        "User-Agent": "LumenAgents/1.0 (+https://openrouter.ai/)",
-      },
-    });
-    if (apiRes.ok) {
-      const json: any = await apiRes.json();
-      if (json?.success && json.data) {
-        const d = json.data;
-        const transcriptArray: string[] = Array.isArray(d.transcript) ? d.transcript : [];
-        const fullText: string =
-          typeof d.full_text === "string" && d.full_text.trim().length > 0
-            ? d.full_text
-            : transcriptArray.join(" ");
-        if (fullText && fullText.trim().length > 0) {
-          return {
-            title: d.details?.title || "YouTube Video",
-            videoId,
-            language: "unknown",
-            transcript: fullText.trim(),
-            lineCount: transcriptArray.length || fullText.split(/\s+/).length,
-          };
-        }
-      }
-    }
-  } catch (e) {
-    console.error("TubeText API error, falling back to HTML scraper:", e);
-  }
-
-  // 4) Second fallback: public FastAPI service youtube-transcript-api-tau-one.vercel.app
-  try {
-    const tauUrl = "https://youtube-transcript-api-tau-one.vercel.app/transcript";
-    const tauRes = await fetch(tauUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "LumenAgents/1.0 (+https://openrouter.ai/)",
-      },
-      body: JSON.stringify({
-        video_url: `https://www.youtube.com/watch?v=${videoId}`,
-      }),
-    });
-    if (tauRes.ok) {
-      const json: any = await tauRes.json();
-      const t = (json?.transcript || "").toString().trim();
-      if (t.length > 0) {
-        return {
-          title: json?.title || "YouTube Video",
-          videoId,
-          language: json?.language || "unknown",
-          transcript: t,
-          lineCount: t.split(/\s+/).length,
-        };
-      }
-    }
-  } catch (e) {
-    console.error("Tau-one YouTube transcript API error, falling back to HTML scraper:", e);
-  }
-
-  // 5) Final fallback: direct HTML + captionTracks scraping from YouTube.
-  const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const res = await fetch(pageUrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  });
-  const html = await res.text();
-
-  const titleMatch = html.match(/<title>(.*?)<\/title>/);
-  const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : "Unknown";
-
-  const captionMatch = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
-  if (!captionMatch) {
-    throw new Error("No captions found for this video. The video may not have subtitles enabled.");
-  }
-
-  const captionTracks = JSON.parse(captionMatch[1]);
-  if (!captionTracks || captionTracks.length === 0) {
-    throw new Error("No caption tracks available for this video.");
-  }
-
-  let track =
-    captionTracks.find((t: any) => t.languageCode === "en" && t.kind !== "asr") ||
-    captionTracks.find((t: any) => t.languageCode === "uk" && t.kind !== "asr") ||
-    captionTracks.find((t: any) => t.languageCode === "en") ||
-    captionTracks.find((t: any) => t.languageCode === "uk") ||
-    captionTracks.find((t: any) => t.kind !== "asr") ||
-    captionTracks[0];
-
-  const captionUrl = track.baseUrl;
-  const captionRes = await fetch(captionUrl);
-  const captionXml = await captionRes.text();
-
-  const lines: string[] = [];
-  const regex = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>(.*?)<\/text>/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(captionXml)) !== null) {
-    const text = match[3]
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/<[^>]+>/g, "")
-      .trim();
-    if (text) lines.push(text);
-  }
-
-  return {
-    title,
-    videoId,
-    language: track.languageCode,
-    transcript: lines.join(" "),
-    lineCount: lines.length,
-  };
-}
-
-function extractAllYouTubeIds(text: string): { url: string; videoId: string }[] {
+function extractAllMediaUrls(text: string): { url: string; platform: string }[] {
   if (!text) return [];
-  const urls: { url: string; videoId: string }[] = [];
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const results: { url: string; platform: string }[] = [];
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
   let m: RegExpExecArray | null;
   while ((m = urlRegex.exec(text)) !== null) {
-    const url = m[1];
-    for (const p of YT_PATTERNS) {
-      const pm = url.match(p);
-      if (pm?.[1]) {
-        urls.push({ url, videoId: pm[1] });
+    const rawUrl = m[1].replace(/[.,;:!?)]+$/, "");
+    for (const { platform, regex } of MEDIA_URL_PATTERNS) {
+      if (regex.test(rawUrl)) {
+        results.push({ url: rawUrl, platform });
         break;
       }
     }
   }
-  return urls;
+  return results;
+}
+
+async function fetchTranscriptViaSupadata(
+  url: string,
+  debug?: string[]
+): Promise<{
+  title: string;
+  transcript: string;
+  platform: string;
+  language: string;
+  lineCount: number;
+} | null> {
+  if (!SUPADATA_API_KEY) {
+    debug?.push("[Supadata] FATAL: SUPADATA_API_KEY is not configured — cannot fetch transcripts");
+    throw new Error("SUPADATA_API_KEY is not set. Configure it as an environment variable to enable media transcript fetching.");
+  }
+
+  const t0 = Date.now();
+  debug?.push(`[Supadata] Start transcript fetch for: ${url}`);
+
+  let title = "Video";
+  try {
+    const metaRes = await fetch(`${SUPADATA_BASE}/metadata?url=${encodeURIComponent(url)}`, {
+      headers: { "x-api-key": SUPADATA_API_KEY },
+    });
+    if (metaRes.ok) {
+      const meta = await metaRes.json();
+      title = meta.title || meta.description?.slice(0, 100) || "Video";
+      debug?.push(`[Supadata] Metadata OK: title="${title.slice(0, 60)}" platform=${meta.platform}`);
+    } else {
+      debug?.push(`[Supadata] Metadata failed: status=${metaRes.status}`);
+    }
+  } catch (e) {
+    debug?.push(`[Supadata] Metadata error: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    const tUrl = `${SUPADATA_BASE}/transcript?url=${encodeURIComponent(url)}&text=true&mode=auto`;
+    debug?.push(`[Supadata] Transcript call: ${tUrl}`);
+    const res = await fetch(tUrl, {
+      headers: { "x-api-key": SUPADATA_API_KEY },
+    });
+
+    if (res.status === 202) {
+      const { jobId } = await res.json();
+      debug?.push(`[Supadata] Async job started: ${jobId}`);
+      const deadline = Date.now() + 120000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1500));
+        const pollRes = await fetch(`${SUPADATA_BASE}/transcript/${jobId}`, {
+          headers: { "x-api-key": SUPADATA_API_KEY },
+        });
+        if (!pollRes.ok) {
+          debug?.push(`[Supadata] Poll HTTP error: ${pollRes.status}`);
+          throw new Error(`Supadata poll HTTP error: ${pollRes.status}`);
+        }
+        const job = await pollRes.json();
+        debug?.push(`[Supadata] Poll status=${job.status} elapsed=${Date.now() - t0}ms`);
+
+        if (job.status === "completed") {
+          const text = typeof job.content === "string" ? job.content : "";
+          if (!text.trim()) throw new Error("Supadata job completed but transcript is empty");
+          debug?.push(`[Supadata] Transcript OK (async): ${text.length} chars, ${Date.now() - t0}ms`);
+          return { title, transcript: text, platform: "video", language: job.lang || "auto", lineCount: text.split(/\s+/).length };
+        }
+        if (job.status === "failed") {
+          const errDetail = job.error?.message || job.error?.details || "unknown";
+          throw new Error(`Supadata transcript job failed: ${errDetail}`);
+        }
+      }
+      throw new Error(`Supadata transcript job timed out after ${Date.now() - t0}ms`);
+    }
+
+    if (!res.ok) {
+      const body = await res.text();
+      debug?.push(`[Supadata] Transcript error: status=${res.status} body=${body.slice(0, 200)}`);
+      throw new Error(`Supadata transcript error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = typeof data.content === "string" ? data.content : "";
+    if (text.length > 0) {
+      debug?.push(`[Supadata] Transcript OK (sync): ${text.length} chars, ${Date.now() - t0}ms`);
+      return { title, transcript: text, platform: "video", language: data.lang || "auto", lineCount: text.split(/\s+/).length };
+    }
+    debug?.push(`[Supadata] Transcript empty`);
+    throw new Error("Supadata returned empty transcript");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    debug?.push(`[Supadata] Error: ${msg}`);
+    throw new Error(msg);
+  }
 }
 
 // Build a very simple page index structure from inline transcript text so that
@@ -875,6 +661,15 @@ Deno.serve(async (req) => {
           });
           if (!kb.files?.length) continue;
 
+          const MEDIA_TYPES = ["youtube", "tiktok", "instagram", "twitter", "facebook", "media", "web"];
+          const TEXT_TYPES = [
+            "txt","md","csv","json","pdf",
+            "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
+            "java","php","swift","kt","html","css","scss",
+            "yaml","yml","xml","sh","bash","sql","toml","ini","env",
+            "xmind","docx","xlsx","xls","pptx","ppt",
+          ];
+
           for (const file of kb.files) {
             const hasTree = !!(file.index_tree?.root && Array.isArray(file.index_tree?.paragraphs) && file.index_tree.paragraphs.length > 0);
             const paragraphCount = hasTree ? file.index_tree.paragraphs.length : 0;
@@ -886,13 +681,46 @@ Deno.serve(async (req) => {
                 indexedFiles.push({ name: file.name, tree: treeText, doc: file.index_tree });
                 pushProcess("file_indexed_ok", { fileName: file.name, type: file.type, paragraphs: paragraphCount, chars: charCount, docDescription: file.index_tree.doc_description || "" });
               }
-            } else if (file.url && [
-              "txt","md","csv","json","pdf",
-              "js","ts","jsx","tsx","py","rb","go","rs","cpp","c","cs",
-              "java","php","swift","kt","html","css","scss",
-              "yaml","yml","xml","sh","bash","sql","toml","ini","env",
-              "xmind","docx","xlsx","xls","pptx","ppt",
-            ].includes(file.type)) {
+            } else if (MEDIA_TYPES.includes(file.type) && file.inline_text && file.inline_text.trim().length > 0) {
+              const inlineDoc = buildInlineTranscriptIndex(file.inline_text, file.name);
+              const treeText = formatTreeForRouting(inlineDoc, file.name);
+              if (treeText) {
+                indexedFiles.push({ name: file.name, tree: treeText, doc: inlineDoc });
+                pushProcess("file_media_inline_rebuilt", { fileName: file.name, chars: file.inline_text.length, paragraphs: inlineDoc.paragraphs?.length });
+              }
+            } else if (MEDIA_TYPES.includes(file.type) && file.url && !file.processed) {
+              pushProcess("file_media_unindexed", { fileName: file.name, type: file.type, url: file.url, reason: "media_not_indexed_yet_will_fetch_live" });
+              try {
+                const liveResult = await fetchTranscriptViaSupadata(file.url, debugLog);
+                if (liveResult && liveResult.transcript.length > 0) {
+                  const inlineDoc = buildInlineTranscriptIndex(liveResult.transcript, liveResult.title || file.name);
+                  const treeText = formatTreeForRouting(inlineDoc, liveResult.title || file.name);
+                  if (treeText) {
+                    indexedFiles.push({ name: liveResult.title || file.name, tree: treeText, doc: inlineDoc });
+                    pushProcess("file_media_live_indexed", { fileName: liveResult.title, chars: liveResult.transcript.length, paragraphs: inlineDoc.paragraphs?.length });
+                  }
+                  try {
+                    const updatedFile = {
+                      ...file,
+                      name: liveResult.title || file.name,
+                      processed: true,
+                      inline_text: liveResult.transcript,
+                      index_tree: inlineDoc,
+                      doc_description: inlineDoc.doc_description || "",
+                    };
+                    const updatedFiles = kb.files.map((f: any) => f.url === file.url ? updatedFile : f);
+                    await base44.asServiceRole.entities.KnowledgeBase.update(kb.id, { files: updatedFiles, processing: false, index_status: "succeeded" });
+                    pushProcess("file_media_persisted", { fileName: liveResult.title, kbId: kb.id });
+                  } catch (persistErr) {
+                    pushProcess("file_media_persist_error", { error: persistErr instanceof Error ? persistErr.message : String(persistErr) });
+                  }
+                } else {
+                  pushProcess("file_media_live_empty", { fileName: file.name, url: file.url });
+                }
+              } catch (liveErr) {
+                pushProcess("file_media_live_error", { fileName: file.name, error: liveErr instanceof Error ? liveErr.message : String(liveErr) });
+              }
+            } else if (file.url && TEXT_TYPES.includes(file.type)) {
               unindexedFiles.push({ name: file.name, url: file.url });
               pushProcess("file_unindexed", { fileName: file.name, type: file.type, processed: file.processed });
             } else {
@@ -1158,10 +986,14 @@ ${retrievedContext}`);
       }
     }
 
-    const BUILTIN_TOOL_NAMES = ["youtube_scraper"];
+    const BUILTIN_TOOL_NAMES = ["media_scraper"];
     const userTools = (agent.tools || []).filter((t: any) => t.enabled);
     const enabledToolNames = new Set(userTools.map((t: any) => t.name));
     for (const bt of BUILTIN_TOOL_NAMES) enabledToolNames.add(bt);
+    if (enabledToolNames.has("youtube_scraper")) {
+      enabledToolNames.delete("youtube_scraper");
+      enabledToolNames.add("media_scraper");
+    }
     const enabledTools = [...enabledToolNames].map(name => ({ name, enabled: true }));
     let toolContext = "";
 
@@ -1178,7 +1010,7 @@ ${retrievedContext}`);
         code_generator: "Generate code snippets and templates.",
         local_ai_bridge: "Connect to local AI models and services.",
         system_utility: "System maintenance and monitoring tools.",
-        youtube_scraper: "youtube_scraper(url) returns the video transcript and metadata for a given YouTube URL.",
+        media_scraper: "media_scraper(url) — extracts video transcript and metadata from YouTube, TikTok, Instagram, Twitter/X, and Facebook URLs.",
       };
 
       const toolsText = enabledTools
@@ -1190,44 +1022,77 @@ ${retrievedContext}`);
 
       systemParts.push(`\n## Your Tools\n${toolsText}`);
 
-      const hasYouTubeTool = enabledTools.some((t: any) => t.name === "youtube_scraper");
+      const hasMediaTool = enabledTools.some((t: any) => t.name === "media_scraper");
       const lastUserMessage = getLastHumanMessageText(messages);
-      if (hasYouTubeTool && lastUserMessage) {
-        const urls = extractAllYouTubeIds(lastUserMessage);
-        pushProcess("youtube_scraper_check", {
-          hasYouTubeTool: true,
-          urlsFoundInMessage: urls.length,
-          urls: urls.map(u => u.url),
+      if (hasMediaTool) {
+        const messageUrls = extractAllMediaUrls(lastUserMessage || "");
+
+        const fileSourceUrls: { url: string; platform: string }[] = [];
+        for (const fs of (fileSources || [])) {
+          const candidates = [fs?.url, fs?.sourceUrl, fs?.originalUrl, fs?.metadata?.url].filter(Boolean);
+          for (const candidate of candidates) {
+            for (const { platform, regex } of MEDIA_URL_PATTERNS) {
+              if (regex.test(candidate)) {
+                fileSourceUrls.push({ url: candidate, platform });
+                break;
+              }
+            }
+          }
+        }
+
+        const seen = new Set<string>();
+        const mediaUrls: { url: string; platform: string }[] = [];
+        for (const u of [...messageUrls, ...fileSourceUrls]) {
+          if (!seen.has(u.url)) {
+            seen.add(u.url);
+            mediaUrls.push(u);
+          }
+        }
+
+        pushProcess("media_scraper_check", {
+          hasMediaTool: true,
+          urlsFromMessage: messageUrls.length,
+          urlsFromFileSources: fileSourceUrls.length,
+          totalUniqueUrls: mediaUrls.length,
+          urls: mediaUrls.map(u => u.url),
         });
-        if (urls.length > 0) {
-          const limited = urls.slice(0, 3);
-          for (const yt of limited) {
-            const ytStart = Date.now();
+        if (mediaUrls.length > 0) {
+          const limited = mediaUrls.slice(0, 3);
+          for (const mu of limited) {
+            const scrapeStart = Date.now();
             try {
-              const ytResult = await fetchYouTubeTranscript(yt.videoId, debugLog);
+              const result = await fetchTranscriptViaSupadata(mu.url, debugLog);
+              if (!result) throw new Error("Supadata returned no transcript");
+
+              const inlineDoc = buildInlineTranscriptIndex(result.transcript, result.title);
+              const treeText = formatTreeForRouting(inlineDoc, result.title);
+              if (treeText) {
+                indexedFiles.push({ name: result.title, tree: treeText, doc: inlineDoc });
+              }
+
               const transcriptSnippet =
-                ytResult.transcript.length > 4000
-                  ? ytResult.transcript.slice(0, 4000) + "\n[transcript truncated]"
-                  : ytResult.transcript;
-              toolContext += `\n\n### YouTube Scraper result\nURL: ${yt.url}\nTitle: ${ytResult.title}\nLanguage: ${ytResult.language}\nLines: ${ytResult.lineCount}\n\nTranscript:\n${transcriptSnippet}`;
-              pushProcess("youtube_scraper_result", {
-                url: yt.url,
-                videoId: yt.videoId,
-                title: ytResult.title,
-                language: ytResult.language,
-                transcriptChars: ytResult.transcript.length,
-                lineCount: ytResult.lineCount,
-                durationMs: Date.now() - ytStart,
+                result.transcript.length > 4000
+                  ? result.transcript.slice(0, 4000) + "\n[transcript truncated]"
+                  : result.transcript;
+              toolContext += `\n\n### Media Scraper result\nURL: ${mu.url}\nPlatform: ${mu.platform}\nTitle: ${result.title}\nLanguage: ${result.language}\nWords: ${result.lineCount}\n\nTranscript:\n${transcriptSnippet}`;
+              pushProcess("media_scraper_result", {
+                url: mu.url,
+                platform: mu.platform,
+                title: result.title,
+                language: result.language,
+                transcriptChars: result.transcript.length,
+                lineCount: result.lineCount,
+                durationMs: Date.now() - scrapeStart,
               });
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : String(e);
-              console.error("YouTube scraper error:", errMsg);
-              toolContext += `\n\n### YouTube Scraper error\nTried to fetch transcript for a YouTube link (${yt.url}) in the user's question but got an error: ${errMsg}.\nYou should explain this limitation to the user.`;
-              pushProcess("youtube_scraper_error", {
-                url: yt.url,
-                videoId: yt.videoId,
+              console.error("Media scraper error:", errMsg);
+              toolContext += `\n\n### Media Scraper error\nTried to fetch transcript for ${mu.url} (${mu.platform}) but got an error: ${errMsg}.\nYou should explain this limitation to the user.`;
+              pushProcess("media_scraper_error", {
+                url: mu.url,
+                platform: mu.platform,
                 error: errMsg,
-                durationMs: Date.now() - ytStart,
+                durationMs: Date.now() - scrapeStart,
               });
             }
           }
@@ -1245,14 +1110,16 @@ ${retrievedContext}`);
     }
 
     if (mode === "thinking") {
-      systemParts.push("\n## Response Mode: Deep Thinking\nProvide thorough, detailed, well-structured responses. Think step by step.");
+      systemParts.push("\n## Response Mode: Deep thinking\nBefore answering, reason through the problem internally: consider multiple angles, check your logic, look for edge cases. Then give the RESULT of that thinking, not the thinking itself. The output should still be concise, structured, and human. Deeper reasoning does not mean longer text. It means a better answer.");
     } else {
-      systemParts.push("\n## Response Mode: Instant\nBe concise, direct, and helpful.");
+      systemParts.push("\n## Response Mode: Instant\nAnswer directly. Minimum viable response. No preamble.");
     }
 
     if (agent.system_instructions) {
-      systemParts.push(`\n## CREATOR INSTRUCTIONS — HIGHEST PRIORITY\nThe following instructions were set by the agent's creator. They OVERRIDE all rules above. Follow them exactly and literally. If they specify a language — respond ONLY in that language. If they specify a style or behavior — follow it, even if it contradicts the defaults above.\n\n${agent.system_instructions}`);
+      systemParts.push(`\n## Creator instructions\nThe agent's creator set these instructions. Follow them for topic, language, persona, and domain behavior. However, the 5 Absolute Rules (no AI openers, no AI closers, no filler, brevity, no AI vocabulary) always apply regardless.\n\n${agent.system_instructions}`);
     }
+
+    systemParts.push(`\n${FINAL_ENFORCEMENT}`);
 
     const systemInstruction = systemParts.join("\n");
 

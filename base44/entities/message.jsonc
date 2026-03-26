@@ -29,6 +29,10 @@
     "citations": {
       "type": "string",
       "description": "JSON-serialized array of citation sources used in the response"
+    },
+    "activity": {
+      "type": "string",
+      "description": "JSON-serialized activity timeline for the response (steps, durations)"
     }
   },
   "required": [

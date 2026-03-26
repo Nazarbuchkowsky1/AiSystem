@@ -4,11 +4,11 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AgentsPreloadGuard from '@/components/AgentsPreloadGuard';
+import Login from '@/pages/Login';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -19,9 +19,14 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, authError } = useAuth();
+  const location = useLocation();
 
-  // Same orange Lumen loader as Agents/Tools — one loading experience
+  if (location.pathname === '/login') {
+    if (isAuthenticated) return <Navigate to="/" replace />;
+    return <Login />;
+  }
+
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div
@@ -53,18 +58,10 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
-    }
+  if (!isAuthenticated || authError) {
+    return <Navigate to="/login" replace />;
   }
 
-  // Render the main app — one loader: prefetch Agents/KB on /Agents so no second loader on page
   return (
     <AgentsPreloadGuard>
       <Routes>

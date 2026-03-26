@@ -16,6 +16,11 @@ dist
 dist-ssr
 *.local
 
+# Server data
+server/data.sqlite
+server/uploads/*
+!server/uploads/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

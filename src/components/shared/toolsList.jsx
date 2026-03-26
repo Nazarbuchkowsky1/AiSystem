@@ -1,11 +1,11 @@
-import { Youtube } from "lucide-react";
+import { Video } from "lucide-react";
 
 const TOOLS_LIST = [
   {
-    name: "youtube_scraper",
-    label: "YouTube Scraper",
-    description: "Extract transcript text from any YouTube video.",
-    icon: Youtube,
+    name: "media_scraper",
+    label: "Media Scraper",
+    description: "Extract transcript from YouTube, TikTok, Instagram, Twitter/X, and Facebook videos.",
+    icon: Video,
     status: "active",
     runs: 0,
   },

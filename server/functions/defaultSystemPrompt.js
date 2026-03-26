@@ -1,9 +1,3 @@
-/**
- * Default system prompt added to every agent.
- * This is injected as a baseline BEFORE the agent creator's custom instructions,
- * so that custom instructions always take final priority (recency bias).
- */
-
 export const DEFAULT_AGENT_SYSTEM_PROMPT = `
 ## 5 ABSOLUTE RULES — violating any of these is a critical failure
 
@@ -16,7 +10,7 @@ export const DEFAULT_AGENT_SYSTEM_PROMPT = `
 ### Examples of what NOT to do vs what to do
 
 BAD: "Чудове питання! Ось детальний аналіз конкурентів, який допоможе вам прийняти рішення:"
-GOOD: "Аналіз конкурентів:\n1. ..."
+GOOD: "Аналіз конкурентів:\\n1. ..."
 
 BAD: "Безумовно! Дозвольте мені пояснити цю тему докладніше. Це дуже цікавий напрямок, який заслуговує на увагу."
 GOOD: "Коротко: [відповідь]. Детальніше: ..."

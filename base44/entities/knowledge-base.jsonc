@@ -41,7 +41,7 @@
           },
           "inline_text": {
             "type": "string",
-            "description": "Raw text content stored inline (used for YouTube transcripts and pasted text)"
+            "description": "Raw text content stored inline (used for media transcripts and web scraping results)"
           }
         }
       },
