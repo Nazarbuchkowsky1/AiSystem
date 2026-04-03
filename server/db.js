@@ -1,10 +1,15 @@
+import fs from 'fs';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, 'data.sqlite');
+const dataRoot = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+if (process.env.DATA_DIR) {
+  fs.mkdirSync(dataRoot, { recursive: true });
+}
+const DB_PATH = path.join(dataRoot, 'data.sqlite');
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');

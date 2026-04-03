@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -10,7 +11,8 @@ import uploadRoutes from './routes/upload.js';
 import functionRoutes from './routes/functions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
 
 const app = express();
 
@@ -29,6 +31,16 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Running on http://localhost:${PORT}`);
+const distDir = path.join(__dirname, '..', 'dist');
+const indexHtml = path.join(distDir, 'index.html');
+if (fs.existsSync(indexHtml)) {
+  app.use(express.static(distDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(indexHtml);
+  });
+}
+
+app.listen(PORT, HOST, () => {
+  console.log(`[Server] http://${HOST}:${PORT}`);
 });

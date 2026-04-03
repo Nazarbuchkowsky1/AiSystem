@@ -49,13 +49,14 @@ router.post('/telegram', async (req, res) => {
       return res.status(401).json({ error: 'Telegram auth expired' });
     }
     const telegramId = body.id;
+    const username = body.username != null ? String(body.username) : '';
     if (telegramId == null) {
       return res.status(400).json({ error: 'Missing Telegram id' });
     }
 
     let airtableRow;
     try {
-      airtableRow = await findAllowedTelegramUser(telegramId);
+      airtableRow = await findAllowedTelegramUser(username);
     } catch (e) {
       console.error('[Auth] Airtable:', e.message);
       return res.status(503).json({ error: 'User directory unavailable' });
@@ -65,7 +66,6 @@ router.post('/telegram', async (req, res) => {
     }
 
     const role = airtableRow.role === 'admin' ? 'admin' : 'user';
-    const username = body.username != null ? String(body.username) : '';
     const photoUrl = body.photo_url != null ? String(body.photo_url) : '';
     const displayName =
       [body.first_name, body.last_name].filter(Boolean).join(' ').trim() || username || `user_${telegramId}`;

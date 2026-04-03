@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -r \"node --watch server/index.js\" \"vite --host\"",
     "tunnel": "cloudflared tunnel --url http://127.0.0.1:5173",

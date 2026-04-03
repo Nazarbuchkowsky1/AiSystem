@@ -1,16 +1,12 @@
 /**
- * Піднімає npm run dev + публічний HTTPS через localtunnel (без власного домену).
- * Піддомен: TUNNEL_SUBDOMAIN у .env або автоматично з VITE_TELEGRAM_BOT_USERNAME.
+ * Піднімає npm run dev + публічний HTTPS (cloudflared якщо є, інакше localtunnel у дочірньому процесі з таймаутом).
  */
-import { spawn, exec as execCb } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { spawn, execSync, exec as execCb } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import readline from 'node:readline';
 import dotenv from 'dotenv';
-
-const require = createRequire(import.meta.url);
-const localtunnel = require('localtunnel');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -19,6 +15,8 @@ dotenv.config({ path: path.join(root, '.env') });
 
 const PORT = 5173;
 const HOST = '127.0.0.1';
+const LT_TIMEOUT_MS = 55000;
+const CF_TIMEOUT_MS = 60000;
 
 function sanitizeSubdomain(raw) {
   let s = String(raw || '')
@@ -68,32 +66,131 @@ function openBrowserSync(url) {
   }
 }
 
+function commandExists(cmd) {
+  try {
+    if (process.platform === 'win32') {
+      execSync(`where ${cmd}`, { stdio: 'ignore' });
+    } else {
+      execSync(`which ${cmd}`, { stdio: 'ignore' });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function tryCloudflaredTunnel() {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const child = spawn('cloudflared', ['tunnel', '--url', `http://${HOST}:${PORT}`], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      reject(new Error('cloudflared timeout'));
+    }, CF_TIMEOUT_MS);
+
+    const onChunk = (buf) => {
+      if (settled) return;
+      const s = buf.toString();
+      const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?/i);
+      if (m) {
+        settled = true;
+        clearTimeout(timer);
+        const url = m[0].replace(/\/$/, '');
+        child.stderr?.off('data', onChunk);
+        child.stdout?.off('data', onChunk);
+        resolve({ url, child, host: new URL(url).hostname, kind: 'cloudflared' });
+      }
+    };
+    child.stderr.on('data', onChunk);
+    child.stdout.on('data', onChunk);
+    child.on('error', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error('cloudflared not runnable'));
+    });
+    child.on('exit', (code) => {
+      if (settled) return;
+      if (code && code !== 0) {
+        settled = true;
+        clearTimeout(timer);
+        reject(new Error(`cloudflared exit ${code}`));
+      }
+    });
+  });
+}
+
+function tryLocaltunnelWorker(subArg) {
+  const worker = path.join(__dirname, 'lt-worker.cjs');
+  return new Promise((resolve, reject) => {
+    const args = [worker, String(PORT), subArg || 'none'];
+    const child = spawn(process.execPath, args, {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: { ...process.env },
+    });
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error('localtunnel timeout'));
+    }, LT_TIMEOUT_MS);
+
+    const rl = readline.createInterface({ input: child.stdout });
+    rl.on('line', (line) => {
+      const m = line.match(/^LUMEN_TUNNEL_URL=(.+)$/);
+      if (m) {
+        clearTimeout(timer);
+        rl.close();
+        const url = m[1].trim();
+        resolve({
+          url,
+          child,
+          host: new URL(url).hostname,
+          kind: 'localtunnel',
+        });
+      }
+    });
+    child.stderr.on('data', (d) => {
+      const t = d.toString();
+      const em = t.match(/^LUMEN_TUNNEL_ERR=(.+)$/m);
+      if (em) {
+        clearTimeout(timer);
+        reject(new Error(em[1]));
+      }
+    });
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      if (code === 2) reject(new Error('lt-worker failed'));
+    });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
 let devProc = null;
-let tunnelClient = null;
+let tunnelChild = null;
 
 function shutdown() {
-  if (tunnelClient) {
-    try {
-      tunnelClient.close();
-    } catch {
-      /* ignore */
-    }
-  }
-  if (devProc && !devProc.killed) {
-    devProc.kill('SIGTERM');
-  }
+  if (tunnelChild && !tunnelChild.killed) tunnelChild.kill('SIGTERM');
+  if (devProc && !devProc.killed) devProc.kill('SIGTERM');
   process.exit(0);
 }
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-devProc = spawn(npmCmd, ['run', 'dev'], {
+devProc = spawn('npm', ['run', 'dev'], {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env },
-  shell: false,
+  shell: true,
 });
 
 devProc.on('error', (err) => {
@@ -102,7 +199,7 @@ devProc.on('error', (err) => {
 });
 
 devProc.on('exit', (code) => {
-  if (tunnelClient) tunnelClient.close();
+  if (tunnelChild) tunnelChild.kill();
   process.exit(code ?? 0);
 });
 
@@ -115,46 +212,56 @@ try {
 }
 
 const baseSub = defaultSubdomain();
-const candidates = [baseSub, `${baseSub}-${Math.random().toString(36).slice(2, 6)}`, null];
+let result;
 
-let publicUrl = null;
-let usedHost = null;
-let usedFallback = false;
-
-for (const sub of candidates) {
+if (commandExists('cloudflared')) {
+  console.log('[public-dev] Використовую cloudflared (стабільніше за localtunnel.me)…');
   try {
-    const opts = { port: PORT, host: HOST };
-    if (sub) opts.subdomain = sub;
-    tunnelClient = await localtunnel(opts);
-    publicUrl = tunnelClient.url;
-    usedHost = new URL(publicUrl).hostname;
-    usedFallback = sub !== baseSub;
-    break;
-  } catch {
-    tunnelClient = null;
-    if (sub == null) {
-      console.error('[public-dev] localtunnel: не вдалося відкрити тунель (спробуй пізніше або npm run tunnel з cloudflared).');
-      process.exit(1);
+    result = await tryCloudflaredTunnel();
+    tunnelChild = result.child;
+  } catch (e) {
+    console.warn('[public-dev] cloudflared не вдалось:', e.message, '→ localtunnel…');
+  }
+}
+
+if (!result) {
+  const candidates = [baseSub, `${baseSub}-${Math.random().toString(36).slice(2, 6)}`, null];
+  for (const sub of candidates) {
+    try {
+      result = await tryLocaltunnelWorker(sub == null ? null : sub);
+      tunnelChild = result.child;
+      result.usedFallback = sub !== baseSub;
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (sub == null) {
+        console.error('[public-dev] localtunnel:', lastErr.message);
+        console.error('[public-dev] Встанови cloudflared (winget install Cloudflare.cloudflared) і перезапусти npm run dev:public');
+        process.exit(1);
+      }
     }
   }
 }
 
-const loginUrl = `${publicUrl.replace(/\/$/, '')}/login`;
+const publicUrl = result.url.replace(/\/$/, '');
+const usedHost = result.host;
+const loginUrl = `${publicUrl}/login`;
+const usedFallback = result.usedFallback === true;
 
 console.log('\n\x1b[33m╔════════════════════════════════════════════════════════════════╗\x1b[0m');
-console.log('\x1b[33m║\x1b[0m  Публічний URL (відкрий у браузері, не localhost):');
+console.log('\x1b[33m║\x1b[0m  Публічний URL:');
 console.log(`\x1b[33m║\x1b[0m  \x1b[32m${loginUrl}\x1b[0m`);
 console.log('\x1b[33m╠════════════════════════════════════════════════════════════════╣\x1b[0m');
-console.log('\x1b[33m║\x1b[0m  Telegram API не дає виставити домен автоматично. Один раз у @BotFather:');
-console.log('\x1b[33m║\x1b[0m  /setdomain → твій бот → встав \x1b[36mлише хост\x1b[0m (без https):');
+console.log('\x1b[33m║\x1b[0m  Один раз @BotFather → /setdomain → \x1b[36mлише хост\x1b[0m:');
 console.log(`\x1b[33m║\x1b[0m  \x1b[36m${usedHost}\x1b[0m`);
 if (usedFallback) {
-  console.log('\x1b[33m║\x1b[0m  Піддомен за зайнятості змінено — у BotFather вкажи хост з цього рядка.');
+  console.log('\x1b[33m║\x1b[0m  Піддомен змінено (зайнятий) — у BotFather вкажи хост з цього рядка.');
+}
+console.log(`\x1b[33m║\x1b[0m  Тунель: ${result.kind}`);
+if (result.kind === 'cloudflared' && usedHost.includes('trycloudflare.com')) {
+  console.log('\x1b[33m║\x1b[0m  \x1b[31mПісля зупинки dev:public старий *.trycloudflare.com\x1b[0m');
+  console.log('\x1b[33m║\x1b[0m  \x1b[31mбільше не відкриється (1033) — лише URL з цього запуску.\x1b[0m');
 }
 console.log('\x1b[33m╚════════════════════════════════════════════════════════════════╝\x1b[0m\n');
 
 openBrowserSync(loginUrl);
-
-tunnelClient.on('close', () => {
-  console.log('[public-dev] Тунель закрито.');
-});

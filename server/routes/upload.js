@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -6,7 +7,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const dataRoot = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..');
+if (process.env.DATA_DIR) {
+  fs.mkdirSync(dataRoot, { recursive: true });
+}
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+  ? path.resolve(process.env.UPLOAD_DIR)
+  : path.join(dataRoot, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
