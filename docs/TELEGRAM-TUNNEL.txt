@@ -1,0 +1,22 @@
+Публічний URL без власного домену
+=================================
+
+Команда (усе в одному: API + Vite + HTTPS-тунель):
+
+  npm run dev:public
+
+Скрипт сам:
+  - піднімає звичайний dev;
+  - відкриває тунель localtunnel на порт 5173;
+  - друкує готовий https://....loca.lt/login;
+  - намагається відкрити його в браузері.
+
+Стабільний піддомен (щоб не міняти BotFather щоразу):
+  У .env уже має бути VITE_TELEGRAM_BOT_USERNAME=access_aihub_bot
+  → піддомен буде на кшталт accessaihubbottg-tg.loca.lt (авто).
+  Або задай свій: TUNNEL_SUBDOMAIN=moyunikalniypid
+
+Один раз у @BotFather: /setdomain → бот → встав ТІЛЬКИ хост з терміналу (без https).
+Telegram не надає API для цього кроку — інакше б будь-хто прив’язав би домен до чужого бота.
+
+Запасний варіант (якщо loca.lt лежить): npm run tunnel (потрібен cloudflared).
