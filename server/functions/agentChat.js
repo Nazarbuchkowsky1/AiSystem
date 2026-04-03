@@ -189,6 +189,50 @@ function hasAnyCitationTag(text) {
   return /\[\d+\]/.test(String(text || ''));
 }
 
+function stripCitationTags(text) {
+  return String(text || '')
+    .replace(/\s*\[(\d+)\]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function buildStyleReference(agent, req) {
+  const stylePrompt = String(agent?.style_prompt || '').trim();
+  const styleSamples = Array.isArray(agent?.style_samples) ? agent.style_samples : [];
+  if (!stylePrompt && styleSamples.length === 0) return { block: '', sampleCount: 0 };
+
+  const snippets = [];
+  const maxFiles = 4;
+  const maxCharsPerFile = 3500;
+
+  for (const sample of styleSamples.slice(0, maxFiles)) {
+    const sourceUrl = getSourceUrl(sample);
+    const fetchUrl = resolveFetchUrl(sourceUrl, req);
+    if (!fetchUrl) continue;
+    try {
+      const resp = await fetch(fetchUrl);
+      if (!resp.ok) continue;
+      const text = (await resp.text()).replace(/\r\n/g, '\n').trim();
+      if (!text) continue;
+      const compact = text.length > maxCharsPerFile ? text.slice(0, maxCharsPerFile) + '\n[...truncated]' : text;
+      snippets.push(`Sample "${sample?.name || 'style-sample'}":\n${compact}`);
+    } catch {
+      // Ignore sample fetch errors; style block is optional.
+    }
+  }
+
+  const parts = [];
+  if (stylePrompt) parts.push(`Style directive:\n${stylePrompt}`);
+  if (snippets.length > 0) parts.push(`Reference writing samples (imitate voice, rhythm, wording patterns):\n${snippets.join('\n\n')}`);
+  parts.push('Style rule: Use these references only for HOW to answer (voice/tone/wording), not as factual evidence.');
+
+  return {
+    block: parts.join('\n\n'),
+    sampleCount: snippets.length,
+  };
+}
+
 async function fetchTranscriptViaSupadata(url, debug) {
   if (!SUPADATA_API_KEY) throw new Error('SUPADATA_API_KEY not configured');
   const t0 = Date.now();
@@ -469,6 +513,12 @@ export default async function agentChat(req, res) {
     systemParts.push(`You are "${agent?.name || 'AI Assistant'}". ${agent?.description || ''}`);
     systemParts.push(`\n${DEFAULT_AGENT_SYSTEM_PROMPT}`);
 
+    const styleReference = await buildStyleReference(agent, req);
+    if (styleReference.block) {
+      systemParts.push(`\n## Voice & Tone Profile\n${styleReference.block}`);
+      pushProcess('style_profile_loaded', { sampleCount: styleReference.sampleCount, hasStylePrompt: !!(agent?.style_prompt || '').trim() });
+    }
+
     const indexedFiles = [];
     const unindexedFiles = [];
 
@@ -624,7 +674,7 @@ export default async function agentChat(req, res) {
 
     if (retrievedContext) {
       const sourcesList = sourcesMap.map(s => `[${s.index}] ${s.name}${s.description ? ` — ${s.description}` : ''}`).join('\n');
-      systemParts.push(`\n## Source Documents\nAvailable sources:\n${sourcesList}\n\nINSTRUCTIONS:\n1. Read ALL sources before answering.\n2. CITE with [1], [2] etc.\n3. If not found, say so.\n\n${retrievedContext}`);
+      systemParts.push(`\n## Source Documents\nAvailable sources:\n${sourcesList}\n\nINSTRUCTIONS:\n1. Read ALL sources before answering.\n2. Do NOT show citations, source indices, or phrases like "from source/file".\n3. Reply naturally like a human dialogue.\n4. If not found, say so.\n\n${retrievedContext}`);
       if (subQuestions.length > 1) systemParts.push(`\n## Investigation Guide\n${subQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`);
     }
 
@@ -703,17 +753,8 @@ export default async function agentChat(req, res) {
       totalOutputTokens += retryRes.usage?.outputTokens ?? 0;
     }
 
-    // Strict grounded post-check: if sources exist but no citations in answer, force a grounded rewrite.
-    if (retrievedContext && !hasAnyCitationTag(responseText)) {
-      pushProcess('grounding_postcheck_retry', { reason: 'missing_citations' });
-      const groundedRetrySystem =
-        systemInstruction +
-        '\n\n[GROUNDING CHECK] You must cite sources for factual claims using [n]. If evidence is missing, explicitly say "This information is not found in the provided sources."';
-      const retryRes = await callLLM(groundedRetrySystem, geminiContents, { temperature: 0.4, maxOutputTokens: 4096 });
-      responseText = retryRes.text;
-      totalPromptTokens += retryRes.usage?.promptTokens ?? 0;
-      totalOutputTokens += retryRes.usage?.outputTokens ?? 0;
-    }
+    // Enforce chat-style output: hide inline citation markers if model emits them.
+    responseText = stripCitationTags(responseText);
 
     const cost = effectiveModel === 'gemini'
       ? (totalPromptTokens / 1e6) * GEMINI_INPUT_COST_PER_1M + (totalOutputTokens / 1e6) * GEMINI_OUTPUT_COST_PER_1M
@@ -727,7 +768,7 @@ export default async function agentChat(req, res) {
     res.json({
       response: responseText || 'I couldn\'t generate a response. Please try again.',
       cost: Math.round(cost * 1e8) / 1e8,
-      citations: sourcesMap.length > 0 ? sourcesMap : undefined,
+      citations: undefined,
       citation_spans: citationSpans,
       notebook_memory: notebookMemory,
       debug: debugLog,

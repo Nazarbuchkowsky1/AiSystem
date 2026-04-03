@@ -3,11 +3,14 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Brain, Loader2 } from "lucide-react";
 import { logStep } from "@/lib/clientLogger";
+import { useAuth } from "@/lib/AuthContext";
 import AgentCard from "../components/agents/AgentCard";
 import AgentWorkspace from "../components/agents/AgentWorkspace";
 import NewAgentModal from "../components/agents/NewAgentModal";
 
 export default function Agents() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState(null);
@@ -41,7 +44,7 @@ export default function Agents() {
     onSuccess: (created, agentData) => {
       logStep("Agents", "Agent.create: done", created?.id);
       if (created?.id != null) {
-        const withModel = { ...created, model: created.model ?? agentData?.model ?? "kimi" };
+        const withModel = { ...created, model: created.model ?? agentData?.model ?? "gemini" };
         queryClient.setQueryData(["agents"], (old) => {
           if (!Array.isArray(old)) return old;
           const exists = old.some((a) => String(a.id) === String(created.id));
@@ -81,7 +84,13 @@ export default function Agents() {
   });
 
   if (selectedAgent) {
-    return <AgentWorkspace agent={selectedAgent} onBack={() => setSelectedAgent(null)} />;
+    return (
+      <AgentWorkspace
+        agent={selectedAgent}
+        onBack={() => setSelectedAgent(null)}
+        canManageSources={isAdmin}
+      />
+    );
   }
 
   return (
@@ -115,11 +124,11 @@ export default function Agents() {
           </div>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f5f5f5", margin: 0, lineHeight: 1.2, letterSpacing: "-0.02em" }}>
-              Agents
+              Агенти
             </h1>
           </div>
         </div>
-        {!isMobile && (
+        {!isMobile && isAdmin && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button
               onClick={() => setShowNewModal(true)}
@@ -144,19 +153,20 @@ export default function Agents() {
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
             >
-              <Plus style={{ width: 12, height: 12 }} /> New Agent
+              <Plus style={{ width: 12, height: 12 }} /> Новий агент
             </button>
           </div>
         )}
       </div>
 
-      {(showNewModal || editingAgent) && (
+      {(showNewModal || editingAgent) && isAdmin && (
         <NewAgentModal
           onClose={() => { setShowNewModal(false); setEditingAgent(null); }}
           onCreate={(agentData) => createAgentMutation.mutate(agentData)}
           onUpdate={(id, data) => updateAgentMutation.mutate({ id, data })}
           onDelete={(id) => deleteAgentMutation.mutate(id)}
           editAgent={editingAgent}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -186,8 +196,10 @@ export default function Agents() {
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
                 <Brain style={{ width: 24, height: 24, color: "#f97316" }} />
               </div>
-              <p style={{ fontSize: 13, color: "#f5f5f5" }}>No agents yet</p>
-              <p style={{ fontSize: 11, color: "#555" }}>Create your first AI agent to get started</p>
+              <p style={{ fontSize: 13, color: "#f5f5f5" }}>Агентів ще немає</p>
+              <p style={{ fontSize: 11, color: "#555" }}>
+                {isAdmin ? "Створіть свого першого AI-агента, щоб почати" : "Очікуйте, поки адміністратор додасть агентів"}
+              </p>
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, alignItems: "stretch" }}>
@@ -197,6 +209,7 @@ export default function Agents() {
                   agent={agent}
                   onClick={() => setSelectedAgent(agent)}
                   onEdit={(a) => setEditingAgent(a)}
+                  showEdit={isAdmin}
                 />
               ))}
             </div>

@@ -1,31 +1,78 @@
 import React from 'react';
 
-const UserNotRegisteredError = () => {
+export default function UserNotRegisteredError({ onBack }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-slate-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg border border-slate-100">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-orange-100">
-            <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0a0a0a',
+        padding: 24,
+        fontFamily: 'Inter, system-ui, sans-serif',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 420,
+          width: '100%',
+          padding: 28,
+          background: '#0f0f0f',
+          borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 56,
+              height: 56,
+              marginBottom: 16,
+              borderRadius: '50%',
+              background: 'rgba(249,115,22,0.12)',
+              border: '1px solid rgba(249,115,22,0.25)',
+            }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Access Restricted</h1>
-          <p className="text-slate-600 mb-8">
-            You are not registered to use this application. Please contact the app administrator to request access.
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#f5f5f5', margin: '0 0 12px' }}>Доступ обмежено</h1>
+          <p style={{ fontSize: 14, color: '#888', margin: '0 0 20px', lineHeight: 1.55 }}>
+            Вас немає у списку дозволених користувачів. Зверніться до адміністратора, щоб додали вас у базу.
           </p>
-          <div className="p-4 bg-slate-50 rounded-md text-sm text-slate-600">
-            <p>If you believe this is an error, you can:</p>
-            <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>Verify you are logged in with the correct account</li>
-              <li>Contact the app administrator for access</li>
-              <li>Try logging out and back in again</li>
+          <div style={{ padding: 14, borderRadius: 10, background: '#141414', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'left' }}>
+            <p style={{ fontSize: 12, color: '#666', margin: 0 }}>Можливо:</p>
+            <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: '#888', fontSize: 12, lineHeight: 1.6 }}>
+              <li>Перевірте, що увійшли правильним акаунтом Telegram</li>
+              <li>Попросіть адміна додати ваш Telegram ID у Airtable</li>
             </ul>
           </div>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              style={{
+                marginTop: 20,
+                padding: '10px 20px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'transparent',
+                color: '#f5f5f5',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              Назад до входу
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
-};
-
-export default UserNotRegisteredError;
+}

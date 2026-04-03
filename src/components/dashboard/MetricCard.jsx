@@ -11,7 +11,19 @@ export default function MetricCard({ label, value, change, isPositive = true, ic
       position: "relative",
       overflow: "hidden",
       boxShadow: "0 0 20px rgba(0,0,0,0.4)",
-    }}>
+      transition: "border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
+    }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+        e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,255,255,0.07), 0 10px 32px rgba(0,0,0,0.5)";
+        e.currentTarget.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+        e.currentTarget.style.boxShadow = "0 0 20px rgba(0,0,0,0.4)";
+        e.currentTarget.style.transform = "none";
+      }}
+    >
       {/* Top accent line */}
       <div style={{
         position: "absolute", top: 0, left: 0, right: 0, height: 1,

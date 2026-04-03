@@ -151,7 +151,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
   const progress = kbProgress !== null ? kbProgress : (derivedProgress !== null ? derivedProgress : 0);
 
   const statusColor = isAddingFile ? "#f97316" : hasFailedIndexing ? "#ef4444" : isProcessing ? "#f97316" : hasUnprocessedFiles ? "#eab308" : "#22c55e";
-  const statusLabel = isAddingFile ? "Uploading…" : hasFailedIndexing ? "Failed" : isProcessing ? "Indexing" : hasUnprocessedFiles ? "Incomplete" : "Ready";
+  const statusLabel = isAddingFile ? "Завантаження..." : hasFailedIndexing ? "Помилка" : isProcessing ? "Індексування" : hasUnprocessedFiles ? "Незавершено" : "Готово";
 
   return (
     <>
@@ -169,7 +169,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           padding: 18,
           textAlign: "left",
           cursor: "pointer",
-          transition: "all 0.25s ease",
+          transition: "border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
           width: "100%",
           background: "linear-gradient(145deg, #141414, #0f0f0f)",
           border: "1px solid rgba(255,255,255,0.06)",
@@ -181,8 +181,8 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           overflow: "hidden",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "rgba(249,115,22,0.2)";
-          e.currentTarget.style.boxShadow = "0 4px 24px rgba(249,115,22,0.08)";
+          e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+          e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,255,255,0.06), 0 8px 28px rgba(249,115,22,0.12)";
           e.currentTarget.style.transform = "translateY(-2px)";
         }}
         onMouseLeave={(e) => {
@@ -295,7 +295,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
               flex: 1,
             }}
           >
-            {kb.description || "No description"}
+            {kb.description || "Без опису"}
           </p>
         </div>
 
@@ -308,8 +308,8 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <span style={{ fontSize: 10, color: "#333" }}>
-            Files: {processedCount}/{totalCount}
+            <span style={{ fontSize: 10, color: "#333" }}>
+            Файлів: {processedCount}/{totalCount}
             {isProcessing && progress > 0 ? ` · ${progress}%` : ""}
           </span>
           {isProcessing ? (
@@ -343,7 +343,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
                 (e.currentTarget.style.background = "rgba(249,115,22,0.1)")
               }
             >
-              Retry
+              Повторити
             </button>
           ) : (
             <button
@@ -376,7 +376,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
 
         {rejectedFiles.length > 0 && (
           <p style={{ fontSize: 10, color: "#ef4444", padding: "4px 0 0", margin: 0 }}>
-            Unsupported: {rejectedFiles.join(", ")}
+            Непідтримуваний: {rejectedFiles.join(", ")}
           </p>
         )}
 
@@ -407,7 +407,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
               onClick={(e) => e.stopPropagation()}
             >
               <Plus style={{ width: 12, height: 12 }} />
-              <span>Add file</span>
+              <span>Додати файл</span>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -448,10 +448,10 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5", marginBottom: 8 }}>
-              Delete Knowledge Base?
+              Видалити базу знань?
             </h3>
             <p style={{ fontSize: 12, color: "#888", marginBottom: 16, lineHeight: 1.4 }}>
-              This will permanently delete "{kb.name}" and all its files.
+              Це назавжди видалить "{kb.name}" та всі її файли.
             </p>
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -473,7 +473,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
                 }
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2a2a2a")}
               >
-                Cancel
+                Скасувати
               </button>
               <button
                 onClick={handleDeleteKB}
@@ -492,7 +492,7 @@ export default function KnowledgeBaseCard({ kb, onSelect }) {
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#dc2626")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#ef4444")}
               >
-                Delete
+                Видалити
               </button>
             </div>
           </div>

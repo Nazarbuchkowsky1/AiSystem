@@ -89,8 +89,26 @@ html, body, #root {
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(249, 115, 22, 0.2);
-  box-shadow: var(--glow-orange);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    var(--glow-orange);
+}
+
+/* Плавніший hover для клікабельних блоків (біла підсвітка) */
+.interactive-surface {
+  transition:
+    background-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.interactive-surface:hover {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
 .glow-text {
@@ -147,14 +165,101 @@ html, body, #root {
 }
 
 .sidebar-item {
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #888;
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.22s ease;
+  white-space: nowrap;
+  overflow: hidden;
 }
-.sidebar-item:hover {
-  background: rgba(249, 115, 22, 0.08);
+.sidebar-item:not(.sidebar-item--active):hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f5f5;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-.sidebar-item.active {
+.sidebar-item--active {
+  color: #f97316;
   background: rgba(249, 115, 22, 0.12);
   border-color: rgba(249, 115, 22, 0.3);
+}
+
+.dashboard-tab {
+  position: relative;
+  padding: 6px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 400;
+  color: #4a4a4a;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.28s ease;
+  border-radius: 6px 6px 0 0;
+  outline: none;
+}
+.dashboard-tab:not(.dashboard-tab--active):hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a8a8a8;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+.dashboard-tab--active {
+  font-weight: 700;
+  color: #f97316;
+}
+
+.tools-stub-card {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 16px 18px;
+  cursor: default;
+  transition:
+    border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.tools-stub-card:hover {
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.1);
+  transform: translateY(-2px);
+}
+
+.agent-card-surface {
+  transition:
+    border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.agent-card-surface:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 28px rgba(249, 115, 22, 0.12);
+  transform: translateY(-2px);
+}
+
+.layout-collapse-btn {
+  color: #555;
+  transition: color 0.2s ease;
+}
+.layout-collapse-btn:hover {
+  color: #f97316;
 }
 
 .chart-glow {

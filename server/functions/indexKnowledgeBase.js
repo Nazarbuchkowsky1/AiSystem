@@ -56,6 +56,18 @@ function buildFileFingerprint(file, sourceUrl, text) {
   return hashText(meta);
 }
 
+function mergeFilesPreservingLatest(existing = [], incoming = []) {
+  const toKey = (f) => {
+    const src = getSourceUrl(f);
+    if (src) return `src:${src}`;
+    return `name:${String(f?.name || '').toLowerCase()}|type:${String(f?.type || '').toLowerCase()}|size:${Number(f?.size || 0)}`;
+  };
+  const map = new Map();
+  for (const f of existing) map.set(toKey(f), f);
+  for (const f of incoming) map.set(toKey(f), f);
+  return Array.from(map.values());
+}
+
 function detectPlatformFromUrl(url) {
   const u = url.toLowerCase();
   if (/youtube\.com|youtu\.be/.test(u)) return 'youtube';
@@ -734,8 +746,8 @@ export default async function indexKnowledgeBase(req, res) {
       if (snap.length > files.length || snapshotPending > dbPending ||
         (expectedFileCount > 0 && snap.length >= expectedFileCount) ||
         (expectedPendingCount > 0 && snapshotPending >= expectedPendingCount)) {
-        files = snap;
-        logDebug(`[KB_DEBUG] Using client filesSnapshot`);
+        files = mergeFilesPreservingLatest(files, snap);
+        logDebug(`[KB_DEBUG] Using merged client filesSnapshot`);
       }
     }
 

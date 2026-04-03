@@ -56,7 +56,7 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
         padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)",
         flexShrink: 0
       }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5" }}>Code Editor</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#f5f5f5" }}>Редактор коду</span>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={handleCopy} style={{
             display: "flex", alignItems: "center", gap: 5,
@@ -67,7 +67,7 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
             transition: "all 0.2s"
           }}>
             {copied ? <Check style={{ width: 12, height: 12 }} /> : <Copy style={{ width: 12, height: 12 }} />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? "Скопійовано" : "Копіювати"}
           </button>
           {!readOnly && onSave && (
             <button onClick={() => { onSave(value); handleClose(); }} style={{
@@ -76,7 +76,7 @@ export default function FullscreenCodeEditor({ code, onClose, onSave, readOnly }
               color: "#f97316", borderRadius: 8, padding: "6px 12px", fontSize: 11,
               fontWeight: 600, cursor: "pointer"
             }}>
-              <Save style={{ width: 12, height: 12 }} /> Save
+              <Save style={{ width: 12, height: 12 }} /> Зберегти
             </button>
           )}
           <button

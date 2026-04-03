@@ -19,7 +19,7 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, authError } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, authError, user } = useAuth();
   const location = useLocation();
 
   if (location.pathname === '/login') {
@@ -75,9 +75,13 @@ const AuthenticatedApp = () => {
             key={path}
             path={`/${path}`}
             element={
-              <LayoutWrapper currentPageName={path}>
-                <Page />
-              </LayoutWrapper>
+              path === 'Analytics' && user?.role !== 'admin' ? (
+                <Navigate to="/Agents" replace />
+              ) : (
+                <LayoutWrapper currentPageName={path}>
+                  <Page />
+                </LayoutWrapper>
+              )
             }
           />
         ))}

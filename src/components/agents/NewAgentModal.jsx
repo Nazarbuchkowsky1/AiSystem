@@ -13,6 +13,7 @@ import {
   Palette,
   Rocket,
   Trash2,
+  FileText,
 } from "lucide-react";
 import TOOLS_LIST from "../shared/toolsList";
 import { logStep } from "@/lib/clientLogger";
@@ -21,14 +22,22 @@ const BUILTIN_TOOL_NAMES = ["media_scraper"];
 const AVAILABLE_TOOLS = TOOLS_LIST
   .filter(t => !BUILTIN_TOOL_NAMES.includes(t.name))
   .map(t => ({ name: t.name, label: t.label }));
+const STYLE_SAMPLE_ACCEPT = ".txt,.md,.csv,.json,.html,.docx";
+const MAX_STYLE_SAMPLES = 8;
 
-export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, editAgent = null }) {
+export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, editAgent = null, isAdmin = true }) {
   const isEditing = !!editAgent;
   const [name, setName] = useState(editAgent?.name || "");
   const [description, setDescription] = useState(editAgent?.description || "");
   const [systemInstructions, setSystemInstructions] = useState(editAgent?.system_instructions || editAgent?.system_prompt || "");
+  const [stylePrompt, setStylePrompt] = useState(editAgent?.style_prompt || "");
+  const [styleSamples, setStyleSamples] = useState(Array.isArray(editAgent?.style_samples) ? editAgent.style_samples : []);
+  const [isUploadingStyle, setIsUploadingStyle] = useState(false);
+  const [styleUploadError, setStyleUploadError] = useState("");
   const [selectedTools, setSelectedTools] = useState(editAgent?.tools?.map(t => t.name) || []);
-  const [selectedModel, setSelectedModel] = useState(editAgent?.model === "gemini" ? "gemini" : "kimi");
+  const [selectedModel, setSelectedModel] = useState(
+    editAgent ? (editAgent.model === "gemini" ? "gemini" : "kimi") : "gemini"
+  );
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(editAgent?.icon_url || null);
   const [selectedIcon, setSelectedIcon] = useState(editAgent?.icon_url ? null : (editAgent?.icon_name || editAgent?.icon || "Bot"));
@@ -51,12 +60,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
     setName(editAgent.name || "");
     setDescription(editAgent.description || "");
     setSystemInstructions(editAgent.system_instructions || editAgent.system_prompt || "");
+    setStylePrompt(editAgent.style_prompt || "");
+    setStyleSamples(Array.isArray(editAgent.style_samples) ? editAgent.style_samples : []);
     setSelectedTools(editAgent.tools?.map(t => t.name) || []);
-    const model = editAgent.model ?? editAgent.chat_model ?? "kimi";
+    const model = editAgent.model ?? editAgent.chat_model ?? "gemini";
     setSelectedModel(model === "gemini" ? "gemini" : "kimi");
     setIconPreview(editAgent.icon_url || null);
     setSelectedIcon(editAgent.icon_url ? null : (editAgent.icon_name || editAgent.icon || "Bot"));
-  }, [editAgent?.id, editAgent?.model, editAgent?.name, editAgent?.description, editAgent?.system_instructions, editAgent?.tools, editAgent?.icon_url, editAgent?.icon_name, editAgent?.icon]);
+  }, [editAgent?.id, editAgent?.model, editAgent?.name, editAgent?.description, editAgent?.system_instructions, editAgent?.style_prompt, editAgent?.style_samples, editAgent?.tools, editAgent?.icon_url, editAgent?.icon_name, editAgent?.icon]);
 
   React.useEffect(() => {
     if (!closing) return;
@@ -150,11 +161,13 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
         description: description.trim(),
         system_instructions: systemInstructions.trim(),
         system_prompt: systemInstructions.trim(),
+        style_prompt: stylePrompt.trim(),
+        style_samples: styleSamples,
         icon_url: iconUrl,
         icon_name: selectedIcon,
         icon: selectedIcon,
         tools: [...new Set([...selectedTools, ...BUILTIN_TOOL_NAMES])].map(t => ({ name: t, enabled: true })),
-        model: selectedModel,
+        model: isAdmin ? selectedModel : "gemini",
         knowledge_base_ids: isEditing ? (editAgent.knowledge_base_ids || []) : [],
         status: isEditing ? editAgent.status : "active"
       };
@@ -179,12 +192,57 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
     setName("");
     setDescription("");
     setSystemInstructions("");
+    setStylePrompt("");
+    setStyleSamples([]);
+    setIsUploadingStyle(false);
+    setStyleUploadError("");
     setSelectedTools([]);
-    setSelectedModel("kimi");
+    setSelectedModel("gemini");
     setIconFile(null);
     setIconPreview(null);
     setSelectedIcon("Bot");
     onClose();
+  };
+
+  const handleStyleFilesChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    setStyleUploadError("");
+    if (files.length === 0) return;
+
+    const remainingSlots = Math.max(0, MAX_STYLE_SAMPLES - styleSamples.length);
+    if (remainingSlots <= 0) {
+      setStyleUploadError(`Максимум ${MAX_STYLE_SAMPLES} файлів стилю.`);
+      return;
+    }
+
+    const toUpload = files.slice(0, remainingSlots);
+    setIsUploadingStyle(true);
+    try {
+      const uploaded = [];
+      for (const file of toUpload) {
+        const uploadRes = await base44.integrations.Core.UploadFile({ file });
+        if (!uploadRes?.file_url) throw new Error(`Upload failed for ${file.name}`);
+        uploaded.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          file_path: uploadRes.file_url,
+          source_url: "",
+          url: uploadRes.file_url,
+          type: (file.name.split(".").pop() || "txt").toLowerCase(),
+          size: file.size || 0,
+        });
+      }
+      setStyleSamples(prev => [...prev, ...uploaded].slice(0, MAX_STYLE_SAMPLES));
+    } catch (err) {
+      setStyleUploadError(String(err?.message || err));
+    } finally {
+      setIsUploadingStyle(false);
+    }
+  };
+
+  const removeStyleSample = (id) => {
+    setStyleSamples(prev => prev.filter(s => s.id !== id));
   };
 
   const toggleTool = (toolName) => {
@@ -219,7 +277,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
         transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>{isEditing ? "Edit Agent" : "Create New Agent"}</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>{isEditing ? "Редагувати агента" : "Створити нового агента"}</h2>
           <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
@@ -230,12 +288,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Agent Name */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Agent Name</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Назва агента</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g., Content Writer"
+              placeholder="Наприклад, Контент-райтер"
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
                 border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
@@ -248,11 +306,11 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
 
           {/* Description */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Description</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Опис</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="What does this agent do?"
+              placeholder="Що робить цей агент?"
               rows={2}
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
@@ -267,11 +325,11 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
 
           {/* System Instructions */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>System Instructions</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Системні інструкції</p>
             <textarea
               value={systemInstructions}
               onChange={e => setSystemInstructions(e.target.value)}
-              placeholder="Define the agent's behavior, constraints, and guidelines..."
+              placeholder="Визначте поведінку агента, обмеження та рекомендації..."
               rows={3}
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
@@ -284,9 +342,80 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
             />
           </div>
 
+          {/* Voice & Tone */}
+          <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Голос і тон</p>
+            <textarea
+              value={stylePrompt}
+              onChange={e => setStylePrompt(e.target.value)}
+              placeholder="Опишіть, як цей агент має спілкуватися (тон, стиль речень, фрази)..."
+              rows={3}
+              style={{
+                width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
+                border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
+                outline: "none", fontFamily: "inherit", resize: "none",
+                overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none", marginBottom: 10,
+              }}
+              onFocus={e => e.target.style.borderColor = "rgba(249,115,22,0.4)"}
+              onBlur={e => e.target.style.borderColor = "#2a2a2a"}
+            />
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: "#777" }}>
+                Приклади стилю ({styleSamples.length}/{MAX_STYLE_SAMPLES})
+              </span>
+              <label style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px",
+                borderRadius: 8, background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.2)",
+                cursor: isUploadingStyle ? "not-allowed" : "pointer", color: "#f97316", fontSize: 11, fontWeight: 600,
+                opacity: isUploadingStyle ? 0.6 : 1,
+              }}>
+                {isUploadingStyle ? <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} /> : <Upload style={{ width: 12, height: 12 }} />}
+                Додати
+                <input
+                  type="file"
+                  multiple
+                  accept={STYLE_SAMPLE_ACCEPT}
+                  onChange={handleStyleFilesChange}
+                  disabled={isUploadingStyle}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </div>
+
+            {styleUploadError && (
+              <p style={{ fontSize: 11, color: "#ef4444", margin: "0 0 8px" }}>{styleUploadError}</p>
+            )}
+
+            {styleSamples.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {styleSamples.map((sample) => (
+                  <div key={sample.id || sample.file_path || sample.url} style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "7px 9px",
+                    borderRadius: 8, background: "#0f0f0f", border: "1px solid #2a2a2a",
+                  }}>
+                    <FileText style={{ width: 13, height: 13, color: "#777", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: "#d4d4d4", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {sample.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeStyleSample(sample.id)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#666", display: "flex", padding: 2 }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                      onMouseLeave={e => e.currentTarget.style.color = "#666"}
+                    >
+                      <Trash2 style={{ width: 12, height: 12 }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Icon Selection */}
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Icon</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5", marginBottom: 12 }}>Іконка</p>
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               {ICON_OPTIONS.map(({ name: iconName, icon: IconComponent }) => (
                 <button key={iconName} onClick={() => { setSelectedIcon(iconName); setIconPreview(null); setIconFile(null); }} style={{
@@ -312,7 +441,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
               {iconPreview ? (
                 <>
                   <img src={iconPreview} alt="preview" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
-                  <span style={{ fontSize: 12, color: "#f5f5f5", flex: 1 }}>Custom icon uploaded</span>
+                  <span style={{ fontSize: 12, color: "#f5f5f5", flex: 1 }}>Свою іконку завантажено</span>
                   <button onClick={(e) => { e.preventDefault(); setIconPreview(null); setIconFile(null); setSelectedIcon("Bot"); }} style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     width: 32, height: 32, borderRadius: 8, background: "rgba(239,68,68,0.1)",
@@ -327,7 +456,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
               ) : (
                 <>
                   <Upload style={{ width: 16, height: 16, color: "#555" }} />
-                  <span style={{ fontSize: 12, color: "#555" }}>Or upload custom icon</span>
+                  <span style={{ fontSize: 12, color: "#555" }}>Або завантажити свою іконку</span>
                 </>
               )}
               <input
@@ -339,9 +468,9 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
             </label>
           </div>
 
-          {/* Model */}
+          {isAdmin && (
           <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Model</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Модель</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {[
                 { id: "kimi", label: "Kimi (K2.5)" },
@@ -368,11 +497,12 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
               })}
             </div>
           </div>
+          )}
 
           {/* Tools Access — only shown if there are non-built-in tools */}
           {AVAILABLE_TOOLS.length > 0 && (
            <div style={{ paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Tools Access</p>
+             <p style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", marginBottom: 12 }}>Доступ до інструментів</p>
              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                {AVAILABLE_TOOLS.map(tool => (
                  <button key={tool.name} onClick={() => toggleTool(tool.name)} style={{
@@ -404,7 +534,7 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
             }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              Cancel
+              Скасувати
             </button>
             <button onClick={handleCreate} disabled={!name.trim() || isCreating} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "rgba(249,115,22,0.1)",
@@ -414,11 +544,11 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
             }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.2)"}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
-              {isCreating ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Agent")}
+              {isCreating ? (isEditing ? "Збереження..." : "Створення...") : (isEditing ? "Зберегти зміни" : "Створити агента")}
             </button>
           </div>
 
-          {isEditing && !showDeleteConfirm && (
+          {isAdmin && isEditing && !showDeleteConfirm && (
             <button onClick={() => setShowDeleteConfirm(true)} style={{
               width: "100%", padding: "10px 16px", borderRadius: 10,
               background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
@@ -427,17 +557,17 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
             }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.2)"}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.1)"}>
-              Delete Agent
+              Видалити агента
             </button>
           )}
 
-          {isEditing && showDeleteConfirm && (
+          {isAdmin && isEditing && showDeleteConfirm && (
             <div style={{
               padding: 14, borderRadius: 10, background: "rgba(239,68,68,0.08)",
               border: "1px solid rgba(239,68,68,0.3)", display: "flex", flexDirection: "column", gap: 10
             }}>
               <p style={{ fontSize: 13, color: "#ef4444", fontWeight: 500, textAlign: "center" }}>
-                Are you sure you want to delete this agent?
+                Дійсно видалити цього агента?
               </p>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setShowDeleteConfirm(false)} style={{
@@ -445,14 +575,14 @@ export default function NewAgentModal({ onClose, onCreate, onUpdate, onDelete, e
                   border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 13, fontWeight: 500,
                   cursor: "pointer", transition: "all 0.2s"
                 }}>
-                  Cancel
+                  Скасувати
                 </button>
                 <button onClick={() => { onDelete(editAgent.id); onClose(); }} style={{
                   flex: 1, padding: "8px 14px", borderRadius: 8, background: "#ef4444",
                   border: "none", color: "#fff", fontSize: 13, fontWeight: 500,
                   cursor: "pointer", transition: "all 0.2s"
                 }}>
-                  Yes, Delete
+                  Так, видалити
                 </button>
               </div>
             </div>

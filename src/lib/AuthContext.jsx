@@ -64,6 +64,14 @@ export const AuthProvider = ({ children }) => {
     return result;
   };
 
+  const loginWithTelegram = async (telegramPayload) => {
+    const result = await base44.auth.loginTelegram(telegramPayload);
+    setUser(result.user);
+    setIsAuthenticated(true);
+    setAuthError(null);
+    return result;
+  };
+
   const logout = (shouldRedirect = true) => {
     logStep("Auth", "logout", shouldRedirect ? "redirect" : "local");
     setUser(null);
@@ -88,6 +96,7 @@ export const AuthProvider = ({ children }) => {
       authError,
       appPublicSettings,
       login,
+      loginWithTelegram,
       logout,
       navigateToLogin,
       checkAppState

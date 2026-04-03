@@ -24,34 +24,34 @@ const CustomTooltip = ({ active, payload, label }) => {
 const TABS_CONFIG = {
   OpenClo: {
     panels: [
-      { title: "Tasks Timeline", type: "area", span: 7 },
-      { title: "Task Types", type: "bar", span: 5 },
-      { title: "OpenClo Runtime", type: "line", span: 5 },
-      { title: "Task Success Rate", type: "pie", span: 7 },
+      { title: "Хронологія задач", type: "area", span: 7 },
+      { title: "Типи задач", type: "bar", span: 5 },
+      { title: "Час виконання", type: "line", span: 5 },
+      { title: "Успішність задач", type: "pie", span: 7 },
     ],
   },
   Tools: {
     panels: [
-      { title: "Tools Usage", type: "area", span: 7 },
-      { title: "Tool Execution Count", type: "bar", span: 5 },
-      { title: "Tool Runtime", type: "line", span: 5 },
-      { title: "Usage by Category", type: "pie", span: 7 },
+      { title: "Використання інструментів", type: "area", span: 7 },
+      { title: "Кількість запусків", type: "bar", span: 5 },
+      { title: "Час роботи інструментів", type: "line", span: 5 },
+      { title: "За категоріями", type: "pie", span: 7 },
     ],
   },
   Costs: {
     panels: [
-      { title: "Daily Spend", type: "area", span: 7 },
-      { title: "Cost by Agent", type: "bar", span: 5 },
-      { title: "Cost by Tool", type: "bar", span: 5 },
-      { title: "Token Consumption", type: "pie", span: 7 },
+      { title: "Витрати за день", type: "area", span: 7 },
+      { title: "Витрати за агентами", type: "bar", span: 5 },
+      { title: "Витрати за інструментами", type: "bar", span: 5 },
+      { title: "Споживання токенів", type: "pie", span: 7 },
     ],
   },
   System: {
     panels: [
-      { title: "System Load", type: "area", span: 7 },
-      { title: "API Requests", type: "line", span: 5 },
-      { title: "Errors / Failures", type: "bar", span: 5 },
-      { title: "Performance Metrics", type: "pie", span: 7 },
+      { title: "Навантаження системи", type: "area", span: 7 },
+      { title: "Запити до API", type: "line", span: 5 },
+      { title: "Помилки та збої", type: "bar", span: 5 },
+      { title: "Метрики продуктивності", type: "pie", span: 7 },
     ],
   },
 };
@@ -68,7 +68,7 @@ function ChartPanel({ title, type, span }) {
   const spanClass = span === 7 ? "col-span-1 md:col-span-7" : "col-span-1 md:col-span-5";
 
   return (
-    <div className={`${spanClass} glass-panel p-5`}>
+    <div className={`${spanClass} glass-panel glass-panel-hover p-5`}>
       <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>{title}</h3>
       <ResponsiveContainer width="100%" height={180}>
         {type === "area" ? (

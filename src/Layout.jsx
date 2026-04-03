@@ -1,34 +1,51 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+import { NavLink } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   BarChart3,
   Brain,
   Wrench,
-  Calendar,
   Settings,
   ChevronLeft,
-  ChevronRight,
-  Menu,
-  X,
-  Plus
+  Plus,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 
-const NAV_ITEMS = [
-  { name: "Analytics", icon: BarChart3, page: "Analytics" },
-  { name: "Agents", icon: Brain, page: "Agents" },
-  { name: "Tools", icon: Wrench, page: "Tools" },
-  { name: "Calendar", icon: Calendar, page: "Calendar" },
-  { name: "Settings", icon: Settings, page: "Settings" },
+const ALL_NAV_ITEMS = [
+  { name: "Аналітика", icon: BarChart3, page: "Analytics", adminOnly: true },
+  { name: "Агенти", icon: Brain, page: "Agents" },
+  { name: "Інструменти", icon: Wrench, page: "Tools" },
+  { name: "Налаштування", icon: Settings, page: "Settings" },
 ];
 
-import { installConsoleCapture, subscribeToLogs } from "@/lib/clientLogger";
-
 export default function Layout({ children, currentPageName }) {
+  const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileOverlayClosing, setMobileOverlayClosing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  const navItems = useMemo(
+    () => ALL_NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin"),
+    [user?.role]
+  );
+
+  const isAdmin = user?.role === "admin";
+
+  const displayHandle = useMemo(() => {
+    const u = user?.telegram_username;
+    if (u) return `@${u}`;
+    const em = user?.email;
+    if (em && !em.startsWith("tg_")) return em.split("@")[0] || "користувач";
+    if (user?.display_name) return user.display_name;
+    return "користувач";
+  }, [user]);
+
+  const roleLabel = user?.role === "admin" ? "Адмін" : "Користувач";
+
+  const avatarLetter = (displayHandle.replace(/^@/, "").charAt(0) || "К").toUpperCase();
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -36,11 +53,11 @@ export default function Layout({ children, currentPageName }) {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  useEffect(() => {
+    setMobileOpen(false);
+    setMobileOverlayClosing(false);
+  }, [currentPageName]);
 
-  // Close mobile menu on page change
-  useEffect(() => { setMobileOpen(false); setMobileOverlayClosing(false); }, [currentPageName]);
-
-  // Mobile overlay: wait for fade-out then unmount
   useEffect(() => {
     if (!mobileOverlayClosing) return;
     const id = setTimeout(() => setMobileOverlayClosing(false), 280);
@@ -54,14 +71,174 @@ export default function Layout({ children, currentPageName }) {
     return () => window.removeEventListener("modal-open", handler);
   }, []);
 
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [debugLogs, setDebugLogs] = useState([]);
+  const showExpanded = isMobile || !collapsed;
 
-  useEffect(() => {
-    installConsoleCapture();
-    const unsubscribe = subscribeToLogs(setDebugLogs);
-    return () => unsubscribe();
-  }, []);
+  const accountBlock = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: showExpanded ? 12 : 8,
+        padding: showExpanded ? "12px 14px" : "12px 8px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        flexShrink: 0,
+        flexDirection: showExpanded ? "row" : "column",
+        justifyContent: showExpanded ? "space-between" : "center",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: showExpanded ? 1 : undefined }}>
+        {user?.photo_url ? (
+          <img
+            src={user.photo_url}
+            alt=""
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              objectFit: "cover",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: "rgba(249,115,22,0.15)",
+              border: "1px solid rgba(249,115,22,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#f97316",
+              fontWeight: 700,
+              fontSize: 15,
+              flexShrink: 0,
+            }}
+          >
+            {avatarLetter}
+          </div>
+        )}
+        {showExpanded && (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#f5f5f5",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {displayHandle}
+            </div>
+            <div style={{ fontSize: 11, color: "#a3a3a3", marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#f97316",
+                  flexShrink: 0,
+                  boxShadow: "0 0 6px rgba(249,115,22,0.5)",
+                }}
+              />
+              {roleLabel}
+            </div>
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => logout(true)}
+        title="Вийти"
+        className="layout-collapse-btn"
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 10,
+          flexShrink: 0,
+        }}
+      >
+        <LogOut style={{ width: 18, height: 18 }} />
+      </button>
+    </div>
+  );
+
+  const footerBlock = (
+    <div
+      style={{
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+        padding: collapsed && !isMobile ? "12px 8px" : "12px 14px",
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: collapsed && !isMobile ? "column" : "row",
+        alignItems: "center",
+        justifyContent: collapsed && !isMobile ? "center" : "space-between",
+        gap: 10,
+      }}
+    >
+      {collapsed && !isMobile ? (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            background: "rgba(249,115,22,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px solid rgba(249,115,22,0.25)",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            flexShrink: 0,
+          }}
+          title="Розгорнути панель"
+        >
+          <img src="/logo.png?v=2" alt="Lumen" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover" }} />
+        </button>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <img src="/logo.png?v=2" alt="Lumen" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+            {!isMobile && !collapsed && (
+              <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                Lumen
+              </span>
+            )}
+          </div>
+          {!isMobile && !collapsed && (
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              className="layout-collapse-btn"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                padding: 6,
+                flexShrink: 0,
+              }}
+              title="Згорнути"
+            >
+              <ChevronLeft style={{ width: 16, height: 16 }} />
+              <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px" }} />
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -75,20 +252,12 @@ export default function Layout({ children, currentPageName }) {
       }}
     >
       <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(-12px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(-12px); opacity: 0; }
-        }
         @keyframes layoutPageFadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
         }
       `}</style>
-      {/* Mobile overlay */}
+
       {isMobile && (mobileOpen || mobileOverlayClosing) && (
         <div
           onClick={() => {
@@ -98,39 +267,73 @@ export default function Layout({ children, currentPageName }) {
             }
           }}
           style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, backdropFilter: "blur(4px)",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 40,
+            backdropFilter: "blur(4px)",
             opacity: mobileOverlayClosing ? 0 : 1,
             transition: "opacity 0.25s ease-out",
           }}
         />
       )}
 
-      {/* Mobile header bar */}
       {isMobile && !modalOpen && (
-        <div style={{
-          height: 52, flexShrink: 0, position: "relative", zIndex: 55,
-          background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)",
-          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px",
-        }}>
+        <div
+          style={{
+            height: 52,
+            flexShrink: 0,
+            position: "relative",
+            zIndex: 55,
+            background: "#0f0f0f",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 16px",
+          }}
+        >
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: "0 8px", height: "100%", WebkitTapHighlightColor: "transparent" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "0 8px",
+              height: "100%",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <img src="/logo.png?v=2" alt="Lumen" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
             <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 13, letterSpacing: "0.05em" }}>Lumen</span>
           </button>
-          {currentPageName === "Agents" && (
+          {currentPageName === "Agents" && isAdmin && (
             <button
               onClick={() => window.dispatchEvent(new CustomEvent("mobile-new-agent"))}
-              style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 12px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+              style={{
+                background: "rgba(249,115,22,0.15)",
+                color: "#f97316",
+                border: "1px solid rgba(249,115,22,0.3)",
+                padding: "5px 12px",
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                whiteSpace: "nowrap",
+              }}
             >
-              <Plus style={{ width: 12, height: 12 }} /> New Agent
+              <Plus style={{ width: 12, height: 12 }} /> Новий агент
             </button>
           )}
         </div>
       )}
 
-      {/* Sidebar */}
       <aside
         style={{
           position: isMobile ? "fixed" : "relative",
@@ -150,148 +353,90 @@ export default function Layout({ children, currentPageName }) {
           transform: isMobile ? (mobileOpen ? "translateX(0)" : "translateX(-100%)") : "none",
         }}
       >
-        {/* Logo */}
-        <div
-          style={{
-            display: isMobile ? "none" : "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            gap: 12,
-            padding: collapsed ? "0" : "0 16px",
-            height: 64,
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
-            flexShrink: 0,
-          }}
-        >
-          {collapsed ? (
-            <button
-              onClick={() => setCollapsed(false)}
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                background: "rgba(249,115,22,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "1px solid rgba(249,115,22,0.25)",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.25)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.4)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.25)"; }}
-              title="Expand sidebar"
-            >
-              <img src="/logo.png?v=2" alt="Lumen" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover" }} />
-            </button>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                <img src="/logo.png?v=2" alt="Lumen" style={{ width: 32, height: 32, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
-                <span style={{ color: "#f5f5f5", fontWeight: 600, fontSize: 14, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                  Lumen
-                </span>
-              </div>
-              <button
-                onClick={() => setCollapsed(true)}
+        {isMobile ? accountBlock : (
+          <>
+            {showExpanded && accountBlock}
+            {!showExpanded && (
+              <div
                 style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#555",
+                  padding: "10px 8px",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
                   display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  gap: 0,
-                  padding: 6,
-                  flexShrink: 0,
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  gap: 8,
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.color = "#f97316"}
-                onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
-                title="Collapse"
               >
-                <ChevronLeft style={{ width: 16, height: 16 }} />
-                <ChevronLeft style={{ width: 16, height: 16, marginLeft: "-8px" }} />
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV_ITEMS.map((item) => {
-            const isActive = currentPageName === item.page;
-            return (
-              <Link
-                    key={item.page}
-                    to={createPageUrl(item.page)}
+                {user?.photo_url ? (
+                  <img src={user.photo_url} alt="" style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover" }} />
+                ) : (
+                  <div
                     style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      background: "rgba(249,115,22,0.15)",
+                      border: "1px solid rgba(249,115,22,0.25)",
                       display: "flex",
                       alignItems: "center",
-                      gap: 12,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      textDecoration: "none",
-                      fontSize: 14,
-                      fontWeight: 500,
-                      color: isActive ? "#f97316" : "#888",
-                      background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
-                      border: `1px solid ${isActive ? "rgba(249,115,22,0.3)" : "transparent"}`,
-                      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = "rgba(249,115,22,0.07)";
-                        e.currentTarget.style.color = "#f97316";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = "transparent";
-                        e.currentTarget.style.color = "#888";
-                      }
+                      justifyContent: "center",
+                      color: "#f97316",
+                      fontWeight: 700,
+                      fontSize: 13,
                     }}
                   >
-                <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
-                {(isMobile || !collapsed) && <span>{item.name}</span>}
-              </Link>
-            );
-          })}
+                    {avatarLetter}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => logout(true)}
+                  title="Вийти"
+                  className="layout-collapse-btn"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 6,
+                    display: "flex",
+                    borderRadius: 8,
+                  }}
+                >
+                  <LogOut style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{ flex: 1, minHeight: 0 }} aria-hidden />
+
+        <nav
+          style={{
+            flexShrink: 0,
+            padding: "8px 12px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {navItems.map((item) => (
+            <NavLink
+              key={item.page}
+              to={createPageUrl(item.page)}
+              className={({ isActive }) =>
+                `sidebar-item ${isActive ? "sidebar-item--active" : ""}`
+              }
+            >
+              <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
+              {(isMobile || !collapsed) && <span>{item.name}</span>}
+            </NavLink>
+          ))}
         </nav>
 
-        {/* Bottom Status */}
-        <div style={{ padding: 16, flexShrink: 0 }}>
-          {(isMobile || !collapsed) && (
-            <div
-              style={{
-                borderRadius: 12,
-                padding: 16,
-                background: "linear-gradient(135deg, rgba(249,115,22,0.1), rgba(249,115,22,0.03))",
-                border: "1px solid rgba(249,115,22,0.15)",
-                position: "relative",
-                overflow: "hidden",
-                cursor: "pointer",
-              }}
-              onClick={() => setDebugOpen(true)}
-            >
-              <p style={{ fontSize: 12, fontWeight: 600, color: "#f97316", marginBottom: 4 }}>System Status</p>
-              <p style={{ fontSize: 11, color: "#555" }}>All systems operational</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-                <div style={{
-                  width: 6, height: 6, borderRadius: "50%", background: "#22c55e",
-                  boxShadow: "0 0 8px rgba(34,197,94,0.6)"
-                }} />
-                <span style={{ fontSize: 10, color: "#22c55e", fontWeight: 600 }}>Online</span>
-              </div>
-            </div>
-          )}
-        </div>
+        {footerBlock}
       </aside>
 
-      {/* Main Content */}
       <main
         style={{
           flex: 1,
@@ -317,165 +462,6 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </div>
       </main>
-      {debugOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.7)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={() => setDebugOpen(false)}
-        >
-          <div
-            style={{
-              width: "90%",
-              maxWidth: 900,
-              maxHeight: "80vh",
-              background: "#050505",
-              borderRadius: 12,
-              border: "1px solid #27272a",
-              boxShadow: "0 18px 45px rgba(0,0,0,0.7)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                padding: "12px 16px",
-                borderBottom: "1px solid #27272a",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#f97316" }}>
-                  Client Console Logs
-                </span>
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                  Останні {debugLogs.length} записів. Клікніть поза вікном, щоб закрити.
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button
-                  onClick={() => {
-                    const textToCopy = debugLogs.map(entry => {
-                    const line = `[${entry.time?.slice(11, 19) || "--:--:--"}] ${entry.tag ? `[${entry.tag}] ` : ""}${entry.level?.toUpperCase() || "LOG"} - ${entry.message}`;
-                    if (entry.payload != null && typeof entry.payload === "object") {
-                      return line + "\n" + JSON.stringify(entry.payload, null, 2);
-                    }
-                    return line;
-                  }).join("\n\n");
-                    navigator.clipboard.writeText(textToCopy);
-                    const btn = document.getElementById("copy-logs-btn");
-                    if (btn) {
-                      const oldText = btn.innerText;
-                      btn.innerText = "Скопійовано!";
-                      setTimeout(() => { btn.innerText = oldText; }, 2000);
-                    }
-                  }}
-                  id="copy-logs-btn"
-                  style={{
-                    background: "rgba(249,115,22,0.1)",
-                    border: "1px solid rgba(249,115,22,0.2)",
-                    color: "#f97316",
-                    cursor: "pointer",
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.2)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.1)")}
-                >
-                  Копіювати
-                </button>
-                <button
-                  onClick={() => setDebugOpen(false)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "#9ca3af",
-                    cursor: "pointer",
-                    fontSize: 18,
-                    lineHeight: 1,
-                    padding: 4,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div
-              style={{
-                flex: 1,
-                padding: 12,
-                fontFamily:
-                  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                fontSize: 11,
-                overflow: "auto",
-                background: "#020617",
-              }}
-            >
-              {debugLogs.length === 0 ? (
-                <div style={{ color: "#6b7280" }}>Логів поки немає. Виконуйте дії в додатку — логи з’являться тут.</div>
-              ) : (
-                debugLogs.map((entry, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      marginBottom: 8,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      color:
-                        entry.level === "error"
-                          ? "#fca5a5"
-                          : entry.level === "warn"
-                          ? "#facc15"
-                          : "#e5e7eb",
-                    }}
-                  >
-                    <span style={{ color: "#6b7280" }}>
-                      [{entry.time?.slice(11, 19) || "--:--:--"}]
-                    </span>{" "}
-                    {entry.tag ? (
-                      <span style={{ color: "#f97316", fontWeight: 600 }}>[{entry.tag}]</span>
-                    ) : null}{" "}
-                    <span style={{ textTransform: "uppercase", fontSize: 10 }}>
-                      {entry.level || "log"}
-                    </span>{" "}
-                    – {entry.message}
-                    {entry.payload != null && typeof entry.payload === "object" ? (
-                      <pre
-                        style={{
-                          marginTop: 6,
-                          marginBottom: 0,
-                          padding: 10,
-                          background: "rgba(0,0,0,0.35)",
-                          borderRadius: 6,
-                          fontSize: 10,
-                          overflow: "auto",
-                          color: "#94a3b8",
-                          border: "1px solid rgba(255,255,255,0.06)",
-                        }}
-                      >
-                        {JSON.stringify(entry.payload, null, 2)}
-                      </pre>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

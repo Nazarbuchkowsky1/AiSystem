@@ -25,6 +25,22 @@ async function request(method, path, body) {
   return res.json();
 }
 
+/** POST without Authorization (login / telegram). */
+async function requestPublic(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(`${API_BASE}${path}`, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const e = new Error(err.error || `HTTP ${res.status}`);
+    e.status = res.status;
+    e.data = err;
+    e.code = err.code;
+    throw e;
+  }
+  return res.json();
+}
+
 function makeEntityProxy(entityName) {
   return {
     async list(sort, limit) {
@@ -70,7 +86,12 @@ const functionsAPI = {
 
 const authAPI = {
   async login(email, password) {
-    const result = await request('POST', '/auth/login', { email, password });
+    const result = await requestPublic('POST', '/auth/login', { email, password });
+    if (result.token) localStorage.setItem('auth_token', result.token);
+    return result;
+  },
+  async loginTelegram(payload) {
+    const result = await requestPublic('POST', '/auth/telegram', payload);
     if (result.token) localStorage.setItem('auth_token', result.token);
     return result;
   },

@@ -28,9 +28,11 @@ db.exec(`
     icon_name TEXT DEFAULT '',
     status TEXT DEFAULT 'active',
     system_instructions TEXT DEFAULT '',
+    style_prompt TEXT DEFAULT '',
+    style_samples TEXT DEFAULT '[]',
     knowledge_base_ids TEXT DEFAULT '[]',
     tools TEXT DEFAULT '[]',
-    model TEXT DEFAULT 'kimi',
+    model TEXT DEFAULT 'gemini',
     message_count INTEGER DEFAULT 0,
     created_date TEXT DEFAULT (datetime('now')),
     updated_date TEXT DEFAULT (datetime('now'))
@@ -112,7 +114,7 @@ db.exec(`
 `);
 
 const JSON_COLUMNS = {
-  agents: ['knowledge_base_ids', 'tools'],
+  agents: ['knowledge_base_ids', 'tools', 'style_samples'],
   knowledge_bases: ['files', 'debug_logs'],
   messages: ['file_urls'],
 };
@@ -191,6 +193,63 @@ function seedAdmin() {
 }
 
 seedAdmin();
+
+function seedDefaultAgentsIfEmpty() {
+  const { c } = db.prepare('SELECT COUNT(*) AS c FROM agents').get();
+  if (c > 0) return;
+  const now = new Date().toISOString();
+  const defaults = [
+    {
+      name: 'Універсальний помічник',
+      description: 'Відповіді на запитання, короткі тексти та ідеї для щоденних задач.',
+      icon_name: 'Bot',
+    },
+    {
+      name: 'Дослідник',
+      description: 'Структурований аналіз теми, план дій і підсумки з джерел.',
+      icon_name: 'Brain',
+    },
+    {
+      name: 'Копірайтер',
+      description: 'Пости, листи та оголошення у заданому тоні.',
+      icon_name: 'Sparkles',
+    },
+  ];
+  const stmt = db.prepare(
+    `INSERT INTO agents (name, description, icon_name, icon_url, status, system_instructions, model, created_date, updated_date)
+     VALUES (?, ?, ?, '', 'active', '', 'gemini', ?, ?)`
+  );
+  for (const a of defaults) {
+    stmt.run(a.name, a.description, a.icon_name, now, now);
+  }
+  console.log('[DB] Seeded default agents (gemini)');
+}
+
+seedDefaultAgentsIfEmpty();
+
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  const has = cols.some(c => c.name === column);
+  if (!has) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+    console.log(`[DB] Added missing column ${table}.${column}`);
+  }
+}
+
+// Lightweight migration for existing local databases.
+ensureColumn('agents', 'style_prompt', "TEXT DEFAULT ''");
+ensureColumn('agents', 'style_samples', "TEXT DEFAULT '[]'");
+
+ensureColumn('users', 'telegram_id', 'TEXT');
+ensureColumn('users', 'telegram_username', "TEXT DEFAULT ''");
+ensureColumn('users', 'photo_url', "TEXT DEFAULT ''");
+ensureColumn('users', 'display_name', "TEXT DEFAULT ''");
+
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id) WHERE telegram_id IS NOT NULL AND telegram_id != \'\'');
+} catch (e) {
+  console.warn('[DB] telegram_id unique index:', e.message);
+}
 
 export { db, getTable, serializeRow, deserializeRow, TABLE_MAP };
 export default db;

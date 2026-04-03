@@ -5,6 +5,28 @@ import { authMiddleware } from './auth.js';
 const router = Router();
 router.use(authMiddleware);
 
+function agentPostGuard(req, res, next) {
+  if (req.params.entity === 'Agent' && req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
+function agentPutGuard(req, res, next) {
+  if (req.params.entity !== 'Agent') return next();
+  if (req.user?.role === 'admin') return next();
+  const keys = Object.keys(req.body || {}).filter((k) => k !== 'id' && k !== 'created_date');
+  if (keys.length > 0 && keys.every((k) => k === 'message_count')) return next();
+  return res.status(403).json({ error: 'Admin access required' });
+}
+
+function agentDeleteGuard(req, res, next) {
+  if (req.params.entity === 'Agent' && req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
 function getColumns(table) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   return cols.map(c => c.name);
@@ -55,7 +77,7 @@ router.get('/:entity/:id', (req, res) => {
   }
 });
 
-router.post('/:entity', (req, res) => {
+router.post('/:entity', agentPostGuard, (req, res) => {
   const table = getTable(req.params.entity);
   try {
     const data = serializeRow(table, req.body);
@@ -76,7 +98,7 @@ router.post('/:entity', (req, res) => {
   }
 });
 
-router.put('/:entity/:id', (req, res) => {
+router.put('/:entity/:id', agentPutGuard, (req, res) => {
   const table = getTable(req.params.entity);
   try {
     const data = serializeRow(table, req.body);
@@ -99,7 +121,7 @@ router.put('/:entity/:id', (req, res) => {
   }
 });
 
-router.delete('/:entity/:id', (req, res) => {
+router.delete('/:entity/:id', agentDeleteGuard, (req, res) => {
   const table = getTable(req.params.entity);
   try {
     const result = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(req.params.id);

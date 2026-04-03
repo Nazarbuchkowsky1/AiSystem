@@ -141,7 +141,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
         transition: "opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>New Knowledge Base</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Нова база знань</h2>
           <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4 }}>
             <X style={{ width: 20, height: 20 }} />
           </button>
@@ -149,12 +149,12 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Name</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Назва</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Knowledge base name"
+              placeholder="Назва бази знань"
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
                 border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box",
@@ -166,11 +166,11 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Description (Optional)</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Опис (за бажанням)</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="What is this knowledge base about?"
+              placeholder="Про що ця база знань?"
               rows={2}
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
@@ -183,7 +183,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Upload Files</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Завантажити файли</label>
             <label style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               padding: 16, borderRadius: 10, background: "#0f0f0f", border: "2px dashed #2a2a2a",
@@ -193,7 +193,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Upload style={{ width: 16, height: 16, color: files.length > 0 ? "#f97316" : "#555" }} />
                 <span style={{ fontSize: 12, color: files.length > 0 ? "#f5f5f5" : "#555" }}>
-                  {files.length > 0 ? `${files.length} file${files.length !== 1 ? "s" : ""}${uploadingCount > 0 ? ` · ${uploadingCount} uploading…` : ""}` : "Click to upload files (up to 100)"}
+                  {files.length > 0 ? `${files.length} файл${files.length !== 1 ? (files.length < 5 ? "и" : "ів") : ""}${uploadingCount > 0 ? ` · ${uploadingCount} завантаж…` : ""}` : "Натисніть, щоб завантажити файли (до 100)"}
                 </span>
               </div>
               {files.length > 0 && (
@@ -204,7 +204,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
                       {n.status === "error" && <span style={{ color: "#ef4444", flexShrink: 0 }}>!</span>}
                       {n.status === "done" && <span style={{ color: "#22c55e", flexShrink: 0 }}>✓</span>}
                       <span style={{ color: n.status === "error" ? "#ef4444" : "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {n.file.name}{n.status === "error" ? ` — ${n.error || "failed"}` : ""}
+                        {n.file.name}{n.status === "error" ? ` — ${n.error || "помилка"}` : ""}
                       </span>
                     </div>
                   ))}
@@ -213,13 +213,13 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               <input ref={fileInputRef} type="file" onChange={handleFileSelect} multiple accept={SUPPORTED_EXTENSIONS.map((e) => `.${e}`).join(",")} style={{ display: "none" }} />
             </label>
             {uploadingCount > 0 && (
-              <p style={{ fontSize: 10, color: "#f97316", marginTop: 6 }}>Wait for uploads to finish, then Create.</p>
+              <p style={{ fontSize: 10, color: "#f97316", marginTop: 6 }}>Зачекайте поки файли завантажаться, потім натисніть «Створити».</p>
             )}
           </div>
 
           {rejectedFiles.length > 0 && (
             <p style={{ fontSize: 11, color: "#ef4444", lineHeight: 1.4 }}>
-              Unsupported format: {rejectedFiles.join(", ")}
+              Непідтримуваний формат: {rejectedFiles.join(", ")}
             </p>
           )}
 
@@ -229,7 +229,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, fontWeight: 500,
               cursor: "pointer", transition: "all 0.2s"
             }}>
-              Cancel
+              Скасувати
             </button>
             <button onClick={handleCreate} disabled={!canCreate} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "#f97316",
@@ -239,7 +239,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
               transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6
             }}>
               {isCreating ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : null}
-              {isCreating ? "Creating..." : uploadingCount > 0 ? `Uploading (${uploadingCount})…` : "Create"}
+              {isCreating ? "Створюється..." : uploadingCount > 0 ? `Завантаження (${uploadingCount})…` : "Створити"}
             </button>
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function NewKBModal({ onClose, onCreate, isLoading }) {
             width: 48, height: 48, color: "#f97316",
             animation: "spin 1s linear infinite"
           }} />
-          <p style={{ fontSize: 14, color: "#f5f5f5", fontWeight: 500 }}>Creating knowledge base...</p>
+          <p style={{ fontSize: 14, color: "#f5f5f5", fontWeight: 500 }}>Створення бази знань...</p>
         </div>
       )}
 

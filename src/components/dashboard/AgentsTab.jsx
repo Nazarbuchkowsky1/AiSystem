@@ -39,8 +39,8 @@ export default function AgentsTab() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-full overflow-auto">
       {/* Agent Activity */}
-      <div className="md:col-span-7 glass-panel p-5">
-        <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Agent Activity</h3>
+      <div className="md:col-span-7 glass-panel glass-panel-hover p-5">
+        <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Активність агентів</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={agentActivity}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
@@ -57,8 +57,8 @@ export default function AgentsTab() {
       </div>
 
       {/* Response Time */}
-      <div className="md:col-span-5 glass-panel p-5">
-        <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Avg Response Time (s)</h3>
+      <div className="md:col-span-5 glass-panel glass-panel-hover p-5">
+        <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Час відповіді (с)</h3>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={responseTime}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
@@ -71,8 +71,8 @@ export default function AgentsTab() {
       </div>
 
       {/* Prompts Per Agent */}
-      <div className="md:col-span-5 glass-panel p-5">
-        <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Prompts Per Agent</h3>
+      <div className="md:col-span-5 glass-panel glass-panel-hover p-5">
+        <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Запитів на агент</h3>
         <div className="space-y-3">
           {agentActivity.map((a) => (
             <div key={a.name} className="flex items-center gap-3">
@@ -87,9 +87,9 @@ export default function AgentsTab() {
       </div>
 
       {/* Usage Distribution */}
-      <div className="md:col-span-7 glass-panel p-5 flex items-center flex-col sm:flex-row">
+      <div className="md:col-span-7 glass-panel glass-panel-hover p-5 flex items-center flex-col sm:flex-row">
         <div className="w-1/2">
-          <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Usage Distribution</h3>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Розподіл використання</h3>
           <div className="space-y-2">
             {usageDist.map((d) => (
               <div key={d.name} className="flex items-center gap-2">

@@ -12,7 +12,7 @@ const ICON_MAP = {
   Settings,
 };
 
-export default function AgentCard({ agent, onClick, onEdit }) {
+export default function AgentCard({ agent, onClick, onEdit, showEdit = true }) {
   const Icon = ICON_MAP[agent.icon_name] || ICON_MAP[agent.icon] || Brain;
   const isActive = agent.status === "active";
 
@@ -20,6 +20,7 @@ export default function AgentCard({ agent, onClick, onEdit }) {
     <div
       role="button"
       tabIndex={0}
+      className="agent-card-surface"
       onClick={() => onClick?.()}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -31,7 +32,6 @@ export default function AgentCard({ agent, onClick, onEdit }) {
         padding: 18,
         textAlign: "left",
         cursor: "pointer",
-        transition: "all 0.25s ease",
         width: "100%",
         background: "linear-gradient(145deg, #141414, #0f0f0f)",
         border: "1px solid rgba(255,255,255,0.06)",
@@ -41,16 +41,6 @@ export default function AgentCard({ agent, onClick, onEdit }) {
         height: "100%",
         position: "relative",
         overflow: "hidden",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "rgba(249,115,22,0.2)";
-        e.currentTarget.style.boxShadow = "0 4px 24px rgba(249,115,22,0.08)";
-        e.currentTarget.style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
-        e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.transform = "none";
       }}
     >
       {/* Top glow to match ToolCard */}
@@ -118,7 +108,7 @@ export default function AgentCard({ agent, onClick, onEdit }) {
                 fontWeight: 500,
               }}
             >
-              {isActive ? "Active" : "Offline"}
+              {isActive ? "Активний" : "Офлайн"}
             </span>
           </div>
         </div>
@@ -162,6 +152,7 @@ export default function AgentCard({ agent, onClick, onEdit }) {
         <span style={{ fontSize: 10, color: "#333" }}>
           {agent.message_count || 0} messages
         </span>
+        {showEdit && (
         <button
           type="button"
           onClick={(e) => {
@@ -188,6 +179,7 @@ export default function AgentCard({ agent, onClick, onEdit }) {
         >
           <Pencil style={{ width: 12, height: 12 }} />
         </button>
+        )}
       </div>
     </div>
   );

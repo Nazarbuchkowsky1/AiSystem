@@ -53,10 +53,10 @@ export default function KnowledgeBasePage({ onBack }) {
             onMouseLeave={e => e.currentTarget.style.color = "#555"}>
             <ArrowLeft style={{ width: 16, height: 16 }} />
           </button>
-          <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Knowledge Base</h1>
+          <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>База знань</h1>
         </div>
         <button onClick={() => setShowNewModal(true)} style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)", padding: "5px 14px", borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-          <Plus style={{ width: 12, height: 12 }} /> New KB
+          <Plus style={{ width: 12, height: 12 }} /> Нова база
         </button>
       </div>
 
@@ -73,8 +73,8 @@ export default function KnowledgeBasePage({ onBack }) {
           <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(249,115,22,0.12)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(249,115,22,0.2)" }}>
             <Upload style={{ width: 24, height: 24, color: "#f97316" }} />
           </div>
-          <p style={{ fontSize: 13, color: "#f5f5f5" }}>No knowledge bases yet</p>
-          <p style={{ fontSize: 11, color: "#555" }}>Create a knowledge base to connect it to your agents</p>
+          <p style={{ fontSize: 13, color: "#f5f5f5" }}>Баз знань ще немає</p>
+          <p style={{ fontSize: 11, color: "#555" }}>Створіть базу знань, щоб підключити її до агентів</p>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, overflow: "auto" }}>

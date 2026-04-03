@@ -4,14 +4,13 @@ import { MessageSquare, DollarSign, Clock, CheckCircle2 } from "lucide-react";
 import { logStep } from "@/lib/clientLogger";
 import MetricCard from "../components/dashboard/MetricCard";
 import DashboardTabs from "../components/dashboard/DashboardTabs";
-import OverviewTab from "../components/dashboard/OverviewTab";
 import AgentsTab from "../components/dashboard/AgentsTab";
 import GenericTab from "../components/dashboard/GenericTab";
 import { base44 } from "@/api/base44Client";
 
 const STATIC_METRICS = [
-  { label: "OpenClo Runtime", value: "4h 22m", change: "+22.4%", isPositive: true, icon: Clock },
-  { label: "Tasks Completed", value: "56", change: "+2", isPositive: true, icon: CheckCircle2 },
+  { label: "Час виконання", value: "4 год 22 хв", change: "+22.4%", isPositive: true, icon: Clock },
+  { label: "Задач виконано", value: "56", change: "+2", isPositive: true, icon: CheckCircle2 },
 ];
 
 function formatChange(today, yesterday) {
@@ -24,7 +23,7 @@ function formatChange(today, yesterday) {
 }
 
 export default function Analytics() {
-  const [activeTab, setActiveTab] = useState("Overview");
+  const [activeTab, setActiveTab] = useState("Agents");
 
   const { data: analytics = {}, isLoading } = useQuery({
     queryKey: ["analytics"],
@@ -45,7 +44,7 @@ export default function Analytics() {
   const promptsMetric = useMemo(() => {
     const { change, isPositive } = formatChange(promptsToday, promptsYesterday);
     return {
-      label: "Prompts Today",
+      label: "Запитів за сьогодні",
       value: promptsToday.toLocaleString(),
       change,
       isPositive,
@@ -61,7 +60,7 @@ export default function Analytics() {
     else if (spendToday < 1) formatted = `$${spendToday.toFixed(3)}`;
     else formatted = `$${spendToday.toFixed(2)}`;
     return {
-      label: "Total Spend",
+      label: "Витрати за день",
       value: formatted,
       change,
       isPositive,
@@ -75,9 +74,9 @@ export default function Analytics() {
     <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "10px 16px 10px", gap: 8, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Analytics</h1>
+        <h1 style={{ fontSize: 16, fontWeight: 600, color: "#f5f5f5" }}>Аналітика</h1>
         <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 8, background: "rgba(249,115,22,0.15)", color: "#f97316" }}>
-          Live
+          Онлайн
         </span>
       </div>
 
@@ -103,9 +102,8 @@ export default function Analytics() {
 
       {/* Tab Content */}
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-        {activeTab === "Overview" && <OverviewTab />}
         {activeTab === "Agents" && <AgentsTab />}
-        {["OpenClo", "Tools", "Costs", "System"].includes(activeTab) && (
+        {["Tools", "Costs", "System"].includes(activeTab) && (
           <GenericTab tabName={activeTab} />
         )}
       </div>

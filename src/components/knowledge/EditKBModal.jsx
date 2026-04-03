@@ -219,7 +219,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
         
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Edit Knowledge Base</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f5f5f5" }}>Редагувати базу знань</h2>
           <button onClick={handleClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#f97316", display: "flex", padding: 4, borderRadius: 6, transition: "all 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}
             onMouseLeave={e => e.currentTarget.style.background = "none"}>
@@ -230,10 +230,10 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Name */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Name</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Назва</label>
             <input
               type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="Knowledge base name"
+              placeholder="Назва бази знань"
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
                 border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 14, boxSizing: "border-box", outline: "none"
@@ -245,10 +245,10 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
 
           {/* Description */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Description</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#f5f5f5", display: "block", marginBottom: 6 }}>Опис</label>
             <textarea
               value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="What is this knowledge base about?"
+              placeholder="Про що ця база знань?"
               rows={2}
               style={{
                 width: "100%", padding: "8px 12px", borderRadius: 10, background: "#0f0f0f",
@@ -264,7 +264,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
           <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: "#f5f5f5" }}>
-                Files ({visibleExistingFiles.length + newFiles.length})
+                Файли ({visibleExistingFiles.length + newFiles.length})
               </p>
               <label style={{
                 display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 8,
@@ -274,14 +274,14 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
                 onMouseEnter={e => e.currentTarget.style.background = "rgba(249,115,22,0.2)"}
                 onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
                 <Upload style={{ width: 12, height: 12 }} />
-                Add Files
+                Додати файли
                 <input type="file" onChange={handleAddFiles} multiple style={{ display: "none" }} />
               </label>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflow: "auto", msOverflowStyle: "none", scrollbarWidth: "none" }}>
               {visibleExistingFiles.length === 0 && newFiles.length === 0 && (
-                <p style={{ fontSize: 11, color: "#555", textAlign: "center", padding: 16 }}>No files</p>
+                <p style={{ fontSize: 11, color: "#555", textAlign: "center", padding: 16 }}>Файлів немає</p>
               )}
 
               {/* Existing files */}
@@ -346,7 +346,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.file.name}</p>
                     <p style={{ fontSize: 10, color: n.status === "error" ? "#ef4444" : n.status === "uploading" ? "#f97316" : "#22c55e" }}>
-                      {n.status === "uploading" ? "Uploading…" : n.status === "error" ? (n.error || "Upload failed") : `Ready • ${formatFileSize(n.file.size)}`}
+                      {n.status === "uploading" ? "Завантаження…" : n.status === "error" ? (n.error || "Помилка завантаження") : `Готово • ${formatFileSize(n.file.size)}`}
                     </p>
                   </div>
                   <button onClick={() => handleRemoveNew(index)} style={{
@@ -363,12 +363,12 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
 
             {rejectedFiles.length > 0 && (
               <p style={{ fontSize: 10, color: "#ef4444", marginTop: 8 }}>
-                Unsupported format: {rejectedFiles.join(", ")}
+                Непідтримуваний формат: {rejectedFiles.join(", ")}
               </p>
             )}
             {(removedFileIndexes.size > 0 || newFiles.length > 0) && (
               <p style={{ fontSize: 10, color: "#f97316", marginTop: 8 }}>
-                {uploadingCount > 0 ? "Wait for uploads to finish, then Save. Indexing will run after save." : "New files will be indexed after saving."}
+                {uploadingCount > 0 ? "Зачекайте, поки завершиться завантаження, потім збережіть. Індексація запуститься після збереження." : "Нові файли буде проіндексовано після збереження."}
               </p>
             )}
           </div>
@@ -382,7 +382,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
             }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              Cancel
+              Скасувати
             </button>
             <button onClick={handleSave} disabled={!canSave} style={{
               flex: 1, padding: "10px 16px", borderRadius: 10, background: "rgba(249,115,22,0.1)",
@@ -394,7 +394,7 @@ export default function EditKBModal({ kb, onClose, onSaved }) {
               onMouseEnter={e => { if (canSave) e.currentTarget.style.background = "rgba(249,115,22,0.2)"; }}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(249,115,22,0.1)"}>
               {isSaving && <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />}
-              {isSaving ? "Saving..." : uploadingCount > 0 ? `Uploading (${uploadingCount})…` : "Save"}
+              {isSaving ? "Збереження…" : uploadingCount > 0 ? `Завантаження (${uploadingCount})…` : "Зберегти"}
             </button>
           </div>
         </div>

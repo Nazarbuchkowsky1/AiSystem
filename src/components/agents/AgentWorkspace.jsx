@@ -141,15 +141,15 @@ function LiveActivity({ mode, hasKb, startTime }) {
   const steps = React.useMemo(() => {
     const s = [];
     if (mode === "thinking") {
-      s.push({ id: "reason", label: "Reasoning through the problem", delay: 0 });
+      s.push({ id: "reason", label: "Аналізую запит", delay: 0 });
     } else {
-      s.push({ id: "process", label: "Processing request", delay: 0 });
+      s.push({ id: "process", label: "Обробка запиту", delay: 0 });
     }
     if (hasKb) {
-      s.push({ id: "kb", label: "Searching knowledge base", delay: 1400 });
-      s.push({ id: "analyze", label: "Analyzing sources", delay: 4000 });
+      s.push({ id: "kb", label: "Пошук у базі знань", delay: 1400 });
+      s.push({ id: "analyze", label: "Аналіз джерел", delay: 4000 });
     }
-    s.push({ id: "generate", label: "Writing response", delay: hasKb ? 7000 : 2200 });
+    s.push({ id: "generate", label: "Генерація відповіді", delay: hasKb ? 7000 : 2200 });
     return s;
   }, [mode, hasKb]);
 
@@ -208,37 +208,37 @@ function buildActivityFromProcessLog(processLog) {
       case "kb_loaded": {
         const fc = e.indexedFilesCount || e.indexedFileCount || 0;
         if (fc > 0)
-          steps.push({ icon: "kb", text: `Loaded ${fc} source${fc > 1 ? "s" : ""}` });
+          steps.push({ icon: "kb", text: `Завантажено ${fc} джерел${fc === 1 ? "о" : fc < 5 ? "а" : ""}` });
         break;
       }
       case "history_summarize_done":
-        steps.push({ icon: "default", text: "Summarized conversation history" });
+        steps.push({ icon: "default", text: "Підбито підсумок історії листування" });
         break;
       case "query_decomposition_done":
         if (e.count > 1)
-          steps.push({ icon: "search", text: `Decomposed into ${e.count} sub-questions` });
+          steps.push({ icon: "search", text: `Розбито на ${e.count} підзапитання` });
         break;
       case "full_context_injected":
-        steps.push({ icon: "kb", text: `Injected ${e.documentsIncluded} document${e.documentsIncluded > 1 ? "s" : ""} as context` });
+        steps.push({ icon: "kb", text: `Додано ${e.documentsIncluded} документ${e.documentsIncluded === 1 ? "" : e.documentsIncluded < 5 ? "и" : "ів"} як контекст` });
         break;
       case "evidence_packed":
-        steps.push({ icon: "search", text: `Retrieved ${e.documentsIncluded} relevant section${e.documentsIncluded > 1 ? "s" : ""}` });
+        steps.push({ icon: "search", text: `Знайдено ${e.documentsIncluded} відповідн${e.documentsIncluded === 1 ? "ий" : e.documentsIncluded < 5 ? "их" : "их"} розділ${e.documentsIncluded === 1 ? "" : e.documentsIncluded < 5 ? "и" : "ів"}` });
         break;
       case "rerank_done":
-        steps.push({ icon: "search", text: "Reranked evidence by relevance" });
+        steps.push({ icon: "search", text: "Реранжування доказів за релевантністю" });
         break;
       case "youtube_scraper_result":
       case "media_scraper_result":
-        steps.push({ icon: "yt", text: `Fetched transcript: ${(e.title || "video").substring(0, 50)}` });
+        steps.push({ icon: "yt", text: `Отримано транскрипт: ${(e.title || "відео").substring(0, 50)}` });
         break;
       case "llm_call_done": {
         const tokens = (e.promptTokens || 0) + (e.outputTokens || 0);
         const model = e.model === "gemini" ? "Gemini" : "Kimi";
-        steps.push({ icon: "generate", text: `Generated via ${model}${tokens > 0 ? ` (${tokens} tokens)` : ""}` });
+        steps.push({ icon: "generate", text: `Згенеровано через ${model}${tokens > 0 ? ` (${tokens} токен${tokens === 1 ? "" : tokens < 5 ? "и" : "ів"})` : ""}` });
         break;
       }
       case "structure_retry_done":
-        steps.push({ icon: "generate", text: "Restructured for clarity" });
+        steps.push({ icon: "generate", text: "Перефразовано для ясності" });
         break;
     }
   }
@@ -270,7 +270,7 @@ function ActivityHistory({ activity }) {
           ? <ChevronDown style={{ width: 12, height: 12 }} />
           : <ChevronRight style={{ width: 12, height: 12 }} />
         }
-        <span>Activity · {totalSec}s · {count} step{count > 1 ? "s" : ""}</span>
+        <span>Активність · {totalSec}с · {count} крок{count > 1 ? (count < 5 ? "и" : "ів") : ""}</span>
       </button>
       <div style={{
         maxHeight: expanded ? 300 : 0,
@@ -293,7 +293,7 @@ function ActivityHistory({ activity }) {
   );
 }
 
-export default function AgentWorkspace({ agent, onBack }) {
+export default function AgentWorkspace({ agent, onBack, canManageSources = false }) {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -301,6 +301,9 @@ export default function AgentWorkspace({ agent, onBack }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [kbIds, setKbIds] = useState(agent.knowledge_base_ids || []);
+  useEffect(() => {
+    if (!canManageSources) setShowSources(false);
+  }, [canManageSources]);
   const [showHistory, setShowHistory] = useState(false);
   const [historyPanelClosing, setHistoryPanelClosing] = useState(false);
   const [historyPanelOpening, setHistoryPanelOpening] = useState(false);
@@ -761,7 +764,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       const convo = await base44.entities.Conversation.create({
         agent_id: String(agent.id),
         agent_name: agent.name,
-        title: (userMsg || "File upload").substring(0, 60),
+        title: (userMsg || "Завантаження файлу").substring(0, 60),
         mode,
         message_count: 1,
         last_message_preview: displayContent.substring(0, 100),
@@ -834,6 +837,8 @@ export default function AgentWorkspace({ agent, onBack }) {
           name: agent.name,
           description: agent.description || "",
           system_instructions: agent.system_instructions || agent.system_prompt || "",
+          style_prompt: agent.style_prompt || "",
+          style_samples: Array.isArray(agent.style_samples) ? agent.style_samples : [],
           knowledge_base_ids: kbIds,
           tools: agent.tools || [],
           model: agent.model === "gemini" ? "gemini" : "kimi",
@@ -874,7 +879,7 @@ export default function AgentWorkspace({ agent, onBack }) {
           logStepJSON("Process", entry?.step ?? "process", entry);
         });
       }
-      const response = res?.data?.response || "Error generating response.";
+      const response = res?.data?.response || "Не вдалося згенерувати відповідь.";
       const responseCost = Number(res?.data?.cost) || 0;
       const responseCitations = res?.data?.citations || null;
       const responseProcessLog = res?.data?.processLog || null;
@@ -936,7 +941,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       setLiveActivityStart(null);
       setGeneratingPlaceholderForConvoId(null);
       abortControllerRef.current = null;
-      setMessages(prev => [...prev, { role: "assistant", content: "Error generating response. Please try again.", createdAt: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "Не вдалося згенерувати відповідь. Спробуйте ще раз.", createdAt: new Date().toISOString() }]);
     }
   };
 
@@ -1083,7 +1088,7 @@ export default function AgentWorkspace({ agent, onBack }) {
       {!isRecording && isFinalizing && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 16px" }}>
           <Loader2 style={{ width: 16, height: 16, color: "#f97316", animation: "spin 1s linear infinite" }} />
-          <span style={{ fontSize: 13, color: "#888" }}>Processing voice...</span>
+          <span style={{ fontSize: 13, color: "#888" }}>Обробка голосу...</span>
         </div>
       )}
 
@@ -1110,7 +1115,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               onPaste={handlePaste}
-              placeholder="Message agent..."
+              placeholder="Напишіть повідомлення..."
               rows={1}
               disabled={isLoading}
               style={{
@@ -1215,7 +1220,7 @@ export default function AgentWorkspace({ agent, onBack }) {
               transition: "left 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
               zIndex: 0,
             }} />
-            {[["instant", Zap, "Instant"], ["thinking", Brain, "Thinking"]].map(([val, Icon, label]) => (
+            {[["instant", Zap, "Миттєво"], ["thinking", Brain, "Обмірковування"]].map(([val, Icon, label]) => (
               <button key={val} onMouseDown={e => e.preventDefault()} onClick={() => setMode(val)}
                 style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 11, fontWeight: 500,
                   background: "transparent",
@@ -1224,11 +1229,12 @@ export default function AgentWorkspace({ agent, onBack }) {
               </button>
             ))}
           </div>
-          {/* 2) Sources toggle */}
+          {canManageSources && (
           <button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(!showSources)}
             style={{ padding: 7, borderRadius: 10, background: showSources ? "rgba(249,115,22,0.1)" : "none", border: "none", cursor: "pointer", color: showSources ? "#f97316" : "#555", display: "flex", transition: "all 0.2s" }}>
             <BookOpen style={{ width: 15, height: 15 }} />
           </button>
+          )}
           {/* 3) Clock (history) */}
           <button onMouseDown={e => e.preventDefault()} onClick={() => {
             if (showHistory && !historyPanelClosing) {
@@ -1270,7 +1276,7 @@ export default function AgentWorkspace({ agent, onBack }) {
           transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease-out",
         }}>
           <div style={{ padding: 16, paddingTop: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#f97316", marginBottom: 12 }}>Chat History</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#f97316", marginBottom: 12 }}>Історія чату</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {conversations.map((c) => {
                 const isDeleting = deletingConvoIds.has(c.id);
@@ -1316,7 +1322,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                         <p style={{ fontSize: 10, color: "#444", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.last_message_preview}</p>
                       </button>
                       {(currentConversationId === c.id && isLoading) || c.id === generatingPlaceholderForConvoId || (typeof sessionStorage !== "undefined" && sessionStorage.getItem(AGENT_LOADING_CID_KEY) === String(c.id)) ? (
-                        <div style={{ flexShrink: 0, padding: 6, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }} title="Generating...">
+                        <div style={{ flexShrink: 0, padding: 6, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }} title="Генерація...">
                           <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
                         </div>
                       ) : (
@@ -1335,7 +1341,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                   </div>
                 );
               })}
-              {conversations.length === 0 && <p style={{ fontSize: 11, color: "#444", textAlign: "center", padding: 20 }}>No history yet</p>}
+              {conversations.length === 0 && <p style={{ fontSize: 11, color: "#444", textAlign: "center", padding: 20 }}>Історії ще немає</p>}
             </div>
           </div>
         </div>
@@ -1427,7 +1433,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                       {timeStr && <span style={{ fontSize: 12, color: "#555" }}>{timeStr}</span>}
-                      <button type="button" onClick={copyMessage} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: isCopied ? "#f97316" : "#555", display: "flex" }} title={isCopied ? "Copied" : "Copy"}>
+                      <button type="button" onClick={copyMessage} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: isCopied ? "#f97316" : "#555", display: "flex" }} title={isCopied ? "Скопійовано" : "Копіювати"}>
                         {isCopied ? <Check style={{ width: 16, height: 16 }} /> : <Copy style={{ width: 16, height: 16 }} />}
                       </button>
                     </div>
@@ -1445,7 +1451,7 @@ export default function AgentWorkspace({ agent, onBack }) {
                     ) : (
                       <div style={{ background: "#181818", border: "1px solid #2a2a2a", borderRadius: 18, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
                         <Loader2 style={{ width: 14, height: 14, color: "#f97316", animation: "spin 1s linear infinite" }} />
-                        <span style={{ fontSize: 12, color: "#555" }}>Generating...</span>
+                        <span style={{ fontSize: 12, color: "#555" }}>Генерація відповіді...</span>
                       </div>
                     )}
                   </div>
@@ -1490,17 +1496,19 @@ export default function AgentWorkspace({ agent, onBack }) {
 
       {/* Sources Panel (right side, smooth slide animation) */}
       <div style={{
-        width: showSources ? 280 : 0,
-        minWidth: showSources ? 280 : 0,
+        width: canManageSources && showSources ? 280 : 0,
+        minWidth: canManageSources && showSources ? 280 : 0,
         overflow: "hidden",
         transition: "width 0.28s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
         flexShrink: 0,
         height: "100%",
       }}>
+        {canManageSources && (
         <AgentSourcesPanel
           agent={agent}
           onKbIdsChange={(ids) => setKbIds(ids)}
         />
+        )}
       </div>
     </div>
   );

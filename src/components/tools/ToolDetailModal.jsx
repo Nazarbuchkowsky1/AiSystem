@@ -153,7 +153,7 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
                       textTransform: "uppercase",
                     }}
                   >
-                    BUILT-IN
+                    ВБУДОВАНИЙ
                   </span>
                 )}
                 <div
@@ -220,13 +220,13 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <Code style={{ width: 13, height: 13, color: "#f97316" }} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#888" }}>Code</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#888" }}>Код</span>
                 </div>
                 {!isBuiltin && (
                   <button onClick={() => setEditing(!editing)} style={{
                     fontSize: 11, color: "#f97316", background: "rgba(249,115,22,0.1)",
                     border: "1px solid rgba(249,115,22,0.2)", borderRadius: 8, padding: "4px 10px", cursor: "pointer"
-                  }}>{editing ? "Cancel" : "Edit"}</button>
+                  }}>{editing ? "Скасувати" : "Редагувати"}</button>
                 )}
               </div>
               {editing ? (
@@ -242,7 +242,7 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
                   <button onClick={handleSaveCode} style={{
                     marginTop: 8, background: "#f97316", color: "#fff", border: "none",
                     borderRadius: 10, padding: "7px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer"
-                  }}>Save Code</button>
+                  }}>Зберегти код</button>
                 </>
               ) : (
                 <div style={{
@@ -266,7 +266,7 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
                       className="language-tsx"
                       dangerouslySetInnerHTML={{
                         __html: Prism.highlight(
-                          tool.code || "// No code configured",
+                          tool.code || "// Код не налаштовано",
                           Prism.languages.tsx,
                           "tsx"
                         ),
@@ -334,9 +334,9 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
           {!isBuiltin && (
             confirmDelete ? (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#ef4444" }}>Delete?</span>
-                <button onClick={() => { onDelete(tool.id); onClose(); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Yes</button>
-                <button onClick={() => setConfirmDelete(false)} style={{ background: "rgba(255,255,255,0.06)", color: "#888", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, cursor: "pointer" }}>No</button>
+                <span style={{ fontSize: 11, color: "#ef4444" }}>Видалити?</span>
+                <button onClick={() => { onDelete(tool.id); onClose(); }} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Так</button>
+                <button onClick={() => setConfirmDelete(false)} style={{ background: "rgba(255,255,255,0.06)", color: "#888", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, cursor: "pointer" }}>Ні</button>
               </div>
             ) : (
               <button onClick={() => setConfirmDelete(true)} style={{
@@ -344,7 +344,7 @@ export default function ToolDetailModal({ tool, onClose, onDelete, onUpdate }) {
                 background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)",
                 color: "#ef4444", borderRadius: 10, padding: "7px 14px", fontSize: 11, cursor: "pointer"
               }}>
-                <Trash2 style={{ width: 12, height: 12 }} /> Delete
+                <Trash2 style={{ width: 12, height: 12 }} /> Видалити
               </button>
             )
           )}

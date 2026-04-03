@@ -93,6 +93,18 @@ function getTextDownloadPayload(file) {
   return "";
 }
 
+function mergeFilesPreservingLatest(existing = [], incoming = []) {
+  const toKey = (f) => {
+    const src = getFileAccessUrl(f);
+    if (src) return `src:${src}`;
+    return `name:${String(f?.name || "").toLowerCase()}|type:${String(f?.type || "").toLowerCase()}|size:${Number(f?.size || 0)}`;
+  };
+  const map = new Map();
+  for (const f of existing) map.set(toKey(f), f);
+  for (const f of incoming) map.set(toKey(f), f);
+  return Array.from(map.values());
+}
+
 function getPreferredMediaTitle(file) {
   const candidates = [
     file?.title,
@@ -281,8 +293,8 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
     try {
       logStep("Sources", "Creating KB for agent", agent.name);
       const newKb = await base44.entities.KnowledgeBase.create({
-        name: `${agent.name} Sources`,
-        description: `Knowledge base for ${agent.name}`,
+        name: `${agent.name} — джерела`,
+        description: `База знань для агента «${agent.name}»`,
         files: [],
         processing: false,
         index_status: "idle",
@@ -410,7 +422,10 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
 
     if (newFileEntries.length > 0) {
       try {
-        const currentFiles = [...(targetKb.files || []), ...newFileEntries];
+        // Prevent stale client state from overwriting newer server-side files list.
+        const latestKbList = await base44.entities.KnowledgeBase.filter({ id: targetKb.id });
+        const latestKb = latestKbList?.[0] || targetKb;
+        const currentFiles = mergeFilesPreservingLatest(latestKb.files || [], newFileEntries);
         await base44.entities.KnowledgeBase.update(targetKb.id, {
           files: currentFiles,
           processing: true,
@@ -573,7 +588,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
 
     const urls = extractUrlsFromText(raw);
     if (urls.length === 0) {
-      setLinkError("No valid URLs found. Paste one or more links.");
+      setLinkError("Не знайдено дійсних URL-адрес. Вставте одне або більше посилань.");
       return;
     }
     logStepJSON("Sources", "url_submit_start", { rawLength: raw.length, urlsFound: urls.length, urls });
@@ -582,7 +597,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
     try {
       const targetKb = await ensureKb();
       if (!targetKb) {
-        setLinkError("Failed to create knowledge base.");
+        setLinkError("Не вдалося створити базу знань.");
         return;
       }
       logStepJSON("Sources", "kb_ready", { kbId: String(targetKb.id), kbName: targetKb.name, existingFiles: (targetKb.files || []).length });
@@ -603,7 +618,10 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       });
       logStepJSON("Sources", "file_entries_created", { count: newEntries.length, entries: newEntries.map(e => ({ name: e.name, type: e.type })) });
 
-      const currentFiles = [...(targetKb.files || []), ...newEntries];
+      // Prevent stale client state from overwriting newer server-side files list.
+      const latestKbList = await base44.entities.KnowledgeBase.filter({ id: targetKb.id });
+      const latestKb = latestKbList?.[0] || targetKb;
+      const currentFiles = mergeFilesPreservingLatest(latestKb.files || [], newEntries);
       await base44.entities.KnowledgeBase.update(targetKb.id, {
         files: currentFiles,
         processing: true,
@@ -654,7 +672,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       setShowAddModal(false);
     } catch (e) {
       logStepJSON("Sources", "link_add_CRASH", { error: String(e?.message || e), stack: e?.stack?.substring(0, 300) });
-      setLinkError("Failed to add link. Try again.");
+      setLinkError("Не вдалося додати посилання. Спробуйте ще раз.");
     } finally {
       setLinkLoading(false);
     }
@@ -738,7 +756,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <BookOpen style={{ width: 15, height: 15, color: "#f97316" }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5" }}>Sources</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5" }}>Джерела</span>
           {files.length > 0 && (
             <span style={{
               fontSize: 10, color: "#f97316", background: "rgba(249,115,22,0.15)",
@@ -773,7 +791,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             <Plus style={{ width: 14, height: 14, color: "#f97316" }} />
           )}
           <span style={{ fontSize: 12, fontWeight: 500, color: "#f97316" }}>
-            {isCreatingKb ? "Setting up..." : "Add Sources"}
+            {isCreatingKb ? "Налаштування..." : "Додати джерела"}
           </span>
         </button>
       </div>
@@ -787,8 +805,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
         }}>
           <AlertCircle style={{ width: 12, height: 12, color: "#ef4444", flexShrink: 0 }} />
           <span style={{ fontSize: 10, color: "#ef4444", flex: 1 }}>
-            {kb?.last_error ? kb.last_error.slice(0, 80) : "Indexing failed"}
-          </span>
+            {kb?.last_error ? kb.last_error.slice(0, 80) : "Індексація не вдалася"}          </span>
           <button
             onClick={handleRetryIndexing}
             style={{
@@ -797,7 +814,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
               fontSize: 10, fontWeight: 500,
             }}
           >
-            Retry
+            Повторити
           </button>
         </div>
       )}
@@ -831,7 +848,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
               <Upload style={{ width: 18, height: 18, color: "#555" }} />
             </div>
             <p style={{ fontSize: 11, color: "#555", textAlign: "center", lineHeight: 1.5, maxWidth: 200 }}>
-              Upload files to build this agent's knowledge base
+              Завантажте файли, щоб побудувати базу знань цього агента
             </p>
             <p style={{ fontSize: 10, color: "#333", textAlign: "center" }}>
               PDF, TXT, DOCX, XLSX, code files, and more
@@ -902,13 +919,13 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                       color: isReady ? "#555" : (kb?.index_status === "failed" && !file.processed) ? "#ef4444" : "#f97316",
                     }}>
                       {isReady ? (
-                        `${MEDIA_FILE_TYPES.includes(file.type) ? ({ youtube: "YT", tiktok: "TT", instagram: "IG", twitter: "X", facebook: "FB", media: "Media", web: "Web" }[file.type] || file.type) : (file.type || "").toUpperCase()}${file.size ? " · " + formatFileSize(file.size) : ""}${isBasic ? " · Basic" : ""}${isPremium ? " · Premium" : ""}${file.index_upgrade_pending ? " · Upgrading…" : ""}`
+                        `${MEDIA_FILE_TYPES.includes(file.type) ? ({ youtube: "YT", tiktok: "TT", instagram: "IG", twitter: "X", facebook: "FB", media: "Media", web: "Web" }[file.type] || file.type) : (file.type || "").toUpperCase()}${file.size ? " · " + formatFileSize(file.size) : ""}${isBasic ? " · Базовий" : ""}${isPremium ? " · Розширений" : ""}${file.index_upgrade_pending ? " · Оновлення…" : ""}`
                       ) : isProcessing ? (
-                        "Indexing..."
+                        "Індексація..."
                       ) : (kb?.index_status === "failed" && !file.processed) ? (
-                        "Failed"
+                        "Помилка"
                       ) : (
-                        "Pending"
+                        "Очікує"
                       )}
                     </p>
                   </div>
@@ -922,7 +939,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                       }}
                       onMouseEnter={e => e.currentTarget.style.color = "#f97316"}
                       onMouseLeave={e => e.currentTarget.style.color = "#555"}
-                      title="Download file"
+                      title="Завантажити файл"
                     >
                       <Download style={{ width: 12, height: 12 }} />
                     </button>
@@ -963,10 +980,10 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             boxShadow: "0 20px 25px rgba(0,0,0,0.5)",
           }} onClick={e => e.stopPropagation()}>
             <p style={{ fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 6 }}>
-              Remove source?
+              Видалити джерело?
             </p>
             <p style={{ fontSize: 11, color: "#888", marginBottom: 14, lineHeight: 1.4 }}>
-              "{files[showDeleteConfirm]?.name}" will be removed from this agent's knowledge.
+              "{files[showDeleteConfirm]?.name}" буде видалено з бази знань цього агента.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -976,7 +993,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                   border: "1px solid #2a2a2a", color: "#f5f5f5", fontSize: 12, fontWeight: 500, cursor: "pointer",
                 }}
               >
-                Cancel
+                Скасувати
               </button>
               <button
                 onClick={() => handleRemoveFile(showDeleteConfirm)}
@@ -985,7 +1002,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                   border: "none", color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer",
                 }}
               >
-                Remove
+                Видалити
               </button>
             </div>
           </div>
@@ -1011,7 +1028,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             transition: "transform 0.2s ease, opacity 0.2s ease",
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: "#f5f5f5", margin: 0 }}>Add Sources</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: "#f5f5f5", margin: 0 }}>Додати джерела</h3>
               <button onClick={closeAddModal} style={{
                 background: "none", border: "none", cursor: "pointer", color: "#555",
                 display: "flex", padding: 4, borderRadius: 6,
@@ -1047,7 +1064,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                 <Upload style={{ width: 22, height: 22, color: "#f97316" }} />
               </div>
               <p style={{ fontSize: 13, color: "#e5e5e5", fontWeight: 500, margin: 0, textAlign: "center" }}>
-                Drag files here or click to browse
+                Перетягніть файли сюди або натисніть для вибору
               </p>
               <p style={{ fontSize: 11, color: "#555", margin: 0, textAlign: "center" }}>
                 PDF, TXT, DOCX, XLSX, code files, and more
@@ -1067,15 +1084,15 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Link style={{ width: 14, height: 14, color: "#f97316", flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: "#e5e5e5", fontWeight: 500 }}>Paste URL</span>
-                <span style={{ fontSize: 10, color: "#555" }}>YouTube, TikTok, Instagram, X, or any link</span>
+                <span style={{ fontSize: 12, color: "#e5e5e5", fontWeight: 500 }}>Вставте посилання</span>
+                <span style={{ fontSize: 10, color: "#555" }}>YouTube, TikTok, Instagram, X або будь-яке посилання</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <textarea
                   value={linkInput}
                   onChange={e => { setLinkInput(e.target.value); setLinkError(""); }}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleLinkSubmit(); }}}
-                  placeholder={"Paste one or more URLs\u2026"}
+                  placeholder="Вставте одне або кілька посилань\u2026"
                   rows={1}
                   style={{
                     flex: 1, padding: "9px 12px", borderRadius: 10, fontSize: 13,
@@ -1100,7 +1117,7 @@ export default function AgentSourcesPanel({ agent, onKbIdsChange }) {
                     height: 38,
                   }}
                 >
-                  {linkLoading ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : "Add"}
+                          {linkLoading ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> : "Додати"}
                 </button>
               </div>
               {linkError && (
